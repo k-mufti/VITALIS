@@ -17,3 +17,11 @@ def load(name):
     if not path.exists():
         return None
     return json.loads(path.read_text())["data"]
+
+
+def saved_at(name):
+    """When this source was last fetched successfully, or None."""
+    path = CACHE_DIR / f"{name}.json"
+    if not path.exists():
+        return None
+    return json.loads(path.read_text()).get("saved_at")

@@ -277,3 +277,24 @@
 .director .d-day { display: block; margin-top: 4px; font: 400 11px var(--cond); letter-spacing: .14em; text-transform: uppercase; color: var(--soft); }
 .director .d-day.preview { color: var(--cyan); }
 .director .d-note { margin-top: 12px; font: 400 11px/1.4 var(--sans); color: var(--soft); }
+
+/* ---------- where the data comes from ---------- */
+.foot button#sourcesBtn { margin-left: 10px; font: inherit; color: var(--cyan); border-bottom: 1px solid currentColor; padding-bottom: 1px; }
+.foot button#sourcesBtn:hover { color: var(--ink); }
+.src-row { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.src-row.assume { border-left: 3px solid var(--amber); padding-left: 12px; }
+.src-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.src-top b { font: 600 14px var(--cond); letter-spacing: .12em; text-transform: uppercase; }
+.src-tag { font: 600 9px var(--cond); letter-spacing: .16em; text-transform: uppercase; padding: 2px 6px; color: var(--white); background: var(--soft); }
+.src-tag.live { background: var(--green); }
+.src-tag.cache { background: var(--cyan); }
+.src-tag.fallback { background: var(--red); }
+.src-tag.assume { background: var(--amber); }
+.src-what { margin-top: 3px; font: 400 12.5px/1.4 var(--sans); }
+.src-val { margin-top: 4px; font: 500 13px var(--cond); letter-spacing: .06em; color: var(--ink); }
+.src-row small { display: block; margin-top: 2px; font: 400 11px var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--soft); }
+.src-cite { margin-top: 3px; font: 400 11.5px/1.4 var(--sans); color: var(--soft); }
+.src-err { margin-top: 4px; font: 400 11px var(--sans); color: var(--red); }
+.src-links { margin-top: 6px; display: flex; gap: 14px; }
+.src-links a { font: 600 10px var(--cond); letter-spacing: .14em; text-transform: uppercase; color: var(--cyan); text-decoration: none; }
+.src-links a:hover { color: var(--ink); }

@@ -16,6 +16,7 @@ import * as THREE from 'three';
 
 const PAPER = '#f5f5f2';
 export const STYLES = ['Halftone', 'Silhouette', 'Matte', 'Outline'];
+export const MAX_HOTSPOTS = 8;
 
 // Extra uniforms for the body + aura shaders, merged into the body's uniforms.
 export function halftoneUniforms(pixelRatio) {
@@ -35,6 +36,12 @@ export function halftoneUniforms(pixelRatio) {
     uOutFill: { value: 0 },            // 0 paper white -> 1 black body
     uOutShade: { value: 0 },           // 0..1 soft light/shadow inside the body
     uOutDots: { value: 0 },            // 0..1 halftone dots in the shadows
+    // Per-organ severity hotspots
+    uTime: { value: 0 },
+    uHotCount: { value: 0 },
+    uHotPos: { value: Array.from({ length: MAX_HOTSPOTS }, () => new THREE.Vector3(0, 999, 0)) },
+    uHotRad: { value: new Float32Array(MAX_HOTSPOTS) },
+    uHotSev: { value: new Float32Array(MAX_HOTSPOTS) },
   };
 }
 
@@ -60,6 +67,11 @@ varying vec3 vW; varying vec3 vN; varying vec3 vV;
 uniform vec3 uRegionCenter, uCyan, uPaper, uOutColor;
 uniform float uRegionRadius, uHighlight, uGhost, uPulse, uCell, uStyle, uEdge, uShade, uFade;
 uniform float uOutWidth, uOutSoft, uOutFill, uOutShade, uOutDots;
+uniform float uTime;
+uniform int uHotCount;
+uniform vec3 uHotPos[8];
+uniform float uHotRad[8];
+uniform float uHotSev[8];
 // 1 inside a dot of radius r (cell = 1), 0 outside, with a soft edge.
 float dotMask(float d, float r) { return 1.0 - smoothstep(r - .06, r + .06, d); }`)
       .replace('#include <opaque_fragment>', `
@@ -98,6 +110,27 @@ float ring = (1.0 - smoothstep(0.0, .035, abs(dR / uRegionRadius - .92))) * uHig
 float rDot = dotMask(d, mix(.26, .30 + .16 * uPulse, uGhost));
 col = mix(col, uCyan, region * rDot * mix(.75, 1.0, uGhost));
 col = mix(col, uCyan, ring);
+
+// Per-organ severity hotspot glows (plan.md 5.2: cyan=healthy, deep navy=severe).
+vec3 colHealthy = vec3(0.498, 0.914, 1.0);   // #7FE9FF
+vec3 colSevere  = vec3(0.039, 0.122, 0.420);  // #0A1F6B
+float hotAlpha = (1.0 - uGhost);              // fade out when zoomed in
+for (int i = 0; i < 8; i++) {
+  if (i >= uHotCount) break;
+  float sev  = uHotSev[i];
+  float rad  = uHotRad[i];
+  float dist2 = distance(vW, uHotPos[i]);
+  float env  = 1.0 - smoothstep(rad * .45, rad, dist2);
+  if (env < .01) continue;
+  float ringW = rad * .08;
+  float hotRing = 1.0 - smoothstep(0.0, ringW, abs(dist2 - rad * .88));
+  float dotR = mix(.18, .30, sev) + mix(.0, .12, sev) * (.5 + .5 * sin(uTime * 3.14159 * (1.0 + sev * 2.5)));
+  float hotDot = dotMask(d, dotR) * env;
+  vec3 hotCol = mix(colHealthy, colSevere, sev);
+  float strength = env * mix(.55, .92, sev) * hotAlpha;
+  col = mix(col, hotCol, hotDot * strength);
+  col = mix(col, hotCol, hotRing * hotAlpha * mix(.6, 1.0, sev));
+}
 outgoingLight = col;
 
 // Zoomed in: only the dots stay visible (x-ray look).

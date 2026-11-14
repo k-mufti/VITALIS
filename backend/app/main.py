@@ -20,7 +20,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect  # no
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
-from . import director, history, hrp, officer, triage  # noqa: E402
+from . import director, history, hrp, officer, provenance, triage  # noqa: E402
 from . import missions as M  # noqa: E402
 from .devices.simulated import DEVICES  # noqa: E402
 from .engine.physiology import COUNTERMEASURES, apply_change, mission_state  # noqa: E402
@@ -228,6 +228,12 @@ def get_space_weather():
 @app.get("/api/hrp")
 def get_hrp():
     return hrp.framework()
+
+
+@app.get("/api/provenance")
+def get_provenance():
+    """Where every number comes from: live APIs, published values, our assumptions."""
+    return provenance.report()
 
 
 @app.get("/api/sources")

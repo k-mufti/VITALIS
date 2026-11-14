@@ -57,6 +57,7 @@ export const api = {
   comms: () => request('/api/comms'),
   vitals: () => request('/api/vitals'),
   sources: () => request('/api/sources'),
+  provenance: () => request('/api/provenance'),
 };
 
 /* One organ, merged from live data and the mock fallback, in the shape the views use.

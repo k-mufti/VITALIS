@@ -6,6 +6,7 @@ import { organs, loadOrgan, prefetchOrgans, updateOrgans, has3dOrgan, organFrame
 import { DRAWINGS } from './organ-drawings.js';
 import { initAnatomyPanel } from './anatomy-panel.js';
 import { applyDefaultLook } from './look.js';
+import { MAX_HOTSPOTS } from './effects.js';
 
 /* The ONLY 3D functions the rest of the app should call (plan.md section 5.4).
    Anything inside src/three/ can change as long as these keep working. */
@@ -85,9 +86,29 @@ export function resetView(instant) {
 }
 
 // Severity 0..1 per organ (plan.md 5.2). The worst organ drives the background halftone.
-// TODO(3d): also tint the organ itself on the blue scale.
 export function setOrganSeverity(organId, severity) {
   twin.severity[organId] = Math.min(1, Math.max(0, severity));
+}
+
+// Push a list of { id, severity } organs into the hotspot shader so they glow on the body.
+// Low-severity organs get a faint healthy-cyan glow; high-severity get deep navy + pulsing ring.
+export function showRisks(organList) {
+  const entries = organList.filter(o => (o.severity || 0) > 0.01).slice(0, MAX_HOTSPOTS);
+  uni.uHotCount.value = entries.length;
+  twin._hotEntries = entries.map(o => o.id);
+  entries.forEach((o, i) => {
+    const sev = Math.min(1, Math.max(0, o.severity || 0));
+    twin.severity[o.id] = sev;
+    if (twin.body && REGIONS[o.id]) {
+      uni.uHotPos.value[i].copy(pt(o.id, 'surface'));
+      uni.uHotRad.value[i] = REGIONS[o.id].radius * 0.9;
+    }
+    uni.uHotSev.value[i] = sev;
+  });
+  for (let i = entries.length; i < MAX_HOTSPOTS; i++) {
+    uni.uHotPos.value[i].set(0, 999, 0);
+    uni.uHotSev.value[i] = 0;
+  }
 }
 
 // TODO(3d): play a fix animation, resolve when it ends.
@@ -112,6 +133,13 @@ export function renderTwin(now, pulse) {
   if (!prefetched && twin.body && !$('#signin')) { prefetched = true; prefetchOrgans(); }
 
   if (twin.autoTurn && !twin.focus) twin.rotTarget += .004;
+  uni.uTime.value = now / 1000;
+  // Refresh hotspot world positions each frame — the body rotates, so world positions move.
+  if (twin.body && twin._hotEntries?.length) {
+    twin._hotEntries.forEach((id, i) => {
+      if (REGIONS[id]) uni.uHotPos.value[i].copy(pt(id, 'surface'));
+    });
+  }
   backdrop.update(now, Math.max(twin.testSeverity, ...Object.values(twin.severity)));
   twin.rot += (twin.rotTarget - twin.rot) * .08;
   pivot.rotation.y = twin.rot;
