@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="styles.css?v=2" />
   <link rel="stylesheet" href="styles/data-ui.css?v=1" />
   <link rel="stylesheet" href="styles/three.css" />
+  <link rel="stylesheet" href="styles/radiation.css?v=2" />
 </head>
 <body>
 
@@ -46,9 +47,17 @@
     <header class="bar">
       <div class="logo">VITALIS</div>
       <div class="bar-mid" id="barMission">Mars <i>/</i> Day 184 <i>/</i> Crew 03</div>
-      <nav>
-        <button class="tab on" data-view="body">Body</button>
-      </nav>
+      <div class="bar-right">
+        <div class="sw-wrap">
+          <button class="sw" id="sw" aria-expanded="false" aria-controls="swPop">
+            <i class="sw-dot"></i><span class="sw-label">Space weather</span><b id="swValue">—</b><em id="swWord">Loading</em>
+          </button>
+          <div class="sw-pop" id="swPop" hidden></div>
+        </div>
+        <nav>
+          <button class="tab on" data-view="body">Body</button>
+        </nav>
+      </div>
     </header>
 
     <div class="stage3d" id="stage3d"><p class="load-note" id="loadNote">Loading body…</p></div>
@@ -66,6 +75,12 @@
       <div class="body-foot">
         <div class="day"><span>Day</span><b id="bodyDay">184</b></div>
         <p class="mission-line" id="missionLine">Mars transit · day 184</p>
+        <div class="dose" id="dose" aria-label="Radiation dose">
+          <div class="dose-head"><span>Radiation dose</span><b id="doseValue">—</b></div>
+          <div class="dose-bar"><i class="dose-base" id="doseBase"></i><i class="dose-storm" id="doseStorm"></i></div>
+          <div class="dose-scale"><span>0</span><span id="doseLimit">600 mSv career limit</span></div>
+          <p class="dose-sub" id="doseSub"></p>
+        </div>
       </div>
 
       <aside class="risk-rail" aria-label="Things to watch">
@@ -159,6 +174,6 @@
   </div>
 
   <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
-  <script type="module" src="src/main.js?v=3"></script>
+  <script type="module" src="src/main.js?v=5"></script>
 </body>
 </html>
