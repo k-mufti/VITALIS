@@ -26,12 +26,12 @@ const PARTS = [
   { sys: 'lungs',   name: 'Lungs',   layer: 'organs',   unit: 'breaths/min' },
   { sys: 'sleep',   name: 'Sleep',   layer: 'organs',   unit: 'h last night' },
   { sys: 'muscles', name: 'Muscles', layer: 'muscle',   unit: '% recovered' },
-  { sys: null,      name: 'Bones',   layer: 'skeleton', soon: 'Coming soon' },
+  { sys: null,      name: 'Bones',   layer: 'skeleton', soon: 'No readings yet' },   // TODO(backend): bones data
 ];
 const STATUS_WORD = { watch: 'Watch', act: 'Act' };   // OK rows stay quiet
 
 // Models each layer shows in the 3D body.
-export const LAYER_MODELS = { muscle: ['muscles'], organs: ['heart', 'lungs'] };
+export const LAYER_MODELS = { muscle: ['muscles'], skeleton: ['bones'], organs: ['heart', 'lungs'] };
 
 function row(p) {
   if (!p.sys) {

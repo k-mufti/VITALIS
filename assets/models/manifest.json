@@ -1,10 +1,16 @@
 {
-  "body": { "file": "../../malebody.fbx", "scale": 1.0 },
+  "body": {
+    "file": "../../malebody.fbx",
+    "scale": 1.0
+  },
   "organs": {
     "heart": {
       "file": "heart.glb",
       "color": "#101416",
-      "anchor": [0.07, 0.72],
+      "anchor": [
+        0.07,
+        0.72
+      ],
       "scale": 1.0,
       "height": 0.072,
       "depth": 0.032,
@@ -13,7 +19,10 @@
     "lungs": {
       "file": "lungs.glb",
       "color": "#3a4245",
-      "anchor": [0, 0.8],
+      "anchor": [
+        0,
+        0.8
+      ],
       "scale": 1.0,
       "width": 0.155,
       "depth": 0.075,
@@ -25,7 +34,20 @@
       "scale": 1.0,
       "fullBody": true,
       "region": true,
-      "frame": { "v": 0.5, "half": 0.54 }
+      "frame": {
+        "v": 0.5,
+        "half": 0.54
+      }
+    },
+    "bones": {
+      "file": "skeleton.glb",
+      "scale": 1.0,
+      "fullBody": true,
+      "color": "#2b3134",
+      "frame": {
+        "v": 0.5,
+        "half": 0.54
+      }
     }
   }
 }
