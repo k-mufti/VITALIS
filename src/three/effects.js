@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 /*
-  Visual styles for the 3D twin (all tunable from the FX panel, devpanel.js).
+  Visual styles for the 3D twin (values are set in look.js).
 
   uStyle 0  Halftone:   black body, paper-coloured dots on the edge + lit side.
   uStyle 1  Silhouette: flat pitch black.

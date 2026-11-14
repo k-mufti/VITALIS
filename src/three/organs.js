@@ -47,7 +47,7 @@ function limbRig(limb) {
   return { on: true, start: limb === 'arms' ? .09 : .015, L: limbPose(limb), R: limbPose(limb) };
 }
 
-// Organ look + skeleton arm fit. The FX panel (devpanel.js) changes these; updateOrgans() applies them.
+// Organ look + limb rigs. look.js sets these; updateOrgans() applies them.
 export const organFx = {
   style: 0,                 // 0 = halftone, 1 = flat silhouette
   edge: 1,                  // edge dots 0..1
