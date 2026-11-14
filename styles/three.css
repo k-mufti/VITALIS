@@ -31,10 +31,10 @@
 .an-row .dot { width: 8px; height: 8px; border-radius: 50%; }
 .an-name { font: 500 17px var(--sans); }
 .an-flag { margin-left: 10px; font: 600 12px var(--cond); font-style: normal; letter-spacing: .14em; text-transform: uppercase; color: var(--amber); }
-.an-flag.act { color: var(--red); }
-.an-val { font: 500 17px var(--sans); font-variant-numeric: tabular-nums; }
+.an-flag.extreme { color: var(--red); }
+.an-val { font: 500 17px var(--sans); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.an-val b { font-weight: 500; }
 .an-val small { margin-left: 5px; font: 400 13px var(--sans); color: var(--soft); }
 button.an-row:hover, button.an-row:focus-visible { background: var(--white); outline: none; }
 button.an-row:hover .an-name { text-decoration: underline; text-decoration-color: var(--cyan); text-underline-offset: 4px; text-decoration-thickness: 2px; }
-.an-row.soon .an-name, .an-row.soon .an-val { color: var(--soft); }
-.an-row.soon .an-val { font: 400 14px var(--sans); }
+.an-flag:empty { display: none; }

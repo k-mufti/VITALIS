@@ -9,6 +9,8 @@ import { createHalftoneSkin, createAuraMaterials, halftoneUniforms } from './eff
 // x: world units from centre line (+ = screen right). v: height fraction from the feet.
 export const REGIONS = {
   sleep:   { x: 0,     v: .972, radius: .34, dist: 2.1 },
+  eyes:    { x: .06,   v: .947, radius: .16, dist: 1.5 },
+  bones:   { x: 0,     v: .55,  radius: .62, dist: 4.2, coreX: 0 },
   lungs:   { x: -.22,  v: .76,  radius: .5,  dist: 2.8, coreX: 0 },
   heart:   { x: .09,   v: .735, radius: .24, dist: 2.3 },
   muscles: { x: -.27,  v: .45,  radius: .5,  dist: 3.9 },

@@ -1,5 +1,5 @@
 import { $, $$ } from '../util.js';
-import { SYS } from '../data/mock.js';
+import { organ, onData } from '../data/client.js';
 import { twin } from './scene.js';
 import { loadOrgan } from './organs.js';
 
@@ -9,9 +9,10 @@ import { loadOrgan } from './organs.js';
    changes what the 3D body shows; the list holds what lives in that layer.
    Hover a row to find it on the body, click it to open it.
 
+   Rows run head to toe (the risk drawer is where systems are ranked). Values and
+   Low / Mild / Extreme come from the same organ data as the risk drawer (src/data/client.js).
    Rows carry data-sys, so the Detail view's existing click handler opens them
-   (initTwin runs before initDetail in main.js).
-   TODO(backend): read values from src/data/client.js once it exists. */
+   (initTwin runs before initDetail in main.js). */
 
 export const LAYERS = [
   { id: 'skin',     label: 'Body' },
@@ -20,37 +21,47 @@ export const LAYERS = [
   { id: 'organs',   label: 'Organs' },
 ];
 
-// What lives in each layer, with a plain unit for its reading.
+// What lives in each layer, head to toe, with a plain unit for its reading.
 const PARTS = [
+  { sys: 'eyes',    name: 'Eyes',    layer: 'organs',   unit: 'mm nerve width' },
+  { sys: 'sleep',   name: 'Sleep',   layer: 'organs',   unit: 'h last night' },
   { sys: 'heart',   name: 'Heart',   layer: 'organs',   unit: 'beats/min' },
   { sys: 'lungs',   name: 'Lungs',   layer: 'organs',   unit: 'breaths/min' },
-  { sys: 'sleep',   name: 'Sleep',   layer: 'organs',   unit: 'h last night' },
   { sys: 'muscles', name: 'Muscles', layer: 'muscle',   unit: '% recovered' },
-  { sys: null,      name: 'Bones',   layer: 'skeleton', soon: 'No readings yet' },   // TODO(backend): bones data
+  { sys: 'bones',   name: 'Bones',   layer: 'skeleton', unit: '% density' },
 ];
-const STATUS_WORD = { watch: 'Watch', act: 'Act' };   // OK rows stay quiet
+// Severity word and dot color, same scale as the risk drawer. Low rows stay quiet.
+const LEVEL_WORD = { mild: 'Mild', extreme: 'Extreme' };
+const LEVEL_DOT = { low: 'ok', mild: 'watch', extreme: 'act' };
 
 // Models each layer shows in the 3D body.
 export const LAYER_MODELS = { muscle: ['muscles'], skeleton: ['bones'], organs: ['heart', 'lungs'] };
 
 function row(p) {
-  if (!p.sys) {
-    return `<div class="an-row soon"><i class="dot none"></i><span class="an-name">${p.name}</span><span class="an-val">${p.soon}</span></div>`;
-  }
-  const d = SYS[p.sys];
-  const state = d.state || 'ok';
-  const flag = STATUS_WORD[state] ? `<em class="an-flag ${state}">${STATUS_WORD[state]}</em>` : '';
   return `<button class="an-row" data-sys="${p.sys}">
-    <i class="dot ${state}"></i>
-    <span class="an-name">${p.name}${flag}</span>
-    <span class="an-val">${d.value}<small>${p.unit}</small></span>
+    <i class="dot"></i>
+    <span class="an-name">${p.name}<em class="an-flag"></em></span>
+    <span class="an-val"><b></b><small>${p.unit}</small></span>
   </button>`;
+}
+
+// Fill in values and severity from the organ data (called again whenever new data arrives).
+function refresh() {
+  $$('.an-row[data-sys]').forEach(r => {
+    const o = organ(r.dataset.sys);
+    const level = o.level || 'low';
+    r.querySelector('.dot').className = 'dot ' + (LEVEL_DOT[level] || 'ok');
+    const flag = r.querySelector('.an-flag');
+    flag.textContent = LEVEL_WORD[level] || '';
+    flag.className = 'an-flag ' + level;
+    r.querySelector('.an-val b').textContent = o.value ?? '—';
+  });
 }
 
 // One list per layer, built once so the Detail view's click handlers stay attached.
 function list(layer) {
   let parts = PARTS.filter(p => p.layer === layer);
-  if (layer === 'skin') parts = PARTS.filter(p => p.sys);
+  if (layer === 'skin') parts = PARTS;
   return `<div class="an-list" data-layer="${layer}">${parts.map(row).join('')}</div>`;
 }
 
@@ -97,5 +108,7 @@ export function initAnatomyPanel(setHover) {
     r.addEventListener('focus', () => setHover(r.dataset.sys));
     r.addEventListener('blur', () => setHover(null));
   });
+  refresh();
+  onData(type => { if (type === 'state') refresh(); });
   setLayer('skin');
 }

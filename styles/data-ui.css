@@ -128,3 +128,129 @@
 .facts.five .fact span { display: flex; align-items: center; gap: 8px; }
 .facts.five .fact b { font-size: 34px; }
 .facts.five .fact > small { display: block; margin-top: 6px; font-size: 13px; }
+
+/* Risk panel, mission picker and medical history.
+   Owned by the backend/data side (rules.md section 1). Same look as styles.css. */
+
+/* ---------- risk panel (right of the body) ---------- */
+.risk-panel {
+  position: absolute; right: 0; top: 0; bottom: 0; width: 340px;
+  display: flex; flex-direction: column; gap: 14px; padding: 28px 28px 46px;
+  border-left: 1px solid var(--line);
+  background: color-mix(in srgb, var(--paper) 90%, transparent);
+  backdrop-filter: blur(8px); z-index: 6;
+}
+.risk-panel header h2 { font: 600 14px var(--cond); letter-spacing: .2em; text-transform: uppercase; }
+.risk-panel header p { margin-top: 4px; font: 400 12px var(--cond); letter-spacing: .14em; text-transform: uppercase; color: var(--soft); }
+.risk-list { flex: 1; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; margin: 0 -6px; padding: 2px 6px; }
+.risk-list::-webkit-scrollbar { width: 4px; }
+.risk-list::-webkit-scrollbar-thumb { background: var(--line); }
+
+.risk {
+  display: grid; grid-template-columns: 22px 1fr; gap: 10px; text-align: left;
+  padding: 11px 12px; border: 1px solid var(--line); background: var(--white);
+  transition: border-color .25s, transform .25s var(--ease);
+}
+.risk:hover, .risk.hot { border-color: var(--ink); transform: translateX(-3px); }
+.risk .rank { font: 600 13px var(--cond); font-style: normal; color: var(--soft); padding-top: 2px; }
+.risk-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.risk b { font: 600 14px var(--cond); letter-spacing: .14em; text-transform: uppercase; }
+.lvl { font: 600 10px var(--cond); letter-spacing: .16em; text-transform: uppercase; padding: 2px 6px; color: var(--white); background: var(--green); }
+.lvl.mild { background: var(--amber); }
+.lvl.extreme { background: var(--red); }
+.risk em { display: block; margin-top: 3px; font: 300 13px var(--cond); font-style: normal; color: var(--soft); }
+.risk .bar { height: 3px; background: var(--line); margin: 8px 0 7px; }
+.risk .bar i { display: block; height: 100%; background: var(--green); transition: width .6s var(--ease); }
+.risk.mild .bar i { background: var(--amber); }
+.risk.extreme .bar i { background: var(--red); }
+.risk p { font: 400 11.5px/1.35 var(--sans); color: var(--soft); }
+.risk p b { font: 600 10px var(--cond); letter-spacing: .14em; display: block; color: #b4b4ae; margin-bottom: 2px; }
+
+.history-btn {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 0 9px; border-top: 1px solid var(--ink);
+  font: 600 13px var(--cond); letter-spacing: .14em; text-transform: uppercase;
+}
+.history-btn span { transition: transform .3s var(--ease); }
+.history-btn:hover span { transform: translateX(5px); }
+
+/* ---------- mission picker (bottom left) ---------- */
+.mission-pick { margin-top: 20px; width: 260px; }
+.mission-pick > span { font: 600 11px var(--cond); letter-spacing: .2em; text-transform: uppercase; color: var(--soft); }
+.mission-btns { display: flex; gap: 6px; margin: 7px 0 12px; }
+.mission-btns button {
+  flex: 1; padding: 6px 0; border: 1px solid var(--line); background: var(--white);
+  font: 600 12px var(--cond); letter-spacing: .12em; text-transform: uppercase; color: var(--soft);
+  transition: background .2s, color .2s, border-color .2s;
+}
+.mission-btns button:hover { border-color: var(--ink); color: var(--ink); }
+.mission-btns button.on { background: var(--ink); border-color: var(--ink); color: var(--white); }
+.day-slider input { width: 100%; accent-color: var(--cyan); cursor: pointer; }
+.day-slider em { display: block; margin-top: 5px; font: 400 11px var(--cond); font-style: normal; letter-spacing: .14em; text-transform: uppercase; color: var(--soft); }
+.day-slider em.preview { color: var(--cyan); }
+
+/* ---------- medical history drawer ---------- */
+.history { position: fixed; inset: 0; z-index: 30; visibility: hidden; }
+.history.on { visibility: visible; }
+.history .scrim { position: absolute; inset: 0; background: rgba(14,14,14,.22); opacity: 0; transition: opacity .4s; }
+.history.on .scrim { opacity: 1; }
+.history .sheet {
+  position: absolute; right: 0; top: 0; bottom: 0; width: min(560px, 92vw);
+  background: var(--white); border-left: 1px solid var(--line); padding: 64px 36px 40px;
+  display: flex; flex-direction: column; gap: 22px; overflow-y: auto;
+  transform: translateX(100%); transition: transform .5s var(--ease);
+}
+.history.on .sheet { transform: none; }
+.history h2 { font: 600 15px var(--cond); letter-spacing: .2em; text-transform: uppercase; display: inline-block; background: var(--ink); color: var(--white); padding: 4px 10px; }
+.history .close { position: absolute; right: 28px; top: 26px; z-index: 2; font: 600 13px var(--cond); letter-spacing: .14em; text-transform: uppercase; color: var(--soft); }
+.history .close:hover { color: var(--ink); }
+.hist-sum { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 20px; }
+.hist-sum div span { display: block; font: 600 10px var(--cond); letter-spacing: .18em; text-transform: uppercase; color: var(--soft); }
+.hist-sum div b { font: 300 30px/1 var(--cond); font-variant-numeric: tabular-nums; }
+.hist-sum div small { display: block; margin-top: 3px; font: 400 11px/1.3 var(--cond); letter-spacing: .1em; color: var(--soft); }
+.hist-sec { font: 600 11px var(--cond); letter-spacing: .2em; text-transform: uppercase; color: var(--soft); border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.timeline { display: flex; flex-direction: column; }
+.tl { display: grid; grid-template-columns: 74px 1fr; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.tl .when { font: 600 12px var(--cond); letter-spacing: .1em; color: var(--soft); }
+.tl .when small { display: block; font: 400 10px var(--cond); letter-spacing: .08em; color: #b4b4ae; }
+.tl b { font: 500 14px/1.3 var(--sans); display: block; }
+.tl p { font: 400 12.5px/1.4 var(--sans); color: var(--soft); margin-top: 2px; }
+.tl i { font-style: normal; font: 600 9px var(--cond); letter-spacing: .16em; text-transform: uppercase; padding: 2px 5px; background: var(--line); color: var(--soft); }
+.tl.alert i { background: var(--red); color: var(--white); }
+.tl.countermeasure i { background: var(--cyan); color: var(--white); }
+.tl.milestone i { background: var(--ink); color: var(--white); }
+
+@media (max-width: 1180px) {
+  .risk-panel { width: 290px; padding: 22px 18px; }
+  .mission-pick { width: 220px; }
+}
+
+/* ---------- detail view: what this could lead to ---------- */
+.d-wrong { margin-top: 18px; max-width: 290px; }
+.d-wrong .lead b, .d-wrong .do b { display: block; font: 600 10px var(--cond); letter-spacing: .18em; text-transform: uppercase; color: var(--soft); margin-bottom: 4px; }
+.d-wrong ul { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.d-wrong li { position: relative; padding-left: 13px; font: 400 12.5px/1.35 var(--sans); }
+.d-wrong li::before { content: ''; position: absolute; left: 0; top: 7px; width: 5px; height: 5px; background: var(--amber); }
+.d-wrong li em { font-style: normal; color: var(--soft); }
+.d-wrong .do { margin-top: 13px; padding-top: 11px; border-top: 1px solid var(--line); font: 500 13px/1.35 var(--sans); }
+
+/* ---------- body spots: keep labels readable over the dark model ---------- */
+.spot span {
+  background: color-mix(in srgb, var(--paper) 86%, transparent);
+  backdrop-filter: blur(3px);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--line) 70%, transparent);
+}
+.spot.watch span { box-shadow: 0 0 0 1px var(--amber); }
+
+/* ---------- layout: risk panel as a drawer ----------
+   The Today panel keeps the right side of the Body view, so "Things to watch" slides in
+   over it from the "Things to watch →" link under the mission picker. */
+.risk-panel {
+  left: auto; width: 360px; transform: translateX(100%); visibility: hidden;
+  box-shadow: -24px 0 60px rgba(0, 0, 0, .08);
+  transition: transform .5s var(--ease), visibility 0s .5s;
+}
+.risk-panel.open { transform: none; visibility: visible; transition: transform .5s var(--ease); }
+.risk-panel header { position: relative; }
+.risk-close { position: absolute; right: 0; top: 0; font: 600 12px var(--cond); letter-spacing: .16em; text-transform: uppercase; color: var(--soft); }
+.risk-close:hover { color: var(--ink); }

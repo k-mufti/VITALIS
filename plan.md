@@ -75,7 +75,7 @@ index.html              SHARED  (screens, script tags)
 styles.css              SHARED  (existing styles, do not reorganize)
 styles/
   three.css             3D owner   (create when needed, link in index.html)
-  data-ui.css           Backend owner
+  data-ui.css           Backend owner (risk panel, mission picker, history, spot labels)
 src/
   main.js               SHARED  (boot + main loop only)
   nav.js                SHARED  (switching views)
@@ -90,7 +90,9 @@ src/
     (add: organs.js, effects.js, fixes.js as you build them)
   ui/                   BACKEND OWNER (views that render data)
     body-view.js  detail.js  crew.js  ask.js
-    (add: risk-board.js  timeline.js  triage.js  engineer.js  director.js  voice.js)
+    risk-board.js         risk panel + mission picker + mission-day slider
+    history.js            medical history drawer
+    (add: triage.js  engineer.js  director.js  voice.js)
   data/                 BACKEND OWNER
     mock.js             demo data (SYS, CREW, histories)
     (add: client.js     REST + WebSocket client, falls back to mock.js)
@@ -163,6 +165,7 @@ OrganState:
   "mission_risk": 0.71,
   "severity": 0.48,
   "status": "Watch",
+  "level": "mild",
   "value": 94.2, "unit": "% of preflight density",
   "usual": "97-100",
   "note": "Hip and spine density down 5.8% since launch.",
@@ -179,6 +182,7 @@ OrganState:
 ```
 - `hrp_risks` = official NASA HRP risk names this organ covers; `hazards` = which of NASA's 5 hazards drive it.
   Both come from `backend/app/hrp.py`. Countermeasures may carry `research` = the real HRP study behind them.
+- `level` = `low` | `mild` | `extreme`, the word the risk panel shows. Always from the backend.
 - `severity` = how bad it is right now (drives the blue color).
 - `mission_risk` = severity combined with how much THIS mission's hazards threaten that organ over the
   remaining days (0 to 1). The Risk Board sorts by `mission_risk`, highest first. `rank` = 1-based position.
@@ -210,8 +214,8 @@ resetView(instant)                       // back to full body
 playFix(organId, fixId)                  // returns a Promise that resolves when the animation ends
 setHeartRate(bpm)                        // heart beats in sync with live data
 ```
-The body is NOT a click target. Organs are opened from the Risk Board (calls `focusOrgan`).
-`onOrganClick` was removed from the contract on purpose.
+Organs open from BOTH the risk panel and the body spots; both call `openSystem(id)`, which calls
+`focusOrgan`. `REGIONS` in `body.js` needs an entry per organ id or its spot is hidden.
 3D owner can change anything inside `src/three/` as long as these keep working.
 
 ### 5.5 Backend API (port 8001, CORS open for localhost:8000)
@@ -224,6 +228,7 @@ The body is NOT a click target. Organs are opened from the Risk Board (calls `fo
 | GET    | `/api/risks?mission=mars` | ranked OrganState list, highest `mission_risk` first (Risk Board) |
 | WS     | `/ws`                     | pushes `{ "type": "vital", ... }` and `{ "type": "state", ... }` |
 | POST   | `/api/countermeasure`     | body `{ organ, id }` -> updated OrganState           |
+| GET    | `/api/history`            | medical history: mission milestones, events, countermeasures, escalations, preflight baselines |
 | GET    | `/api/triage`             | list of alerts with level + Earth delay countdown    |
 | POST   | `/api/director/event`     | body `{ type }`: `radiation_storm`, `bad_sleep_week`, `bp_spike`, `skipped_exercise`, `reset` |
 | POST   | `/api/ask`                | body `{ question }` -> `{ answer, sources, engine }` (Claude/OpenAI if key set, else rules) |
@@ -298,17 +303,20 @@ Pitch line: "NASA's Artemis II crew already wears a wrist device (ARCHeR). VITAL
 3D owner:
 - [ ] Find + import organ models (heart, skeleton, brain, lungs, muscles), convert to .glb, fill manifest + CREDITS.md
 - [ ] Black silhouette body with halftone rim (`effects.js`)
-- [ ] `showRisks(ids)`: only ranked systems glow on the body; body itself not clickable
-- [ ] Eyes: add an `eyes` region/model (organ ID `eyes`) + Thigh Cuff fix animation
+- [ ] `showRisks(ids)`: ranked systems glow on the body in the blue severity scale
+- [x] Eyes + bones have `REGIONS` entries so their spots land on the body (placeholder positions, refine them)
+- [ ] Eyes: real organ model + Thigh Cuff fix animation; bones: skeleton model
 - [ ] Organs glow from inside, `setOrganSeverity` maps to the blue scale
 - [ ] `focusOrgan` zoom with the inside glow
 
 Backend owner:
-- [ ] Backend, built in layers: see 6.1
+- [x] Backend, built in layers: see 6.1 (all routes the frontend uses are live; tests: test_engine.py, test_hrp.py, test_step2.py, verify_sources.py)
 - [x] `src/data/client.js` with mock fallback; Detail, spots, Crew radiation and Ask use live data
-- [ ] Risk Board UI (`src/ui/risk-board.js`): ranked cards, top 3 big, click -> detail
-- [ ] Detail view sections: Current state / What could go wrong / What to do
-- [ ] Remove click-to-open from body spots (spots become passive labels or go away)
+- [x] Risk panel (`src/ui/risk-board.js`): ranked cards with Low/Mild/Extreme + what it could lead to, click -> detail
+- [x] Mission picker (Mars / Moon / ISS) + mission-day slider that previews the body later in the mission
+- [x] Medical history drawer (`src/ui/history.js`) from `/api/history`
+- [x] Detail view sections: Current state / What could go wrong / What to do
+- [x] Body spots stay clickable and cover all six systems
 - [ ] `src/data/client.js` with fallback to mock
 
 ### 6.1 Backend build steps (one layer at a time, test before moving on)
@@ -321,12 +329,12 @@ Routes never change between steps, only what is behind them, so the frontend kee
 | 1 [x] | Foundation | FastAPI, CORS, `/api/health`, `/api/state`, `/api/risks`, `/api/organs/{id}` from a fixed fixture | `curl :8001/api/risks`, open `:8001/docs` |
 | 2 [x] | Space environment | `constants.py`, `missions.py` (phase, gravity, dose, comms by day), JPL Horizons, NASA DONKI, NOAA SWPC, JSON cache; `/api/missions`, `/api/environment`, `/api/comms`, `/api/space-weather`, `/api/sources` | `python test_step2.py`, `/api/sources` says live or cache |
 | 2b [x] | NASA framework | `hrp.py` (5 hazards, 17 risks, organ + mission mapping, research), eyes added, `/api/hrp` | `python test_hrp.py` |
-| 3 [ ] | Devices | `DeviceAdapter` interface + simulated watch, CGM, med bay; `/api/vitals` | readings change on each call |
-| 4 [ ] | Engine | physiology + risk ranking replace the fixture, using the step 2 environment and `hrp.py` tags; includes the eyes (SANS) model; `?day=`, `?mission=` | ranking + values match the fixture at day 184; day 240 differs |
-| 5 [ ] | Live | background sim loop + `/ws` (vitals every 1 s, state every 2 s) | frontend numbers move on their own |
-| 6 [ ] | Actions | `/api/countermeasure`, `/api/director/event` (storm replays a real DONKI event), `/api/mission` | event raises severity, countermeasure lowers it |
-| 7 [ ] | Triage | green/amber/red queue, Earth delay countdown, `/api/triage` | storm creates a red alert that gets a reply |
-| 8 [ ] | Officer | `/api/ask` with Claude/OpenAI, rule-based fallback | answer cites the crew's numbers |
+| 3 [x] | Devices | `DeviceAdapter` interface + simulated watch, CGM, med bay; `/api/vitals` | readings change on each call |
+| 4 [x] | Engine | physiology + risk ranking replace the fixture, using the step 2 environment and `hrp.py` tags; includes the eyes (SANS) model; `?day=`, `?mission=` | ranking + values match the fixture at day 184; day 240 differs |
+| 5 [x] | Live | background sim loop + `/ws` (vitals every 1 s, state every 2 s) | frontend numbers move on their own |
+| 6 [x] | Actions | `/api/countermeasure`, `/api/director/event` (storm replays a real DONKI event), `/api/mission` | event raises severity, countermeasure lowers it |
+| 7 [x] | Triage | green/amber/red queue, Earth delay countdown, `/api/triage` | storm creates a red alert that gets a reply |
+| 8 [~] | Officer | `/api/ask` rule-based from engine state (done); Claude/OpenAI later | answer cites the crew's numbers |
 
 ### Phase 2: features (Sat night)
 - [ ] Timeline scrub (cruise to arrival) using `/api/state?day=`

@@ -7,7 +7,7 @@ export const API = 'http://localhost:8001';
 const WS_URL = 'ws://localhost:8001/ws';
 
 // Latest data from the backend. Views read from here (or from SYS, which is kept in sync).
-export const live = { online: false, state: null, risks: [], vitals: {}, triage: [] };
+export const live = { online: false, state: null, risks: [], vitals: {}, triage: [], previewDay: null };
 
 const listeners = [];
 // fn(type, live). type: 'online' | 'offline' | 'state' | 'vital' | 'triage'
@@ -48,6 +48,9 @@ export const api = {
   setMission: mission => post('/api/mission', { mission }),
   countermeasure: (organ, id) => post('/api/countermeasure', { organ, id }),
   triage: () => request('/api/triage'),
+  history: () => request('/api/history'),
+  missions: () => request('/api/missions'),
+  environment: (mission, day) => request('/api/environment' + query({ mission, day })),
   director: type => post('/api/director/event', { type }),
   ask: question => post('/api/ask', { question }, 35000),
   spaceWeather: () => request('/api/space-weather'),
@@ -56,10 +59,75 @@ export const api = {
   sources: () => request('/api/sources'),
 };
 
+/* One organ, merged from live data and the mock fallback, in the shape the views use.
+   Always returns something for every organ id in ORGAN_IDS. */
+export const ORGAN_IDS = ['bones', 'sleep', 'eyes', 'heart', 'muscles', 'lungs'];
+// Shown only when the backend is off, so the panel still reads sensibly in a demo.
+const FALLBACK_WRONG = {
+  bones: [{ title: 'Hip or spine fracture after landing' }],
+  eyes: [{ title: 'Blurry near vision from optic disc swelling (SANS)' }],
+  heart: [{ title: 'Dizziness or fainting when standing up after landing' }],
+  sleep: [{ title: 'Slower reactions and mistakes during critical tasks' }],
+  muscles: [{ title: 'Weak legs at landing, harder first surface walk' }],
+  lungs: [{ title: 'Breathing problems from cabin air or dust' }],
+};
+const FALLBACK = {
+  bones: { name: 'Bones', value: 95.9, unit: '% of preflight density', usual: '97-100', level: 'mild',
+    note: 'Hip and spine density down 4.1% since launch.', l2: 'Last scan', v2: 'Day 180' },
+  eyes: { name: 'Eyes', value: 5.2, unit: 'mm optic nerve sheath', usual: 'under 5.0 mm', level: 'mild',
+    note: 'Fluid shifting toward the head has widened the optic nerve sheath.', l2: 'Near vision', v2: 'Normal' },
+};
+
+export function organ(id) {
+  const o = live.state && live.state.organs[id];
+  if (o) {
+    return {
+      id, name: o.name, value: o.value, unit: o.unit, usual: o.usual, note: o.note,
+      level: o.level, status: o.status, severity: o.severity, rank: o.rank,
+      drivers: o.drivers, wrong: o.what_could_go_wrong, countermeasures: o.countermeasures,
+      hrpRisks: o.hrp_risks, hazards: o.hazards, projection: o.projection,
+      l2: (SYS[id] || FALLBACK[id] || {}).l2 || 'Watching for', v2: (SYS[id] || FALLBACK[id] || {}).v2 || o.status,
+      week: (SYS[id] || {}).week,
+    };
+  }
+  const m = SYS[id] || FALLBACK[id] || {};
+  let level = m.level;
+  if (!level) {
+    level = 'low';
+    if (m.state === 'watch') level = 'mild';
+  }
+  return {
+    id, status: 'OK', severity: 0, countermeasures: [], drivers: [],
+    wrong: FALLBACK_WRONG[id] || [], ...m, level,
+  };
+}
+
+// Every organ, ranked worst first (live), or a sensible fixed order offline.
+export function rankedOrgans() {
+  if (live.risks.length) return live.risks.map(o => organ(o.id));
+  return ORGAN_IDS.map((id, i) => ({ rank: i + 1, ...organ(id) }));
+}
+
 // Mission numbers for the UI: live when online, mock otherwise.
 export function missionInfo() {
   if (live.state) return live.state;
   return MOCK_MISSION;
+}
+
+// Preview another mission day without leaving live mode. null goes back to live.
+export async function setPreviewDay(day) {
+  live.previewDay = day;
+  if (day === null) {
+    if (live.state) applyState(await api.state());
+    return;
+  }
+  applyState(await api.state(day));
+}
+
+// Switch the whole mission (mars / moon / iss). The backend pushes the new state.
+export async function setMission(mission) {
+  await api.setMission(mission);
+  applyState(await api.state(live.previewDay ?? undefined));
 }
 
 function applyState(state) {
@@ -97,8 +165,8 @@ function connectSocket() {
   ws.onopen = () => { opened = true; };
   ws.onmessage = e => {
     const msg = JSON.parse(e.data);
-    if (msg.type === 'state') applyState(msg.state);
-    if (msg.type === 'vital') applyVital(msg);
+    if (msg.type === 'state' && live.previewDay === null) applyState(msg.state);
+    if (msg.type === 'vital' && live.previewDay === null) applyVital(msg);
   };
   ws.onclose = () => {
     let wait = 30000;
