@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { camera, renderer, pivot, twin } from './scene.js';
 import { uni, pt } from './body.js';
+import { LAYER_MODELS } from './anatomy-panel.js';
 
 /* 3D organ models from assets/models/manifest.json. They sit inside the glass body
    and appear with an upward scan line when their system is opened.
@@ -14,7 +15,8 @@ import { uni, pt } from './body.js';
    fill    share of the view the organ fills when focused
    clipTop cut the model off above this share of its height (trims the lungs' long trachea)
    fullBody  model replaces the skin (the écorché), framed by `frame`
-   region  light up the body region on this model (used for the thigh on the écorché) */
+   region  light up the body region on this model (used for the thigh on the écorché)
+   color   graphite shade, so organs that overlap (heart in front of the lungs) read apart */
 
 const MODEL_DIR = 'assets/models/';
 let manifest = null;
@@ -34,9 +36,9 @@ export function has3dOrgan(k) {
 const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 
 // Graphite organ with a thin cyan edge. Appears with an upward scan line, then a faint sweep repeats.
-function organMaterial(u, source, doubleSided) {
+function organMaterial(u, source, doubleSided, color) {
   const m = new THREE.MeshStandardMaterial({
-    color: '#1b2022', roughness: .42, metalness: 0,
+    color: color || '#1b2022', roughness: .42, metalness: 0,
     normalMap: source?.normalMap || null,
     side: doubleSided ? THREE.DoubleSide : THREE.FrontSide,
   });
@@ -48,7 +50,7 @@ function organMaterial(u, source, doubleSided) {
       .replace('#include <project_vertex>', '#include <project_vertex>\nvW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
-varying vec3 vW; uniform vec3 uCyan, uRegionCenter; uniform float uRegionRadius, uPulse, uReveal, uMinY, uMaxY, uTime, uRegionOn;`)
+varying vec3 vW; uniform vec3 uCyan, uRegionCenter; uniform float uRegionRadius, uPulse, uReveal, uMinY, uMaxY, uTime, uRegionOn, uHover;`)
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
 float span = uMaxY - uMinY;
 float edgeY = uMinY + span * uReveal;
@@ -60,7 +62,7 @@ float scanLine = (1.0 - smoothstep(0.0, span * .012, abs(vW.y - edgeY))) * step(
 float sweepY = uMinY + span * (fract(uTime * .16) * 1.4 - .2);
 float sweep = (1.0 - smoothstep(0.0, span * .006, abs(vW.y - sweepY))) * .45 * step(.999, uReveal);
 float reg = uRegionOn * (1.0 - smoothstep(uRegionRadius * .45, uRegionRadius, distance(vW, uRegionCenter)));
-outgoingLight = mix(outgoingLight, uCyan, clamp(rim * .6 + scanLine + sweep + reg * (.22 + .3 * uPulse), 0.0, 1.0));
+outgoingLight = mix(outgoingLight, uCyan, clamp(rim * (.6 + uHover * .4) + uHover * .18 + scanLine + sweep + reg * (.22 + .3 * uPulse), 0.0, 1.0));
 #include <opaque_fragment>`);
   };
   return m;
@@ -71,19 +73,19 @@ export function loadOrgan(k) {
   if (organs[k]) return organs[k].promise;
   const o = organs[k] = {
     reveal: 0,
-    u: { uReveal: { value: 0 }, uMinY: { value: 0 }, uMaxY: { value: 1 }, uTime: { value: 0 }, uRegionOn: { value: 0 } },
+    u: { uReveal: { value: 0 }, uMinY: { value: 0 }, uMaxY: { value: 1 }, uTime: { value: 0 }, uRegionOn: { value: 0 }, uHover: { value: 0 } },
   };
   o.promise = manifestReady.then(() => {
     const cfg = manifest.organs[k];
     if (!cfg || !twin.body) throw new Error('No model for ' + k);
-    o.u.uRegionOn.value = cfg.region ? 1 : 0;
+    o.region = !!cfg.region;
     return loader.loadAsync(encodeURI(MODEL_DIR + cfg.file)).then(gltf => {
       const model = gltf.scene;
       model.traverse(m => {
         if (!m.isMesh) return;
         // Keep the model's normal map for surface detail, swap everything else for the VITALIS look.
         if (m.material.normalMap) m.material.normalMap.anisotropy = renderer.capabilities.getMaxAnisotropy();
-        m.material = organMaterial(o.u, m.material, !!cfg.clipTop);
+        m.material = organMaterial(o.u, m.material, !!cfg.clipTop, cfg.color);
       });
       placeOrgan(k, cfg, model, o);
       pivot.add(o.group);
@@ -146,11 +148,22 @@ export function prefetchOrgans() {
   loadOrgan('lungs').then(() => loadOrgan('heart'));
 }
 
+// Should this model be showing? The open system's model, or (on the Body view) the models of the picked layer.
+function wanted(k, now) {
+  if (twin.focus) return twin.focus === k && now - twin.focusAt > 650;
+  return (LAYER_MODELS[twin.layer] || []).includes(k);
+}
+
 // Called every frame: scan organs in and out.
 export function updateOrgans(now, dt) {
   for (const [k, o] of Object.entries(organs)) {
     if (!o.group) continue;
-    const want = twin.focus === k && now - twin.focusAt > 650;
+    const want = wanted(k, now);
+    o.u.uHover.value += ((twin.hover === k ? 1 : 0) - o.u.uHover.value) * Math.min(1, dt * 8);
+    // Region glow (the thigh on the écorché) only while that system is hovered or open.
+    let regionGoal = 0;
+    if (o.region && (twin.focus === k || twin.hover === k)) regionGoal = 1;
+    o.u.uRegionOn.value += (regionGoal - o.u.uRegionOn.value) * Math.min(1, dt * 6);
     if (want) o.reveal = Math.min(1, o.reveal + dt / (k === 'muscles' ? 2.2 : 1.5));
     else o.reveal = Math.max(0, o.reveal - dt / .5);
     o.u.uReveal.value = o.reveal < .5 ? 4 * o.reveal ** 3 : 1 - Math.pow(-2 * o.reveal + 2, 3) / 2;
