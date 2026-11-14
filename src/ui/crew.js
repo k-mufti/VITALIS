@@ -1,5 +1,6 @@
 import { $, $$ } from '../util.js';
 import { CREW } from '../data/mock.js';
+import { onData, missionInfo } from '../data/client.js';
 
 /* Crew view: trip progress and crew members. */
 
@@ -19,4 +20,17 @@ export function initCrew() {
     $('.track .done').style.width = STOP_POS[i] + '%';
     $('#tripNote').textContent = b.dataset.note;
   }));
+  showRadiation();
+  onData(type => {
+    if (type === 'state') showRadiation();
+  });
+}
+
+// Radiation so far vs the NASA-STD-3001 career limit (600 mSv).
+function showRadiation() {
+  const m = missionInfo();
+  const fact = $('.facts .fact');
+  const pct = Math.min(100, Math.round(100 * m.radiation_msv / m.radiation_career_limit_msv));
+  fact.querySelector('b').innerHTML = `${Math.round(m.radiation_msv)} <small>of ${m.radiation_career_limit_msv} mSv</small>`;
+  fact.querySelector('.meter i').style.width = pct + '%';
 }

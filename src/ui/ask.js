@@ -1,5 +1,6 @@
 import { $, $$ } from '../util.js';
 import { heartHistory, sleepHistory } from '../data/mock.js';
+import { live, api } from '../data/client.js';
 
 /* Ask view: scripted answers for now. Will call POST /api/ask later (plan.md 5.5). */
 
@@ -28,10 +29,31 @@ const ANSWERS = [
     proof: () => chart({ title: 'Resting heart rate · next 3 days', value: '~66', unit: 'bpm', data: hr, forecast: [65, 65, 66, 66], usual: [54, 62], min: 52, max: 68 }) +
       `<div class="verdict"><h3>Confidence</h3><b>Medium</b></div>` },
   { re: /report|summary|crew/i,
-    a: `<b>Crew report · Day 184</b><ul><li>4 of 6 crew are in their normal range.</li><li>Reyes (03): heart rate up, sleep down.</li><li>Nakamura (05): sore lower back, resting.</li><li>Radiation is 74% of the trip limit, on schedule.</li><li>Cabin air and temperature are normal.</li></ul>`,
+    a: `<b>Crew report · Day 184</b><ul><li>4 of 6 crew are in their normal range.</li><li>Reyes (03): heart rate up, sleep down.</li><li>Nakamura (05): sore lower back, resting.</li><li>Radiation is 339 of 600 mSv (56% of the career limit).</li><li>Cabin air and temperature are normal.</li></ul>`,
     src: 'All crew sensors · last 24 hours (demo data)',
-    proof: () => `<div class="verdict"><h3>Crew</h3><b>4 OK · 2 watch</b></div><div class="verdict"><h3>Radiation</h3><b>148 / 200 mSv</b></div><div class="verdict"><h3>Ship</h3><b>All OK</b></div>` },
+    proof: () => `<div class="verdict"><h3>Crew</h3><b>4 OK · 2 watch</b></div><div class="verdict"><h3>Radiation</h3><b>339 / 600 mSv</b></div><div class="verdict"><h3>Ship</h3><b>All OK</b></div>` },
 ];
+
+// Proof panel for live answers: the top 3 risks the officer looked at.
+function liveProof() {
+  return live.risks.slice(0, 3).map(o =>
+    `<div class="verdict"><h3>${o.rank}. ${o.name}</h3><b>${o.status} · ${o.value} ${o.unit}</b></div>`).join('');
+}
+
+async function askLive(q, a, th) {
+  let text = 'I could not reach the medical officer. Try again in a moment.';
+  let src = '';
+  try {
+    const r = await api.ask(q);
+    text = r.answer;
+    src = r.sources.join(' · ');
+  } catch (err) {
+    console.error(err);
+  }
+  a.innerHTML = `<span class="who-tag">Vitalis</span><p>${text}</p>` + (src ? `<p class="src"><b>Sources</b>${src}</p>` : '');
+  $('#proof').innerHTML = `<h3>What I looked at</h3>` + liveProof();
+  th.scrollTop = th.scrollHeight;
+}
 
 export function ask(q, instant) {
   q = q.trim(); if (!q) return;
@@ -40,6 +62,10 @@ export function ask(q, instant) {
   const hit = ANSWERS.find(x => x.re.test(q));
   const a = document.createElement('div'); a.className = 'a'; a.innerHTML = `<span class="who-tag">Vitalis</span><span class="thinking"></span>`; th.append(a);
   th.scrollTop = th.scrollHeight;
+  if (live.online) {
+    askLive(q, a, th);
+    return;
+  }
   setTimeout(() => {
     a.innerHTML = `<span class="who-tag">Vitalis</span>` + (hit ? hit.a + `<p class="src"><b>Sources</b>${hit.src}</p>` : `I can only answer questions about this demo crew’s health. Try one of the questions below.`);
     if (hit) $('#proof').innerHTML = `<h3>What I looked at</h3>` + hit.proof();

@@ -2,6 +2,7 @@ import { $, $$ } from '../util.js';
 import { state } from '../state.js';
 import { SYS } from '../data/mock.js';
 import { GUIDE } from '../data/health-rules.js';
+import { onData } from '../data/client.js';
 import { focusOrgan, resetView } from '../three/api.js';
 import { ORGANS, animateOrgan, initOrganDrag } from '../three/organ-drawings.js';
 import { show } from '../nav.js';
@@ -82,6 +83,17 @@ export function initDetail() {
   $('#back').addEventListener('click', () => show('body'));
   addEventListener('keydown', e => { if (e.key === 'Escape' && state.view === 'detail') show('body'); });
   initOrganDrag();
+
+  // Live data: refresh the open system's numbers (not while looking at a past day).
+  onData(type => {
+    if (type !== 'state' && type !== 'vital') return;
+    if (!state.current || state.pastDay !== null) return;
+    const d = SYS[state.current];
+    $('#dValue').textContent = d.value;
+    $('#dUsual').textContent = d.usual;
+    $('#d2Value').textContent = d.v2;
+    const note = $('#dNote'); note.textContent = d.note; note.classList.toggle('watch', d.state === 'watch');
+  });
 
   // Small live wobble on the big number
   setInterval(() => {
