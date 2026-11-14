@@ -1,0 +1,432 @@
+{
+  "mission": "mars",
+  "mission_name": "Mars",
+  "crew_id": "03",
+  "day": 184,
+  "date": "2026-11-14",
+  "phase": "cruise",
+  "arrival_day": 240,
+  "end_day": 740,
+  "comms_delay_min": 6.9,
+  "radiation_msv": 338.6,
+  "radiation_career_limit_msv": 600,
+  "radiation_event_limit_msv": 250,
+  "storm": null,
+  "risk_ranking": [
+    "bones",
+    "sleep",
+    "heart",
+    "muscles",
+    "lungs"
+  ],
+  "organs": {
+    "heart": {
+      "id": "heart",
+      "name": "Heart",
+      "rank": 3,
+      "mission_risk": 0.643,
+      "severity": 0.484,
+      "status": "Watch",
+      "value": 64,
+      "unit": "beats a minute at rest",
+      "usual": "54-62",
+      "note": "Resting rate is 6 beats above your usual. Worth watching.",
+      "drivers": [
+        "microgravity",
+        "2 missed exercise days",
+        "1.2 h sleep debt",
+        "radiation dose"
+      ],
+      "projection": [
+        {
+          "day": 184,
+          "severity": 0.484
+        },
+        {
+          "day": 191,
+          "severity": 0.487
+        },
+        {
+          "day": 198,
+          "severity": 0.49
+        },
+        {
+          "day": 205,
+          "severity": 0.494
+        },
+        {
+          "day": 212,
+          "severity": 0.497
+        },
+        {
+          "day": 219,
+          "severity": 0.5
+        },
+        {
+          "day": 226,
+          "severity": 0.503
+        },
+        {
+          "day": 233,
+          "severity": 0.506
+        },
+        {
+          "day": 240,
+          "severity": 0.51
+        }
+      ],
+      "countermeasures": [
+        {
+          "id": "lbnp_30",
+          "label": "30 min lower body negative pressure",
+          "minutes": 30,
+          "effect": -0.12
+        },
+        {
+          "id": "cardio_45",
+          "label": "45 min cycling",
+          "minutes": 45,
+          "effect": -0.06
+        }
+      ],
+      "what_could_go_wrong": [
+        {
+          "title": "Dizziness or fainting when standing up after landing",
+          "likelihood": "medium",
+          "by_day": 240,
+          "signs": [
+            "resting rate climbing",
+            "light-headed when moving"
+          ]
+        },
+        {
+          "title": "Irregular heart rhythm",
+          "likelihood": "medium",
+          "by_day": null,
+          "signs": [
+            "skipped beats",
+            "racing heart at rest"
+          ]
+        }
+      ],
+      "source": "NASA HRP: cardiovascular adaptation and orthostatic intolerance after landing"
+    },
+    "bones": {
+      "id": "bones",
+      "name": "Bones",
+      "rank": 1,
+      "mission_risk": 0.694,
+      "severity": 0.51,
+      "status": "Watch",
+      "value": 95.9,
+      "unit": "% of preflight density",
+      "usual": "97-100",
+      "note": "Hip and spine density down 4.1% since launch.",
+      "drivers": [
+        "microgravity",
+        "2 missed exercise days"
+      ],
+      "projection": [
+        {
+          "day": 184,
+          "severity": 0.51
+        },
+        {
+          "day": 191,
+          "severity": 0.528
+        },
+        {
+          "day": 198,
+          "severity": 0.546
+        },
+        {
+          "day": 205,
+          "severity": 0.564
+        },
+        {
+          "day": 212,
+          "severity": 0.582
+        },
+        {
+          "day": 219,
+          "severity": 0.6
+        },
+        {
+          "day": 226,
+          "severity": 0.618
+        },
+        {
+          "day": 233,
+          "severity": 0.636
+        },
+        {
+          "day": 240,
+          "severity": 0.653
+        }
+      ],
+      "countermeasures": [
+        {
+          "id": "ared_60",
+          "label": "60 min resistive exercise",
+          "minutes": 60,
+          "effect": -0.137
+        }
+      ],
+      "what_could_go_wrong": [
+        {
+          "title": "Hip or spine fracture after landing",
+          "likelihood": "high",
+          "by_day": 240,
+          "signs": [
+            "density below 92%",
+            "back pain under load"
+          ]
+        },
+        {
+          "title": "Kidney stones from calcium released by bone",
+          "likelihood": "high",
+          "by_day": null,
+          "signs": [
+            "side or back pain",
+            "less urine"
+          ]
+        }
+      ],
+      "source": "NASA HRP: bone loss 1-1.5% per month in weight-bearing bones"
+    },
+    "sleep": {
+      "id": "sleep",
+      "name": "Sleep & mind",
+      "rank": 2,
+      "mission_risk": 0.67,
+      "severity": 0.557,
+      "status": "Watch",
+      "value": 6.2,
+      "unit": "hours slept",
+      "usual": "7-8 h",
+      "note": "Sleeping 1.2 h less than usual this week.",
+      "drivers": [
+        "1.2 h sleep debt",
+        "radiation dose"
+      ],
+      "projection": [
+        {
+          "day": 184,
+          "severity": 0.557
+        },
+        {
+          "day": 191,
+          "severity": 0.557
+        },
+        {
+          "day": 198,
+          "severity": 0.557
+        },
+        {
+          "day": 205,
+          "severity": 0.557
+        },
+        {
+          "day": 212,
+          "severity": 0.557
+        },
+        {
+          "day": 219,
+          "severity": 0.557
+        },
+        {
+          "day": 226,
+          "severity": 0.557
+        },
+        {
+          "day": 233,
+          "severity": 0.557
+        },
+        {
+          "day": 240,
+          "severity": 0.557
+        }
+      ],
+      "countermeasures": [
+        {
+          "id": "sleep_plan",
+          "label": "Protected 8 h sleep + light schedule",
+          "minutes": 480,
+          "effect": -0.397
+        },
+        {
+          "id": "call_home",
+          "label": "Video message home + crew time",
+          "minutes": 30,
+          "effect": -0.05
+        }
+      ],
+      "what_could_go_wrong": [
+        {
+          "title": "Slower reactions and mistakes during critical tasks",
+          "likelihood": "high",
+          "by_day": 187,
+          "signs": [
+            "reaction test slower than usual",
+            "under 6 h sleep"
+          ]
+        },
+        {
+          "title": "Low mood and crew conflict from isolation",
+          "likelihood": "high",
+          "by_day": null,
+          "signs": [
+            "mood score dropping",
+            "withdrawing from crew"
+          ]
+        }
+      ],
+      "source": "NASA HRP: risk of sleep loss and circadian misalignment"
+    },
+    "lungs": {
+      "id": "lungs",
+      "name": "Lungs",
+      "rank": 5,
+      "mission_risk": 0.0,
+      "severity": 0.0,
+      "status": "OK",
+      "value": 15,
+      "unit": "breaths a minute",
+      "usual": "14-18",
+      "note": "Breathing is steady. Right where it usually is.",
+      "drivers": [],
+      "projection": [
+        {
+          "day": 184,
+          "severity": 0.0
+        },
+        {
+          "day": 191,
+          "severity": 0.0
+        },
+        {
+          "day": 198,
+          "severity": 0.0
+        },
+        {
+          "day": 205,
+          "severity": 0.0
+        },
+        {
+          "day": 212,
+          "severity": 0.0
+        },
+        {
+          "day": 219,
+          "severity": 0.0
+        },
+        {
+          "day": 226,
+          "severity": 0.0
+        },
+        {
+          "day": 233,
+          "severity": 0.0
+        },
+        {
+          "day": 240,
+          "severity": 0.0
+        }
+      ],
+      "countermeasures": [
+        {
+          "id": "air_check",
+          "label": "Cabin air check + breathing exercises",
+          "minutes": 15,
+          "effect": 0.0
+        }
+      ],
+      "what_could_go_wrong": [
+        {
+          "title": "Breathing problems from cabin air or dust",
+          "likelihood": "low",
+          "by_day": null,
+          "signs": [
+            "oxygen below 95%",
+            "breathing faster at rest"
+          ]
+        }
+      ],
+      "source": "NASA-STD-3001 Vol 1: cabin atmosphere and crew health"
+    },
+    "muscles": {
+      "id": "muscles",
+      "name": "Muscles",
+      "rank": 4,
+      "mission_risk": 0.314,
+      "severity": 0.281,
+      "status": "OK",
+      "value": 87,
+      "unit": "recovery out of 100",
+      "usual": "80-95",
+      "note": "2 missed workout days are slowing recovery.",
+      "drivers": [
+        "microgravity",
+        "2 missed exercise days"
+      ],
+      "projection": [
+        {
+          "day": 184,
+          "severity": 0.281
+        },
+        {
+          "day": 191,
+          "severity": 0.288
+        },
+        {
+          "day": 198,
+          "severity": 0.295
+        },
+        {
+          "day": 205,
+          "severity": 0.302
+        },
+        {
+          "day": 212,
+          "severity": 0.309
+        },
+        {
+          "day": 219,
+          "severity": 0.316
+        },
+        {
+          "day": 226,
+          "severity": 0.323
+        },
+        {
+          "day": 233,
+          "severity": 0.33
+        },
+        {
+          "day": 240,
+          "severity": 0.337
+        }
+      ],
+      "countermeasures": [
+        {
+          "id": "ared_60",
+          "label": "60 min resistive exercise",
+          "minutes": 60,
+          "effect": -0.15
+        }
+      ],
+      "what_could_go_wrong": [
+        {
+          "title": "Weak legs at landing, harder first surface walk",
+          "likelihood": "low",
+          "by_day": 240,
+          "signs": [
+            "recovery score falling",
+            "missed workouts"
+          ]
+        }
+      ],
+      "source": "NASA HRP: risk of muscle loss in microgravity"
+    }
+  }
+}
