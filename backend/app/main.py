@@ -163,14 +163,17 @@ def get_vitals():
 
 
 @app.post("/api/countermeasure")
-def post_countermeasure(body: CountermeasureIn):
+async def post_countermeasure(body: CountermeasureIn):
     for cm in COUNTERMEASURES.get(body.organ, []):
         if cm["id"] == body.id:
             before = mission_state(sim)["organs"][body.organ]
             apply_change(sim.mods, sim.relief, cm)
             sim.events.insert(0, f"countermeasure:{body.id}")
-            after = mission_state(sim)["organs"][body.organ]
-            return {"ok": True, "before": before, "after": after}
+            sim.fresh_readings(DEVICES)
+            state = mission_state(sim)
+            triage.update(sim, state)
+            await broadcast({"type": "state", "state": state})
+            return {"ok": True, "before": before, "after": state["organs"][body.organ]}
     raise HTTPException(status_code=404, detail="unknown organ or countermeasure id")
 
 
@@ -186,10 +189,15 @@ def get_triage():
 
 
 @app.post("/api/director/event")
-def post_director_event(body: EventIn):
+async def post_director_event(body: EventIn):
     result = director.trigger(sim, body.type)
     if not result["ok"]:
         raise HTTPException(status_code=400, detail=result["error"])
+    # Unscheduled check on every device, then push the new state right away.
+    sim.fresh_readings(DEVICES)
+    state = mission_state(sim)
+    triage.update(sim, state)
+    await broadcast({"type": "state", "state": state})
     return result
 
 

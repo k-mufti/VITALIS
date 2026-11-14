@@ -3,6 +3,7 @@ from . import constants as C
 from . import triage
 from .engine.physiology import mission_state
 from .sources import donki
+from .state import MOD_LIMITS
 
 EVENTS = ["radiation_storm", "bad_sleep_week", "bp_spike", "skipped_exercise", "reset"]
 
@@ -32,6 +33,7 @@ def trigger(sim, kind):
         m["missed_exercise_days"] += 5
     else:
         return {"ok": False, "error": f"unknown event, use one of {EVENTS}"}
+    for key, limit in MOD_LIMITS.items():
+        m[key] = min(m[key], limit)
     sim.events.insert(0, kind)
-    sim.measure_now = True  # unscheduled check: every device reads on the next tick
     return {"ok": True, "event": kind, "storm": sim.storm if kind == "radiation_storm" else None}

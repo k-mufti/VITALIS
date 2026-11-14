@@ -5,6 +5,12 @@ from . import missions as M
 
 ORGANS = ["heart", "bones", "sleep", "eyes", "lungs", "muscles"]
 
+# Seconds of continuous readings averaged for the current value (smooths sensor noise).
+RECENT_WINDOW = 5
+
+# Upper limits for the body-state knobs, so repeated director clicks stay physiologically sane.
+MOD_LIMITS = {"sleep_debt": 4.0, "missed_exercise_days": 14, "bp_offset": 42.0, "stress": 2.0}
+
 
 class Sim:
     def __init__(self):
@@ -37,10 +43,24 @@ class Sim:
         self.history[vital["metric"]].append(vital["value"])
 
     def recent(self, metric):
+        """Current value of a metric. Continuous sensors (every second) are smoothed over the last
+        few seconds; scheduled checks (daily cuff, weekly ultrasound) use the latest reading, since
+        older ones describe the body as it was days ago."""
         values = self.history.get(metric)
         if not values:
             return None
-        return sum(values) / len(values)
+        window = list(values)[-RECENT_WINDOW:] if self.latest[metric]["cadence"] == "continuous" else [values[-1]]
+        return sum(window) / len(window)
+
+    def fresh_readings(self, devices):
+        """Something just changed the body (director event, countermeasure): drop old readings and
+        take a new one from every device, so the change shows at once instead of being averaged away."""
+        self.history.clear()
+        self.measure_now = True
+        for device in devices:
+            for v in device.read(self):
+                self.record(v)
+        self.measure_now = False
 
 
 sim = Sim()
