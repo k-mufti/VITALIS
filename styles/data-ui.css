@@ -222,14 +222,58 @@
   .mission-pick { width: 220px; }
 }
 
-/* ---------- detail view: what this could lead to ---------- */
-.d-wrong { margin-top: 18px; max-width: 290px; }
-.d-wrong .lead b, .d-wrong .do b { display: block; font: 600 10px var(--cond); letter-spacing: .18em; text-transform: uppercase; color: var(--soft); margin-bottom: 4px; }
-.d-wrong ul { list-style: none; display: flex; flex-direction: column; gap: 5px; }
-.d-wrong li { position: relative; padding-left: 13px; font: 400 12.5px/1.35 var(--sans); }
-.d-wrong li::before { content: ''; position: absolute; left: 0; top: 7px; width: 5px; height: 5px; background: var(--amber); }
-.d-wrong li em { font-style: normal; color: var(--soft); }
-.d-wrong .do { margin-top: 13px; padding-top: 11px; border-top: 1px solid var(--line); font: 500 13px/1.35 var(--sans); }
+/* ---------- detail view: current state, what could go wrong, what to do ---------- */
+/* The 3D body sits behind this view, so the text columns get a paper backing to stay readable.
+   The left column is taller now: keep it centred when there is room, but never over the Back button. */
+.detail .d-left { left: 28px; top: max(72px, calc(50% - 285px)); transform: none; width: 324px; padding: 12px; background: rgba(245, 245, 242, .88); }
+.d-now { margin-top: 18px; }
+.d-now-top { display: flex; align-items: center; gap: 10px; }
+.d-sev { flex: 1; height: 3px; background: var(--line); }
+.d-sev i { display: block; height: 100%; background: var(--green); transition: width .6s var(--ease); }
+.d-sev.mild i { background: var(--amber); }
+.d-sev.extreme i { background: var(--red); }
+.d-trend { margin-top: 7px; font: 400 12.5px/1.4 var(--sans); color: var(--soft); }
+.d-head { margin-top: 14px; font: 600 10px var(--cond); letter-spacing: .18em; text-transform: uppercase; color: var(--soft); }
+.d-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.d-chips span { padding: 3px 8px; border: 1px solid var(--line); background: var(--white); font: 500 12px var(--sans); }
+
+/* The readings move to the top right so the plan fits under them. */
+.detail .d-right { top: 18px; right: 28px; transform: none; width: 344px; padding: 10px 12px 12px; grid-template-columns: 1fr 1fr; gap: 10px 20px; background: rgba(245, 245, 242, .88); }
+.detail .d-right .pair b { font-size: 30px; }
+.detail .d-right .wave { grid-column: 1 / -1; height: 30px; }
+.detail .d-right .tiny { grid-column: 1 / -1; margin-top: -4px; }
+
+.d-plan { position: absolute; right: 28px; top: 164px; bottom: 44px; width: 344px; padding: 12px; background: rgba(245, 245, 242, .88); display: flex; flex-direction: column; gap: 22px; overflow-y: auto; scrollbar-width: thin; }
+.d-plan h3 { margin-bottom: 9px; font: 600 13px var(--cond); letter-spacing: .2em; text-transform: uppercase; }
+.d-plan h3 em { font-style: normal; font-weight: 500; color: var(--soft); }
+.d-meta { display: block; margin-top: 3px; font: 500 11px var(--cond); letter-spacing: .14em; text-transform: uppercase; color: var(--soft); }
+.d-risks { list-style: none; display: flex; flex-direction: column; gap: 7px; }
+.d-risk { padding: 9px 12px; background: var(--white); border: 1px solid var(--line); border-left: 3px solid var(--soft); }
+.d-risk.high { border-left-color: var(--red); }
+.d-risk.medium { border-left-color: var(--amber); }
+.d-risk.low { border-left-color: var(--green); }
+.d-risk b { display: block; font: 500 14px/1.3 var(--sans); }
+.d-risk p { margin-top: 5px; font: 400 12.5px/1.4 var(--sans); }
+.d-risk p em { margin-right: 7px; font: 600 10px var(--cond); font-style: normal; letter-spacing: .16em; text-transform: uppercase; color: var(--soft); }
+.d-act .d-meta { color: var(--ink); }
+.d-acts { display: flex; flex-direction: column; gap: 7px; }
+.d-act { display: block; width: 100%; padding: 10px 12px; text-align: left; background: var(--white); border: 1px solid var(--ink); transition: background .25s, color .25s, opacity .25s; }
+.d-act b { display: block; font: 600 14px/1.3 var(--sans); }
+.d-tag { display: inline-block; margin-bottom: 5px; padding: 2px 6px; background: var(--cyan); color: var(--white); font: 600 10px var(--cond); letter-spacing: .16em; text-transform: uppercase; }
+.d-study { display: block; margin-top: 3px; font: 400 12px/1.35 var(--sans); color: var(--soft); }
+.d-go { display: block; margin-top: 8px; font: 600 12px var(--cond); letter-spacing: .16em; text-transform: uppercase; color: var(--cyan); }
+.d-go i { display: inline-block; font-style: normal; transition: transform .3s var(--ease); }
+.d-act:hover:not(:disabled) { background: var(--ink); color: var(--white); }
+.d-act:hover:not(:disabled) .d-meta, .d-act:hover:not(:disabled) .d-study { color: #b4b4ae; }
+.d-act:hover:not(:disabled) .d-go { color: #9fe3ee; }
+.d-act:hover:not(:disabled) .d-go i { transform: translateX(5px); }
+.d-act:disabled { cursor: default; opacity: .45; }
+.d-act.busy { opacity: 1; border-color: var(--cyan); }
+.d-off { font: 400 13px/1.45 var(--sans); color: var(--soft); }
+.d-acts + .d-off { margin-top: 9px; }
+.d-result { margin-top: 9px; padding: 9px 12px; border-left: 3px solid var(--green); background: var(--white); font: 400 13px/1.45 var(--sans); }
+.d-result b { display: block; font: 600 10px var(--cond); letter-spacing: .18em; text-transform: uppercase; color: var(--green); }
+.d-result.bad { border-left-color: var(--red); }
 
 /* ---------- body spots: keep labels readable over the dark model ---------- */
 .spot span {
