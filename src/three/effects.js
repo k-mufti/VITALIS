@@ -28,6 +28,13 @@ export function halftoneUniforms(pixelRatio) {
     uAura: { value: 0 },               // 0..1 aura strength (0 = off)
     uAuraSize: { value: .06 },         // aura thickness in world units
     uAuraColor: { value: new THREE.Color('#0aa5bd') },
+    // Outline style
+    uOutWidth: { value: .45 },         // 0..1 how far the line reaches in from the edge
+    uOutSoft: { value: .2 },           // 0..1 crisp ink -> soft charcoal
+    uOutColor: { value: new THREE.Color('#0e0e0e') },
+    uOutFill: { value: 0 },            // 0 paper white -> 1 black body
+    uOutShade: { value: 0 },           // 0..1 soft light/shadow inside the body
+    uOutDots: { value: 0 },            // 0..1 halftone dots in the shadows
   };
 }
 
@@ -50,8 +57,9 @@ export function createHalftoneSkin(uni) {
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
 varying vec3 vW; varying vec3 vN; varying vec3 vV;
-uniform vec3 uRegionCenter, uCyan, uPaper;
+uniform vec3 uRegionCenter, uCyan, uPaper, uOutColor;
 uniform float uRegionRadius, uHighlight, uGhost, uPulse, uCell, uStyle, uEdge, uShade;
+uniform float uOutWidth, uOutSoft, uOutFill, uOutShade, uOutDots;
 // 1 inside a dot of radius r (cell = 1), 0 outside, with a soft edge.
 float dotMask(float d, float r) { return 1.0 - smoothstep(r - .06, r + .06, d); }`)
       .replace('#include <opaque_fragment>', `
@@ -73,7 +81,13 @@ if (uStyle < .5) {
   float l = .15 + .85 * lam;
   col = mix(vec3(.02), vec3(.5), l * l);
 } else {
-  col = mix(uPaper * .93, vec3(0.0), smoothstep(.55, .75, rim));
+  // Outline: fill tone + optional shading + shadow dots, then the edge line on top.
+  col = mix(uPaper * .93, vec3(.01), uOutFill);
+  col *= mix(1.0, .3 + .7 * lam, uOutShade);
+  float shadowR = uOutDots * smoothstep(.15, 1.0, 1.0 - lam) * .45;
+  col = mix(col, uOutColor, dotMask(d, shadowR) * step(.03, shadowR));
+  float lineLo = 1.0 - uOutWidth;
+  col = mix(col, uOutColor, smoothstep(lineLo, min(lineLo + .02 + uOutSoft * .5, 1.0), rim));
 }
 col = mix(col, vec3(0.0), uGhost);
 
