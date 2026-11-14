@@ -14,8 +14,10 @@ import httpx
 from . import cache
 
 BASE = "https://ccmc.gsfc.nasa.gov/DONKI-API/get"
-# Keep the request windows small so the API answers fast and does not rate limit us.
-WINDOW_DAYS = {"SEP": 730, "FLR": 60}
+# How far back to look. SEP events are rare, so look further back than for flares.
+LOOKBACK_DAYS = {"SEP": 730, "FLR": 60}
+# The new API rejects long date ranges (HTTP 400), so we ask in chunks. Largest chunk that works wins.
+CHUNK_SIZES = [60, 30, 14, 7]
 
 # Real SEP events from the DONKI catalog, used only if every fetch fails and there is no cache.
 SEED_SEP = [
@@ -38,24 +40,42 @@ errors = {"sep": None, "flr": None}
 _data = {"sep": [], "flr": []}
 
 
-async def _fetch(kind):
-    """Returns (events, error). events is a list on success, None on failure."""
-    end = dt.date.today()
-    start = end - dt.timedelta(days=WINDOW_DAYS[kind])
+async def _get(client, kind, start, end):
+    """One request. Returns (events or None, error or None)."""
     params = {"startDate": start.isoformat(), "endDate": end.isoformat()}
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.get(f"{BASE}/{kind}", params=params)
-        if r.status_code != 200:
-            return None, f"HTTP {r.status_code} from {BASE}/{kind}"
-        if "json" not in r.headers.get("content-type", ""):
-            return None, f"not JSON ({r.headers.get('content-type')}) from {BASE}/{kind}"
-        data = r.json()
-        if not isinstance(data, list):
-            return None, "unexpected JSON shape (not a list)"
-        return data, None
+        r = await client.get(f"{BASE}/{kind}", params=params)
     except Exception as e:
         return None, f"{type(e).__name__}: {e}"
+    if r.status_code != 200:
+        return None, f"HTTP {r.status_code} for {start}..{end}: {r.text[:150].strip()}"
+    if "json" not in r.headers.get("content-type", ""):
+        return None, f"not JSON ({r.headers.get('content-type')})"
+    data = r.json()
+    if not isinstance(data, list):
+        return None, "unexpected JSON shape (not a list)"
+    return data, None
+
+
+async def _fetch(kind):
+    """Walk back LOOKBACK_DAYS in chunks. Returns (events, error)."""
+    today = dt.date.today()
+    oldest = today - dt.timedelta(days=LOOKBACK_DAYS[kind])
+    last_error = None
+    async with httpx.AsyncClient(timeout=20) as client:
+        for size in CHUNK_SIZES:
+            events, end, ok = [], today, True
+            while end > oldest:
+                start = max(oldest, end - dt.timedelta(days=size))
+                data, err = await _get(client, kind, start, end)
+                if data is None:
+                    last_error, ok = err, False
+                    break
+                events.extend(data)
+                end = start - dt.timedelta(days=1)
+            if ok:
+                return events, None
+    return None, last_error
 
 
 async def refresh():
@@ -65,7 +85,7 @@ async def refresh():
         if data is not None:
             _data[key] = data
             cache.save(f"donki_{key}", data)
-            status[key] = f"live (ccmc DONKI-API, {len(data)} events in last {WINDOW_DAYS[kind]} days)"
+            status[key] = f"live (ccmc DONKI-API, {len(data)} events in last {LOOKBACK_DAYS[kind]} days)"
             continue
         cached = cache.load(f"donki_{key}")
         if cached:
