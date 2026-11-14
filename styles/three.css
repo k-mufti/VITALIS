@@ -19,22 +19,18 @@
 .an-tab.on { background: var(--ink); color: var(--white); }
 .an-tab:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 
-.an-list { display: none; margin-top: 10px; }
-.an-list.on { display: block; animation: anIn .4s var(--ease) both; }
+.an-grid { display: none; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+.an-grid.on { display: grid; animation: anIn .4s var(--ease) both; }
 @keyframes anIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
-.an-row {
-  display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 12px;
-  width: 100%; padding: 13px 6px; text-align: left; border-bottom: 1px solid var(--line);
-  transition: background .25s;
+/* Picture of the part, name underneath */
+.an-tile {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 6px 4px 10px; border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--white) 55%, transparent);
+  transition: border-color .25s, background .25s;
 }
-.an-row .dot { width: 8px; height: 8px; border-radius: 50%; }
-.an-name { font: 500 17px var(--sans); }
-.an-flag { margin-left: 10px; font: 600 12px var(--cond); font-style: normal; letter-spacing: .14em; text-transform: uppercase; color: var(--amber); }
-.an-flag.extreme { color: var(--red); }
-.an-val { font: 500 17px var(--sans); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.an-val b { font-weight: 500; }
-.an-val small { margin-left: 5px; font: 400 13px var(--sans); color: var(--soft); }
-button.an-row:hover, button.an-row:focus-visible { background: var(--white); outline: none; }
-button.an-row:hover .an-name { text-decoration: underline; text-decoration-color: var(--cyan); text-underline-offset: 4px; text-decoration-thickness: 2px; }
-.an-flag:empty { display: none; }
+.an-tile img { width: 100%; aspect-ratio: 1; object-fit: contain; transition: transform .35s var(--ease); }
+.an-tile span { font: 500 15px var(--sans); }
+.an-tile:hover, .an-tile:focus-visible { border-color: var(--ink); background: var(--white); outline: none; }
+.an-tile:hover img, .an-tile:focus-visible img { transform: scale(1.05); }
