@@ -54,6 +54,7 @@ export const api = {
   director: type => post('/api/director/event', { type }),
   ask: question => post('/api/ask', { question }, 35000),
   spaceWeather: () => request('/api/space-weather'),
+  radiationCurve: mission => request('/api/radiation/curve' + query({ mission })),
   comms: () => request('/api/comms'),
   vitals: () => request('/api/vitals'),
   sources: () => request('/api/sources'),
@@ -73,8 +74,8 @@ const FALLBACK_WRONG = {
   lungs: [{ title: 'Breathing problems from cabin air or dust' }],
 };
 const FALLBACK = {
-  bones: { name: 'Bones', value: 95.9, unit: '% of preflight density', usual: '97-100', level: 'mild',
-    note: 'Hip and spine density down 4.1% since launch.', l2: 'Last scan', v2: 'Day 180' },
+  bones: { name: 'Bones', value: 95.9, unit: '% of preflight density (estimated)', usual: '97-100', level: 'mild',
+    note: 'Estimated hip and spine density down 4.1% since launch. Scanned after landing.', l2: 'Next scan', v2: 'After landing' },
   eyes: { name: 'Eyes', value: 5.2, unit: 'mm optic nerve sheath', usual: 'under 5.0 mm', level: 'mild',
     note: 'Fluid shifting toward the head has widened the optic nerve sheath.', l2: 'Near vision', v2: 'Normal' },
 };
@@ -86,7 +87,7 @@ export function organ(id) {
       id, name: o.name, value: o.value, unit: o.unit, usual: o.usual, note: o.note,
       level: o.level, status: o.status, severity: o.severity, rank: o.rank,
       drivers: o.drivers, wrong: o.what_could_go_wrong, countermeasures: o.countermeasures,
-      hrpRisks: o.hrp_risks, hazards: o.hazards, projection: o.projection,
+      hrpRisks: o.hrp_risks, hazards: o.hazards, projection: o.projection, measurement: o.measurement,
       l2: (SYS[id] || FALLBACK[id] || {}).l2 || 'Watching for', v2: (SYS[id] || FALLBACK[id] || {}).v2 || o.status,
       week: (SYS[id] || {}).week,
     };

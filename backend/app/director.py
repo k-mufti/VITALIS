@@ -33,4 +33,5 @@ def trigger(sim, kind):
     else:
         return {"ok": False, "error": f"unknown event, use one of {EVENTS}"}
     sim.events.insert(0, kind)
+    sim.measure_now = True  # unscheduled check: every device reads on the next tick
     return {"ok": True, "event": kind, "storm": sim.storm if kind == "radiation_storm" else None}

@@ -8,7 +8,7 @@ export const SYS = {
     note: 'Resting rate has been a little high for 3 days. Worth watching.', week: [57, 58, 57, 60, 62, 63, 64], jitter: [63, 65] },
   sleep: { name: 'Sleep & mind', value: 6.2, unit: 'hours slept', usual: '7–8 h', l2: 'Reaction test', v2: 'Normal', state: 'watch',
     note: 'Sleeping less than usual this week. Focus is still normal.', week: [7.3, 7.1, 7.0, 6.8, 6.5, 6.4, 6.2] },
-  muscles: { name: 'Muscles', value: 87, unit: 'recovery out of 100', usual: '80–95', l2: 'Workout today', v2: '45 min', state: 'ok',
+  muscles: { name: 'Muscles', value: 87, unit: 'strength estimate out of 100', usual: '80–95', l2: 'Workout today', v2: '45 min', state: 'ok',
     note: 'Recovered well from yesterday’s workout.', week: [84, 88, 82, 90, 86, 85, 87] },
 };
 

@@ -20,11 +20,11 @@ def baseline_entries(state):
     m = M.get(state["mission"])
     entries = [
         {"day": 0, "date": M.date_for_day(0).isoformat(), "kind": "milestone",
-         "title": f"Launch, {state['mission_name']} mission", "detail": "Preflight scans on file: bone density, vision, cardiac."},
+         "title": f"Launch, {state['mission_name']} mission", "detail": "Preflight scans on file: bone density (DXA), vision, cardiac. Bone is next scanned after landing."},
         {"day": 30, "date": M.date_for_day(30).isoformat(), "kind": "checkup",
          "title": "30-day standard measures", "detail": "All systems in the crew member's usual range."},
         {"day": 90, "date": M.date_for_day(90).isoformat(), "kind": "checkup",
-         "title": "90-day standard measures", "detail": "Bone density down 1.8%, expected for time in microgravity."},
+         "title": "90-day standard measures", "detail": "Estimated bone loss 1.8% from exercise logs, expected for time in microgravity."},
     ]
     if state["day"] >= m["arrival_day"]:
         entries.append({"day": m["arrival_day"], "date": M.date_for_day(m["arrival_day"]).isoformat(),

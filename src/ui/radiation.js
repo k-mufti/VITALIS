@@ -276,8 +276,8 @@ function renderPop() {
   if (now) {
     html += `<div class="sw-row"><span>Proton flux now</span><b>${formatFlux(now.flux_pfu)} <small>pfu</small></b></div>
       ${meter(now.flux_pfu, now.threshold_pfu)}
-      <p class="sw-muted">GOES-${now.satellite}, ${esc(now.energy)} protons, ${fmtTime(now.time_tag)}.
-      A solar radiation storm starts at ${now.threshold_pfu} pfu.</p>`;
+      ${levels(now.flux_pfu)}
+      <p class="sw-muted">GOES-${now.satellite} satellite, ${fmtTime(now.time_tag)}.</p>`;
   } else {
     html += `<p class="sw-muted">No GOES reading yet (${esc(status.noaa_protons || 'unavailable')}).</p>`;
   }
@@ -293,6 +293,27 @@ function renderPop() {
   pop.innerHTML = html;
 }
 
+/* What a pfu reading means for the crew, in plain words. pfu = high-energy protons hitting each
+   square centimetre every second. Bands follow NOAA's solar radiation storm scale (S1 = 10 pfu,
+   S2 = 100, S3 = 1000). The "for the crew" column is our plain-language reading, not NOAA's text. */
+const LEVELS = [
+  { min: 0, label: 'Normal', say: 'Background. Nothing to do.' },
+  { min: 1, label: 'Elevated', say: 'Above normal. Keep watching.' },
+  { min: 10, label: 'Storm', say: 'Go to the storm shelter.' },
+  { min: 100, label: 'Strong', say: 'Dose climbs fast outside the shelter.' },
+  { min: 1000, label: 'Severe', say: 'Stay sheltered. Spacewalks off.' },
+];
+
+function levels(flux) {
+  let idx = 0;
+  LEVELS.forEach((l, i) => { if (flux >= l.min) idx = i; });
+  const rows = LEVELS.map((l, i) => {
+    const range = i < LEVELS.length - 1 ? `${l.min === 0 ? '<' + LEVELS[1].min : l.min + '+'}` : `${l.min}+`;
+    return `<li class="${i === idx ? 'on' : ''}" data-band="${i}"><span>${range}</span><b>${l.label}</b><em>${l.say}</em></li>`;
+  }).join('');
+  return `<ul class="sw-levels">${rows}</ul><p class="sw-muted">pfu = protons hitting each cm² every second.</p>`;
+}
+
 // Log scale from 0.1 to 1000 pfu, with the storm threshold marked.
 function meter(flux, threshold) {
   const pos = v => Math.max(0, Math.min(100, (Math.log10(Math.max(v, 0.1)) + 1) * 25));
@@ -300,36 +321,94 @@ function meter(flux, threshold) {
     <div class="sw-meter-scale"><span>0.1</span><span>1</span><span>10 storm</span><span>100</span><span>1000</span></div>`;
 }
 
-// ---------- dose gauge ----------
+// ---------- dose graph ----------
+/* Cumulative dose over the whole mission: solid line up to today, dashed projection after,
+   the career limit as a red line, and the day the projection crosses it. Words kept to labels. */
+
+let curve = null;
+let curveKey = null;
+
+async function loadCurve() {
+  const m = missionInfo();
+  const key = `${m.mission}|${m.day}|${m.storm_dose_msv || 0}`;
+  if (!live.online || key === curveKey) return;
+  curveKey = key;
+  try {
+    curve = await api.radiationCurve();
+  } catch (err) {
+    curve = null; // older backend without the endpoint: draw from the state alone
+  }
+  drawChart();
+}
 
 function renderDose() {
   const m = missionInfo();
+  $('#doseValue').innerHTML = `${Math.round(m.radiation_msv || 0)} <small>mSv</small>`;
+  drawChart();
+  loadCurve();
+}
+
+function drawChart() {
+  const m = missionInfo();
+  const svg = $('#doseChart');
   const limit = m.radiation_career_limit_msv || 600;
-  const dose = m.radiation_msv || 0;
-  const stormDose = m.storm_dose_msv || 0;
-  const pct = Math.min(100, (100 * dose) / limit);
-  const stormPct = Math.min(pct, (100 * stormDose) / limit);
+  const storm = m.storm_dose_msv || 0;
+  // Offline (or no curve yet): a straight line from launch to today, no projection.
+  const c = curve || {
+    day: m.day, end_day: m.day, points: [{ day: 0, msv: 0 }, { day: m.day, msv: (m.radiation_msv || 0) - storm }],
+    crosses_limit_day: null,
+  };
+  const today = Math.min(c.day, c.end_day);
+  const end = Math.max(c.end_day, 1);
 
-  $('#doseValue').innerHTML = `${Math.round(dose)} <small>/ ${limit} mSv</small>`;
-  $('#doseBase').style.width = `${pct - stormPct}%`;
-  $('#doseStorm').style.width = `${stormPct}%`;
-  $('#doseStorm').style.left = `${pct - stormPct}%`;
-  $('#doseLimit').textContent = `${limit} mSv career limit`;
+  const W = 320, H = 130, L = 4, R = 40, T = 12, B = 18;
+  const top = Math.max(limit * 1.15, ...c.points.map(p => p.msv + storm));
+  const x = d => L + (d / end) * (W - L - R);
+  const y = v => T + (1 - v / top) * (H - T - B);
+  const pt = (d, v) => `${x(d).toFixed(1)},${y(v).toFixed(1)}`;
 
-  let lv = 'low';
-  if (pct >= 50) lv = 'mid';
-  if (pct >= 80) lv = 'high';
-  $('#dose').dataset.level = lv;
+  const past = c.points.filter(p => p.day <= today);
+  const future = c.points.filter(p => p.day >= today);
+  const atToday = past[past.length - 1].msv;
+  const pastLine = past.map(p => pt(p.day, p.msv)).join(' ');
+  const area = `${pt(0, 0)} ${pastLine} ${pt(today, atToday + storm)} ${pt(today, 0)}`;
+  const futureLine = future.map(p => pt(p.day, p.msv + storm)).join(' ');
+  const last = c.points[c.points.length - 1];
+  const endDose = last.msv + storm;
 
-  const parts = [`<b>${Math.round(pct)}%</b> of career limit`];
-  const rate = m.dose_rate_msv_per_day;
-  if (rate) {
-    const daysLeft = Math.max(0, Math.round((limit - dose) / rate));
-    parts.push(`+${rate} mSv a day`);
-    parts.push(`limit in ~${daysLeft} days at this rate`);
+  let svgStr = `
+    <line class="dc-axis" x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}"/>
+    <line class="dc-limit" x1="${L}" x2="${W - R}" y1="${y(limit)}" y2="${y(limit)}"/>
+    <text class="dc-limit-t" x="${W - R + 4}" y="${y(limit) + 3}">${limit}</text>
+    <text class="dc-limit-s" x="${W - R + 4}" y="${y(limit) + 13}">limit</text>
+    <polygon class="dc-area" points="${area}"/>
+    <polyline class="dc-past" points="${pastLine}"/>`;
+  if (storm) {
+    svgStr += `<line class="dc-storm" x1="${x(today)}" x2="${x(today)}" y1="${y(atToday)}" y2="${y(atToday + storm)}"/>`;
   }
-  if (stormDose) parts.push(`<span class="dose-storm-note">+${Math.round(stormDose)} mSv from solar storms</span>`);
-  $('#doseSub').innerHTML = parts.join(' · ');
+  if (future.length > 1) {
+    svgStr += `<polyline class="dc-future" points="${futureLine}"/>`;
+    if (c.end_day > today) {
+      svgStr += `<text class="dc-end" x="${x(c.end_day) + 4}" y="${y(endDose) + 3}">${Math.round(endDose)}</text>`;
+    }
+  }
+  if (c.crosses_limit_day !== null && c.crosses_limit_day !== undefined && c.crosses_limit_day > today) {
+    const cx = x(c.crosses_limit_day);
+    svgStr += `<line class="dc-cross-l" x1="${cx}" x2="${cx}" y1="${y(limit)}" y2="${y(0)}"/>
+      <circle class="dc-cross" cx="${cx}" cy="${y(limit)}" r="3.5"/>
+      <text class="dc-cross-t" x="${cx}" y="${y(0) + 13}" text-anchor="middle">day ${c.crosses_limit_day}</text>`;
+  }
+  svgStr += `
+    <circle class="dc-now" cx="${x(today)}" cy="${y(atToday + storm)}" r="4.5"/>
+    <text class="dc-axis-t" x="${L}" y="${H - 4}">0</text>
+    <text class="dc-now-t" x="${x(today)}" y="${H - 4}" text-anchor="middle">now</text>`;
+  if (c.end_day > today) svgStr += `<text class="dc-axis-t" x="${W - R}" y="${H - 4}" text-anchor="end">${c.end_day}</text>`;
+  svg.innerHTML = svgStr;
+
+  const crossText = c.crosses_limit_day ? `, projected to pass the ${limit} mSv career limit on day ${c.crosses_limit_day}` : '';
+  svg.setAttribute('aria-label', `${Math.round(atToday + storm)} mSv so far of ${limit} mSv career limit${crossText}.`);
+  const pct = (atToday + storm) / limit;
+  $('#dose').dataset.level = pct >= 0.8 ? 'high' : pct >= 0.5 ? 'mid' : 'low';
 }
 
 // ---------- formatting ----------

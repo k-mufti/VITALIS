@@ -28,6 +28,7 @@ class Sim:
         self.events = []
         self.storm = None
         self.storm_count = 0
+        self.measure_now = True  # take every reading once at start, then follow each device schedule
         self.alerts = []
         self.alert_seq = 0
 
