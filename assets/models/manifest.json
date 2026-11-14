@@ -2,8 +2,7 @@
   "body": { "file": "../../malebody.fbx", "scale": 1.0 },
   "organs": {
     "heart": {
-      "file": "realistic-human-heart/source/Heart.fbx",
-      "normalMaps": { "": "realistic-human-heart/textures/hart_UV_low01_Normal.hart_UV_low_defaultMat.png" },
+      "file": "heart.glb",
       "anchor": [0.23, 0.725],
       "scale": 1.0,
       "height": 0.072,
@@ -11,11 +10,7 @@
       "fill": 0.66
     },
     "lungs": {
-      "file": "realistic-human-lungs/source/Lungs With Texture.fbx",
-      "normalMaps": {
-        "part01": "realistic-human-lungs/textures/all_low_lunghs_Normal.lungh_part01.png",
-        "part02": "realistic-human-lungs/textures/all_low_lunghs_Normal.lungh_part02.png"
-      },
+      "file": "lungs.glb",
       "anchor": [0, 0.8],
       "scale": 1.0,
       "width": 0.155,
@@ -24,7 +19,7 @@
       "clipTop": 0.74
     },
     "muscles": {
-      "file": "source/Humain ecorché.fbx",
+      "file": "ecorche.glb",
       "scale": 1.0,
       "fullBody": true,
       "region": true,
