@@ -12,7 +12,7 @@ import * as THREE from 'three';
 */
 
 const PAPER = '#f5f5f2';
-const DOT_PX = 5;   // halftone cell size in CSS pixels
+const DOT_PX = 6;   // halftone cell size in CSS pixels
 
 // Extra uniforms the halftone shader needs, merged into the body's uniforms.
 export function halftoneUniforms(pixelRatio) {
@@ -53,8 +53,11 @@ vec2 g = mat2(.7071, -.7071, .7071, .7071) * gl_FragCoord.xy / uCell;
 float d = length(fract(g) - .5);
 
 // Solid: black, edge dissolves into paper dots.
-float edge = smoothstep(.62, .97, rim);
-vec3 col = mix(vec3(0.0), uPaper, dotMask(d, edge * .74) * step(.02, edge));
+// Wide edge band of dots, plus halftone "light" from the upper left so the form reads in dots.
+float edge = smoothstep(.35, .97, rim);
+float htLit = smoothstep(.45, 1.0, dot(normalize(vN), normalize(vec3(-.55, .65, .55))));
+float htR = max(edge * .74, htLit * .42);
+vec3 col = mix(vec3(0.0), uPaper, dotMask(d, htR) * step(.03, htR));
 col = mix(col, vec3(0.0), uGhost);
 
 // Region highlight: cyan dots inside, thin cyan ring at the border.
@@ -97,8 +100,9 @@ export function createHalftoneBackdrop(host) {
         const x = w / 2 + (i * cos - j * sin) * s;
         const y = h / 2 + (i * sin + j * cos) * s;
         if (x < -s || y < -s || x > w + s || y > h + s) continue;
-        const floor = Math.max(0, 1 - ell(x, y, w / 2, h * .9, h * .16, h * .028)) ** .7;
-        const halo = Math.max(0, 1 - ell(x, y, w / 2, h * .48, h * .3, h * .5)) ** 2 * .32;
+        // Body now fills the screen, so the floor shadow sits at the very bottom edge.
+        const floor = Math.max(0, 1 - ell(x, y, w / 2, h * 1.02, h * .3, h * .07)) ** .7;
+        const halo = Math.max(0, 1 - ell(x, y, w / 2, h * .5, h * .42, h * .62)) ** 1.6 * .55;
         const k = Math.max(floor, halo);
         if (k < .04) continue;
         c.beginPath();
