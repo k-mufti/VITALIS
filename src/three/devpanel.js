@@ -26,7 +26,7 @@ const DEFAULTS = {
   orgStyle: 0, orgEdge: 1, orgShade: 1, orgDot: '#7fe9ff',
   tintHeart: '#0a1f6b', tintLungs: '#1f5fd1', tintBones: '#13308f', tintMuscles: '#1846c4', tintBrain: '#3d6ff0', tintDigestion: '#22409e',
   // Limb rigs (per-model / per-limb values are filled in below)
-  rigModel: 0, rigLimb: 0, armJoints: false,
+  rigModel_arms: 0, rigModel_legs: 0, armJoints: false,
   // Organ position: which organ the sliders move
   posOrgan: 0,
 };
@@ -85,7 +85,7 @@ const CHOSEN_LOOK = {
   health: 1, orgStyle: 0, orgEdge: 1, orgShade: 1, orgDot: '#7fe9ff', tintHeart: '#0a1f6b',
   tintLungs: '#1f5fd1', tintBones: '#13308f', tintMuscles: '#1846c4', tintBrain: '#3d6ff0',
   tintDigestion: '#22409e', armJoints: false,
-  rigModel: 1, rig_bones_arms_on: true, rig_bones_arms_start: 0.09, rig_bones_arms_mirror: true,
+  rigModel_arms: 1, rig_bones_arms_on: true, rig_bones_arms_start: 0.09, rig_bones_arms_mirror: true,
   rig_bones_arms_side: 0, rig_muscles_arms_on: true, rig_muscles_arms_start: 0.09, rig_muscles_arms_cut: 0.76,
   rig_muscles_arms_soft: 0.02, rig_muscles_arms_mirror: true, rig_muscles_arms_side: 0,
   posOrgan: 5, pos_heart_x: 0, pos_heart_y: 0.048, pos_heart_z: -0.044, pos_heart_s: 1.07, pos_lungs_x: 0,
@@ -117,7 +117,7 @@ const CHOSEN_LOOK = {
 Object.assign(DEFAULTS, CHOSEN_LOOK);
 // Which side the sliders edit: left when mirrored, otherwise the picked side.
 const editSide = (f, m, limb) => (f[rk(m, limb, 'mirror')] || f[rk(m, limb, 'side')] === 0 ? 'L' : 'R');
-const rigShown = (f, mi, li) => f.rigModel === mi && f.rigLimb === li;
+const rigShown = (f, mi, limb) => f[`rigModel_${limb}`] === mi;
 const STORE_KEY = 'vitalis-fx';
 const VERSION = 3;  // bump to push new defaults over saved settings
 const LINE_COLORS = [['Ink', '#0e0e0e'], ['Cyan', '#0aa5bd'], ['Gray', '#8a8a85'], ['White', '#f5f5f2']];
@@ -175,19 +175,20 @@ const CONTROLS = [
   { k: 'tintBrain', label: 'Brain', type: 'color' },
   { k: 'tintDigestion', label: 'Digestion', type: 'color' },
 
-  { section: 'Limb rigs' },
-  { k: 'rigModel', label: 'Model', type: 'choice', options: RIG_MODELS.map(r => r[1]) },
-  { k: 'rigLimb', label: 'Limb', type: 'choice', options: LIMBS.map(l => l[1]) },
+  // One section per limb ("Arm rigs", "Leg rigs"), each with its own Skeleton / Muscles switch.
+  ...LIMBS.flatMap(([limb, limbName]) => [
+  { section: `${limbName.slice(0, -1)} rigs` },
+  { k: `rigModel_${limb}`, label: 'Model', type: 'choice', options: RIG_MODELS.map(r => r[1]) },
   { k: 'armJoints', label: 'Show joint markers', type: 'check' },
-  ...RIG_MODELS.flatMap(([m], mi) => LIMBS.flatMap(([limb, limbName], li) => {
-    const shown = f => rigShown(f, mi, li);
+  ...RIG_MODELS.flatMap(([m], mi) => {
+    const shown = f => rigShown(f, mi, limb);
     const on = f => shown(f) && f[rk(m, limb, 'on')];
     const cutLabel = limb === 'arms' ? 'Armpit height' : 'Crotch height';
     return [
       { k: rk(m, limb, 'on'), label: `Pose ${limbName.toLowerCase()} to match body`, type: 'check', when: shown },
       { k: rk(m, limb, 'mirror'), label: 'Mirror both sides', type: 'check', when: on },
       { k: rk(m, limb, 'side'), label: 'Editing', type: 'choice', options: ['Left on screen', 'Right on screen'], when: f => on(f) && !f[rk(m, limb, 'mirror')] },
-      { type: 'action', act: 'copyLR', text: 'Copy this side to the other side', when: f => on(f) && !f[rk(m, limb, 'mirror')] },
+      { type: 'action', act: 'copyLR', m, limb, text: 'Copy this side to the other side', when: f => on(f) && !f[rk(m, limb, 'mirror')] },
       ...SIDES.flatMap(sd => LIMB_JOINTS[limb].flatMap(([j, name]) => [
         { type: 'subhead', text: name, when: f => on(f) && editSide(f, m, limb) === sd },
         ...JOINT_PROPS.map(([pr, label, min, max, step, unit]) =>
@@ -199,10 +200,11 @@ const CONTROLS = [
         { k: rk(m, limb, 'cut'), label: cutLabel, min: limb === 'arms' ? .6 : .35, max: limb === 'arms' ? .85 : .6, step: .001, unit: 'cmUp', when: on },
         { k: rk(m, limb, 'soft'), label: 'Joint softness', min: .002, max: .08, step: .001, unit: 'cmOut', when: on },
       ] : []),
-      { type: 'action', act: 'resetLimb', text: `Reset ${limbName.toLowerCase()}`, when: on },
+      { type: 'action', act: 'resetLimb', m, limb, text: `Reset ${limbName.toLowerCase()}`, when: on },
     ];
-  })),
+  }),
   { type: 'note', text: 'Open Body → Bones or Muscles. Turns chain like a real limb: the first joint carries the next two. Each pivot height is also where that part starts. Skeleton: if a rib, hip or hand bone moves with the wrong limb, change "start at". Muscles: the limb is cut from the body below the armpit / crotch height; raise softness if a joint looks creased.' },
+  ]),
 
   { section: 'Organ position' },
   { k: 'posOrgan', label: 'Organ', type: 'choice', options: ORGAN_LIST.map(o => o[1]) },
@@ -229,6 +231,11 @@ function load() {
     const v = saved.v || 1;
     if (v < 2) saved.bgIntensity = 0;                            // v2: background dots turned off
     if (v < 3 && saved.armElbow === 8) saved.armElbow = -12;     // v3: elbow bends in by default
+    if (saved.rigModel !== undefined) {   // one Model switch became one per limb section
+      saved.rigModel_arms = saved.rigModel_legs = saved.rigModel;
+      delete saved.rigModel;
+      delete saved.rigLimb;
+    }
     // Rig keys gained a limb: rig_bones_on -> rig_bones_arms_on, armpit -> cut.
     for (const [m] of RIG_MODELS) {
       for (const name of ['on', 'start', 'mirror', 'side', 'armpit', 'soft']) {
@@ -341,7 +348,7 @@ function controlHTML(c) {
   }
   if (c.type === 'note') return `<p class="note">${c.text}</p>`;
   if (c.type === 'subhead') return `<span class="subhead">${c.text}</span>`;
-  if (c.type === 'action') return `<button class="act" data-act="${c.act}">${c.text}</button>`;
+  if (c.type === 'action') return `<button class="act" data-act="${c.act}" data-m="${c.m || ''}" data-limb="${c.limb || ''}">${c.text}</button>`;
   if (c.type === 'check') {
     return `<label class="check"><input type="checkbox" data-key="${c.k}" ${fx[c.k] ? 'checked' : ''}> ${c.label}</label>`;
   }
@@ -487,8 +494,10 @@ export function initDevPanel() {
     collapsed.delete('Organ position');
     const rigIndex = RIG_MODELS.findIndex(([m]) => m === part.dataset.sys);
     if (rigIndex >= 0) {
-      fx.rigModel = rigIndex;
-      collapsed.delete('Limb rigs');
+      fx.rigModel_arms = rigIndex;
+      fx.rigModel_legs = rigIndex;
+      collapsed.delete('Arm rigs');
+      collapsed.delete('Leg rigs');
     }
     save();
     render(panel);
@@ -525,7 +534,7 @@ export function initDevPanel() {
       setTimeout(() => (b.textContent = 'Copy settings'), 1200);
       return;
     }
-    const m = RIG_MODELS[fx.rigModel][0], limb = LIMBS[fx.rigLimb][0];
+    const m = d.m, limb = d.limb;   // set on the rig action buttons
     if (d.act === 'copyLR') {
       const from = editSide(fx, m, limb), to = from === 'L' ? 'R' : 'L';
       for (const [j] of LIMB_JOINTS[limb]) for (const [pr] of JOINT_PROPS) fx[jk(m, to, j, pr)] = fx[jk(m, from, j, pr)];
