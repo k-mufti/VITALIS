@@ -106,9 +106,22 @@ def flares():
     return sorted(_data["flr"], key=lambda e: e.get("peakTime") or e.get("beginTime") or "", reverse=True)
 
 
+def measured_sep_events():
+    """SEP events seen by a real instrument, one per event time. DONKI also lists model
+    forecasts (instrument names starting with 'MODEL:'), which we skip for the replay."""
+    seen, out = set(), []
+    for e in sep_events():
+        instrument = (e.get("instruments") or [{}])[0].get("displayName", "")
+        if instrument.startswith("MODEL") or e.get("eventTime") in seen:
+            continue
+        seen.add(e.get("eventTime"))
+        out.append(e)
+    return out
+
+
 def pick_storm(index=0):
-    """The event the director replays. Most recent first."""
-    events = sep_events()
+    """The event the director replays: real measured events, most recent first."""
+    events = measured_sep_events()
     if not events:
         events = SEED_SEP
     return events[index % len(events)]
