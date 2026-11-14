@@ -1,0 +1,60 @@
+/* "Your health" panel (right of the Body view, health-panel.js).
+   Same look as the "Your body" panel: a black-outlined tab bar, then plain rows.
+   Each row: what it is + your usual on the left, the number + one word on the right.
+   Colour carries the status: ink = normal, amber = needs a look. */
+
+.health { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* The box hugs its rows; it scrolls only if a system has more than fits. */
+
+.hp-tabs { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--ink); background: color-mix(in srgb, var(--paper) 80%, transparent); }
+.hp-tab {
+  position: relative; padding: 10px 0; font: 600 13px var(--cond); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--ink); transition: background .3s, color .3s;
+}
+.hp-tab + .hp-tab { border-left: 1px solid var(--ink); }
+.hp-tab:hover { background: var(--white); }
+.hp-tab.on { background: var(--ink); color: var(--white); }
+.hp-tab:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+/* A system with something to look at gets a small amber mark. */
+.hp-tab.flag::after { content: ''; position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--amber); }
+
+.hp-body {
+  flex: 0 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: none;
+  margin-top: 12px; padding: 16px 16px 6px; border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--white) 88%, transparent); backdrop-filter: blur(6px);
+}
+.hp-body.enter { animation: anIn .35s var(--ease) both; }
+.hp-body::-webkit-scrollbar { width: 0; }
+.hp-body h3 { font: 600 20px var(--cond); letter-spacing: .04em; }
+.hp-say { margin: 4px 0 6px; font: 400 15px/1.4 var(--sans); }
+
+.hp-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; padding: 13px 0; text-align: left; border-top: 1px solid var(--line);
+}
+.hp-rows .hp-row:first-child { border-top: 0; }
+button.hp-row { transition: background .2s, padding .2s var(--ease); }
+button.hp-row:hover, button.hp-row:focus-visible { outline: none; background: var(--paper); margin: 0 -10px; padding-left: 10px; padding-right: 10px; width: calc(100% + 20px); }
+
+.hp-name { font: 500 15px/1.3 var(--sans); }
+.hp-name small { display: block; margin-top: 2px; font: 400 13px/1.3 var(--sans); color: var(--soft); }
+
+.hp-val { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; }
+.hp-val b { font: 500 26px/1 var(--cond); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hp-val b small { margin-left: 4px; font: 500 14px var(--cond); letter-spacing: .02em; color: var(--soft); }
+.hp-val em { margin-top: 4px; font: 600 12px var(--cond); font-style: normal; letter-spacing: .12em; text-transform: uppercase; color: var(--green); }
+.hp-row.high .hp-val em, .hp-row.low .hp-val em { color: var(--amber); }
+.hp-row.high .hp-val b, .hp-row.low .hp-val b { color: var(--amber); }
+.hp-row.none .hp-val em { color: var(--soft); }
+
+/* General: one row per system, a word for how it is doing. */
+.hp-sys .hp-name { font-weight: 600; }
+
+/* The one thing to do next, for a system that needs a look. */
+.hp-next {
+  display: block; width: 100%; margin: 6px 0 12px; padding: 12px 14px; text-align: left;
+  border-left: 3px solid var(--amber); background: var(--paper); font: 500 15px/1.35 var(--sans);
+  transition: background .2s;
+}
+.hp-next:hover { background: var(--white); outline: 1px solid var(--ink); }
+.hp-next span { display: block; margin-bottom: 3px; font: 600 12px var(--cond); letter-spacing: .14em; text-transform: uppercase; color: var(--soft); }
