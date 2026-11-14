@@ -203,7 +203,7 @@ const CSS = `
 #fxPanel .row button { flex: 1; font: 600 12px 'Barlow Condensed', sans-serif; letter-spacing: .14em; text-transform: uppercase;
   padding: 7px 0; border: 1px solid #0e0e0e; }
 #fxPanel .row button:hover { background: #0e0e0e; color: #fff; }
-#fxToggle { position: fixed; z-index: 40; top: 80px; right: 16px; font: 700 12px 'Barlow Condensed', sans-serif;
+#fxToggle { position: fixed; z-index: 40; bottom: 46px; right: 16px; font: 700 12px 'Barlow Condensed', sans-serif;
   letter-spacing: .2em; padding: 6px 10px; border: 1px solid #0e0e0e; background: #fff; }
 #fxToggle.off { display: none; }
 `;

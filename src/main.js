@@ -7,6 +7,8 @@ import { initCrew } from './ui/crew.js';
 import { initAsk } from './ui/ask.js';
 import { initToday } from './ui/today.js';
 import { initCheckin } from './ui/checkin.js';
+import { initRiskBoard } from './ui/risk-board.js';
+import { initHistory } from './ui/history.js';
 import { initData } from './data/client.js';
 
 /* VITALIS demo. Every reading here is made up.
@@ -21,6 +23,8 @@ initCrew();
 initAsk();
 initToday();
 initCheckin();
+initRiskBoard();
+initHistory();
 initData();
 
 (function loop(now) {
