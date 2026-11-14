@@ -3,14 +3,16 @@
   "organs": {
     "heart": {
       "file": "heart.glb",
-      "anchor": [0.23, 0.725],
+      "color": "#101416",
+      "anchor": [0.07, 0.72],
       "scale": 1.0,
       "height": 0.072,
-      "depth": 0.058,
+      "depth": 0.032,
       "fill": 0.66
     },
     "lungs": {
       "file": "lungs.glb",
+      "color": "#3a4245",
       "anchor": [0, 0.8],
       "scale": 1.0,
       "width": 0.155,

@@ -28,6 +28,7 @@ export const twin = {
   hover: null,
   focus: null,
   focusAt: 0,
+  layer: 'skin',       // body layer picked in the anatomy panel: skin | muscle | skeleton | organs
   ghostTarget: 0,
   bodyBox: null,
   // Detail view camera: orbits the focused organ (drag to turn, scroll to zoom).

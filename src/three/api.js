@@ -4,6 +4,7 @@ import { scene, camera, renderer, host, pivot, HOME, cam, twin, flyTo, initScene
 import { REGIONS, uni, skin, loadBody, pt } from './body.js';
 import { organs, loadOrgan, prefetchOrgans, updateOrgans, has3dOrgan } from './organs.js';
 import { DRAWINGS } from './organ-drawings.js';
+import { initAnatomyPanel } from './anatomy-panel.js';
 
 /* The ONLY 3D functions the rest of the app should call (plan.md section 5.4).
    Anything inside src/three/ can change as long as these keep working. */
@@ -11,7 +12,11 @@ import { DRAWINGS } from './organ-drawings.js';
 export function initTwin() {
   initScene();
   loadBody();
+  initAnatomyPanel(setHoverOrgan);
 }
+
+// Layers that show the body as glass, so what's inside can be seen.
+const GLASS_LAYERS = ['skeleton', 'organs'];
 
 // Highlight a region while the mouse is over its spot (null to clear).
 export function setHoverOrgan(organId) {
@@ -117,9 +122,9 @@ export function renderTwin(now, pulse) {
   }
   updateOrgans(now, dt);
 
-  // In the muscle view the écorché replaces the skin.
+  // Wherever the écorché is showing, it replaces the skin.
   let fadeTarget = 1;
-  if (twin.focus === 'muscles' && organs.muscles?.reveal > .25) fadeTarget = 0;
+  if (organs.muscles?.group?.visible && organs.muscles.reveal > .25) fadeTarget = 0;
   uni.uFade.value += (fadeTarget - uni.uFade.value) * follow(3.5);
   if (twin.body) twin.body.visible = uni.uFade.value > .01;
 
@@ -127,7 +132,9 @@ export function renderTwin(now, pulse) {
   // Once a 3D organ is showing, the skin's own cyan region glow steps aside.
   const skinGlow = twin.hover || (twin.focus && !organs[twin.focus]?.group?.visible);
   uni.uHighlight.value += ((skinGlow ? 1 : 0) - uni.uHighlight.value) * follow(6);
-  uni.uGhost.value += (twin.ghostTarget - uni.uGhost.value) * follow(3);
+  let ghostGoal = twin.ghostTarget;
+  if (!twin.focus && GLASS_LAYERS.includes(twin.layer)) ghostGoal = 1;
+  uni.uGhost.value += (ghostGoal - uni.uGhost.value) * follow(3);
   uni.uPulse.value = pulse;
   skin.depthWrite = uni.uGhost.value < .05;
   if (twin.body && focus) { uni.uRegionCenter.value.copy(pt(focus)); uni.uRegionRadius.value = REGIONS[focus].radius; }
