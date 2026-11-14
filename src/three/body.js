@@ -16,6 +16,7 @@ export const REGIONS = {
 export const uni = {
   uRegionCenter: { value: new THREE.Vector3(0, 99, 0) }, uRegionRadius: { value: .3 },
   uHighlight: { value: 0 }, uGhost: { value: 0 }, uPulse: { value: 0 }, uCyan: { value: new THREE.Color('#0aa5bd') },
+  uFade: { value: 1 },
 };
 
 // Charcoal body. Shader adds a thin cyan ring on the hovered region and turns the body to glass when zoomed in.
@@ -27,7 +28,7 @@ skin.onBeforeCompile = sh => {
     .replace('#include <project_vertex>', '#include <project_vertex>\nvW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
   sh.fragmentShader = sh.fragmentShader
     .replace('#include <common>', `#include <common>
-varying vec3 vW; uniform vec3 uRegionCenter; uniform float uRegionRadius, uHighlight, uGhost, uPulse; uniform vec3 uCyan;`)
+varying vec3 vW; uniform vec3 uRegionCenter; uniform float uRegionRadius, uHighlight, uGhost, uPulse, uFade; uniform vec3 uCyan;`)
     .replace('#include <opaque_fragment>', `
 float facing = clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);
 float rim = pow(1.0 - facing, 2.4);
@@ -36,7 +37,7 @@ float region = (1.0 - smoothstep(uRegionRadius * .5, uRegionRadius, dR)) * uHigh
 float ring = (1.0 - smoothstep(0.0, .03, abs(dR / uRegionRadius - .9))) * uHighlight;
 outgoingLight = mix(outgoingLight, uCyan, clamp(smoothstep(.42, .8, rim) * region + ring * (1.0 - .6 * uGhost) + region * .1 * (1.0 - uGhost), 0.0, 1.0));
 outgoingLight = mix(outgoingLight, uCyan, region * uGhost * (.25 + .35 * uPulse));
-diffuseColor.a *= mix(1.0, clamp(.045 + rim * .42 + region * (.16 + .22 * uPulse) + ring * .5, 0.0, 1.0), uGhost);
+diffuseColor.a *= mix(1.0, clamp(.045 + rim * .42 + region * (.16 + .22 * uPulse) + ring * .5, 0.0, 1.0), uGhost) * uFade;
 #include <opaque_fragment>`);
 };
 
@@ -62,6 +63,7 @@ export function loadBody() {
     HOME.pos.set(0, 0, Math.max(8, H * 2.4));
     cam.pos.copy(HOME.pos);
     twin.body = obj;
+    twin.bodyBox = b.clone();
     $('#loadNote').remove();
     $('#spots').classList.remove('hide');
   }, undefined, err => {

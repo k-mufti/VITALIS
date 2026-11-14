@@ -1,4 +1,7 @@
+import * as THREE from 'three';
 import { $, $$ } from '../util.js';
+import { twin } from './scene.js';
+import { organs, has3dOrgan, animate3dOrgan } from './organs.js';
 
 /* Organ drawings shown in the Detail view, their live motion, and drag-to-turn. */
 
@@ -6,7 +9,7 @@ const label = (x, y, x2, y2, text, anchor = 'start') =>
   `<line class="tick" x1="${x}" y1="${y}" x2="${x2}" y2="${y2}"/><circle class="node" cx="${x2}" cy="${y2}" r="1.8"/><text x="${x}" y="${y - 5}" text-anchor="${anchor}">${text}</text>`;
 const bronchi = 'M200 150 C190 165 175 175 160 190 M160 190 C150 210 140 232 128 262 M160 190 C148 196 134 204 118 220 M168 184 C166 230 160 270 150 304 M150 304 C142 312 136 318 126 322 M128 262 C120 270 114 280 110 292';
 
-export const ORGANS = {
+export const DRAWINGS = {
   lungs: `<svg viewBox="0 0 400 400">
     <path class="thin" d="M194 40 V146 M206 40 V146"/>
     <path class="flow" d="M200 40 V150"/>
@@ -60,9 +63,25 @@ export const ORGANS = {
   </svg>`,
 };
 
-// Move the open organ drawing. value = the system's live reading (breaths or beats a minute).
+// What the Detail view puts in #organ. Systems with a 3D model get an empty drawing
+// (the model shows in the 3D stage behind it); the rest keep their SVG drawing.
+const EMPTY = '<svg viewBox="0 0 400 400"></svg>';
+const LOADING = '<svg viewBox="0 0 400 400"><text x="200" y="204" text-anchor="middle">Loading 3D model</text></svg>';
+export const ORGANS = {};
+Object.keys(DRAWINGS).forEach(k => Object.defineProperty(ORGANS, k, {
+  enumerable: true,
+  get() {
+    if (!has3dOrgan(k)) return DRAWINGS[k];
+    if (organs[k]?.group) return EMPTY;
+    return LOADING;
+  },
+}));
+
+// Move the open organ (3D model or drawing). value = the system's live reading (breaths or beats a minute).
 // Returns a 0..1 pulse used to light up the 3D body in sync.
 export function animateOrgan(k, t, value) {
+  const pulse3d = animate3dOrgan(k, t, value);
+  if (pulse3d !== null) return pulse3d;
   const g = $('#anim'); if (!g) return 0;
   if (k === 'lungs') { const s = Math.sin(t * 2 * Math.PI * value / 60); g.style.transform = `scale(${1 + .045 * s}, ${1 + .03 * s})`; return (s + 1) / 2; }
   if (k === 'heart') { const c = Math.exp(-((((t * value / 60) % 1 - .23) / .07) ** 2)); g.style.transform = `scale(${1 - .045 * c})`; return c; }
@@ -79,11 +98,32 @@ export function animateOrgan(k, t, value) {
   return (Math.sin(t * 1.2) + 1) / 2;
 }
 
-// Drag to turn the organ drawing
+// Drag to turn the organ: orbits the camera around a 3D organ, or tilts the drawing.
+// Scroll zooms a 3D organ, double-click resets it.
+const showing3d = () => !!(twin.focus && organs[twin.focus]?.group);
 export function initOrganDrag() {
   const el = $('#organ'); let start = null, rx = 0, ry = 0, tx = 0, ty = 0;
-  el.addEventListener('pointerdown', e => { start = { x: e.clientX, y: e.clientY, tx, ty }; el.setPointerCapture(e.pointerId); });
-  el.addEventListener('pointermove', e => { if (!start) return; ty = Math.max(-50, Math.min(50, start.ty + (e.clientX - start.x) * .3)); tx = Math.max(-20, Math.min(20, start.tx - (e.clientY - start.y) * .2)); });
+  const orbit = twin.orbit;
+  el.addEventListener('pointerdown', e => {
+    start = { x: e.clientX, y: e.clientY, tx, ty, yaw: orbit.yawT, pitch: orbit.pitchT };
+    el.setPointerCapture(e.pointerId);
+  });
+  el.addEventListener('pointermove', e => {
+    if (!start) return;
+    if (showing3d()) {
+      orbit.yawT = start.yaw - (e.clientX - start.x) * .008;
+      orbit.pitchT = THREE.MathUtils.clamp(start.pitch + (e.clientY - start.y) * .005, -.7, .7);
+      return;
+    }
+    ty = Math.max(-50, Math.min(50, start.ty + (e.clientX - start.x) * .3));
+    tx = Math.max(-20, Math.min(20, start.tx - (e.clientY - start.y) * .2));
+  });
   el.addEventListener('pointerup', () => { start = null; tx = 0; ty = 0; });
+  el.addEventListener('wheel', e => {
+    if (!showing3d() || !orbit.on) return;
+    e.preventDefault();
+    orbit.distT = THREE.MathUtils.clamp(orbit.distT * Math.exp(e.deltaY * .0012), orbit.base * .45, orbit.base * 1.8);
+  }, { passive: false });
+  el.addEventListener('dblclick', () => { orbit.yawT = 0; orbit.pitchT = 0; orbit.distT = orbit.base; });
   (function loop() { rx += (tx - rx) * .1; ry += (ty - ry) * .1; const s = el.querySelector('svg'); if (s) s.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`; requestAnimationFrame(loop); })();
 }

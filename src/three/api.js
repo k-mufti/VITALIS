@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { $, $$, ease } from '../util.js';
 import { scene, camera, renderer, host, pivot, HOME, cam, twin, flyTo, initScene } from './scene.js';
 import { REGIONS, uni, skin, loadBody, pt } from './body.js';
+import { organs, loadOrgan, prefetchOrgans, updateOrgans, has3dOrgan } from './organs.js';
+import { DRAWINGS } from './organ-drawings.js';
 
 /* The ONLY 3D functions the rest of the app should call (plan.md section 5.4).
    Anything inside src/three/ can change as long as these keep working. */
@@ -17,24 +19,51 @@ export function setHoverOrgan(organId) {
 }
 
 // Fly the camera into an organ and turn the body to glass.
+// If the organ has a 3D model it scans in once loaded; until then the camera frames the body region.
 export function focusOrgan(organId) {
   twin.focus = organId;
+  twin.focusAt = performance.now();
   twin.hover = null;
   twin.rotTarget = 0;
   twin.rot = 0;
+  pivot.rotation.y = 0;
   $('#spots').classList.add('hide');
   if (twin.body) {
     pivot.updateMatrixWorld();
-    const p = pt(organId, 'core');
-    flyTo({ pos: new THREE.Vector3(p.x, p.y, p.z + REGIONS[organId].dist + .6), look: p });
+    frameOrgan(organId, 1500);
   }
   twin.ghostTarget = 1;
+  if (has3dOrgan(organId) && !organs[organId]?.group) {
+    loadOrgan(organId).then(o => {
+      if (twin.focus !== organId) return;
+      if (o.failed) { $('#organ').innerHTML = DRAWINGS[organId]; return; }
+      $('#organ').innerHTML = '<svg viewBox="0 0 400 400"></svg>';
+      frameOrgan(organId, 1100);
+    });
+  }
+}
+
+// Camera flight to the organ model (or the body region if there is no model yet), then orbit there.
+function frameOrgan(organId, dur) {
+  const o = organs[organId];
+  let point, dist;
+  if (o?.frame) {
+    point = o.frame.point.clone();
+    dist = o.frame.dist;
+  } else {
+    point = pt(organId, 'core');
+    dist = REGIONS[organId].dist + .6;
+  }
+  Object.assign(twin.orbit, { on: true, base: dist, dist, distT: dist, yaw: 0, yawT: 0, pitch: 0, pitchT: 0 });
+  twin.orbit.focus.copy(point);
+  flyTo({ pos: point.clone().add(new THREE.Vector3(0, 0, dist)), look: point.clone() }, dur);
 }
 
 // Back to the full body. instant = jump with no camera flight.
 export function resetView(instant) {
   twin.focus = null;
   twin.ghostTarget = 0;
+  twin.orbit.on = false;
   if (instant) {
     twin.fly = null;
     cam.pos.copy(HOME.pos);
@@ -62,18 +91,43 @@ export function onOrganClick(callback) {}
 
 // Called every frame from main.js. pulse = 0..1 from the open organ's animation.
 const v = new THREE.Vector3();
+let lastNow = performance.now(), prefetched = false;
 export function renderTwin(now, pulse) {
+  const dt = Math.min(.05, (now - lastNow) / 1000);
+  lastNow = now;
+  const follow = rate => 1 - Math.exp(-dt * rate);
+  // Start loading the heart and lungs once sign-in is over, so the parse doesn't stutter the fingerprint screen.
+  if (!prefetched && twin.body && !$('#signin')) { prefetched = true; prefetchOrgans(); }
+
   twin.rot += (twin.rotTarget - twin.rot) * .08;
   pivot.rotation.y = twin.rot;
+  const orbit = twin.orbit;
   if (twin.fly) {
     const k = ease(Math.min(1, (now - twin.fly.t0) / twin.fly.dur));
     cam.pos.lerpVectors(twin.fly.fromPos, twin.fly.pos, k);
     cam.look.lerpVectors(twin.fly.fromLook, twin.fly.look, k);
     if (k >= 1) { twin.fly.done?.(); twin.fly = null; }
+  } else if (orbit.on) {
+    orbit.yaw += (orbit.yawT - orbit.yaw) * .1;
+    orbit.pitch += (orbit.pitchT - orbit.pitch) * .1;
+    orbit.dist += (orbit.distT - orbit.dist) * .1;
+    cam.look.copy(orbit.focus);
+    cam.pos.set(Math.sin(orbit.yaw) * Math.cos(orbit.pitch), Math.sin(orbit.pitch), Math.cos(orbit.yaw) * Math.cos(orbit.pitch))
+      .multiplyScalar(orbit.dist).add(orbit.focus);
   }
+  updateOrgans(now, dt);
+
+  // In the muscle view the écorché replaces the skin.
+  let fadeTarget = 1;
+  if (twin.focus === 'muscles' && organs.muscles?.reveal > .25) fadeTarget = 0;
+  uni.uFade.value += (fadeTarget - uni.uFade.value) * follow(3.5);
+  if (twin.body) twin.body.visible = uni.uFade.value > .01;
+
   const focus = twin.focus || twin.hover;
-  uni.uHighlight.value += ((focus ? 1 : 0) - uni.uHighlight.value) * .1;
-  uni.uGhost.value += (twin.ghostTarget - uni.uGhost.value) * .05;
+  // Once a 3D organ is showing, the skin's own cyan region glow steps aside.
+  const skinGlow = twin.hover || (twin.focus && !organs[twin.focus]?.group?.visible);
+  uni.uHighlight.value += ((skinGlow ? 1 : 0) - uni.uHighlight.value) * follow(6);
+  uni.uGhost.value += (twin.ghostTarget - uni.uGhost.value) * follow(3);
   uni.uPulse.value = pulse;
   skin.depthWrite = uni.uGhost.value < .05;
   if (twin.body && focus) { uni.uRegionCenter.value.copy(pt(focus)); uni.uRegionRadius.value = REGIONS[focus].radius; }
