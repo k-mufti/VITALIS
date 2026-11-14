@@ -3,7 +3,7 @@ import { renderer, backdrop, twin } from './scene.js';
 import { STYLES } from './effects.js';
 
 /*
-  FX dev panel for trying looks. Toggle with the ` (backtick) key.
+  FX dev panel for trying looks. Only loads with ?dev in the URL. Toggle with the ` (backtick) key.
   Settings are saved in this browser only. "Copy settings" puts them on the
   clipboard so they can be made the defaults below.
 */
@@ -208,7 +208,16 @@ const CSS = `
 #fxToggle.off { display: none; }
 `;
 
+// Developers only: the panel exists when the page is opened with ?dev (e.g. http://localhost:8000/?dev).
+// Everyone else gets the default look, never the settings saved in this browser.
+const DEV = new URLSearchParams(location.search).has('dev');
+
 export function initDevPanel() {
+  if (!DEV) {
+    fx = { ...DEFAULTS };
+    apply();
+    return;
+  }
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.append(style);
