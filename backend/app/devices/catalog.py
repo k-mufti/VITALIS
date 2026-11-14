@@ -46,6 +46,10 @@ DEVICES = {
         "label": "Exercise machines",
         "real": "ISS treadmill (T2) and resistive device (ARED) log every session",
     },
+    "cabin_air": {
+        "label": "Cabin air monitor",
+        "real": "Ship life-support sensors; the ISS tracks cabin CO2 continuously",
+    },
     "dosimeter": {
         "label": "Personal dosimeter",
         "real": "Crew Active Dosimeter worn by ISS crews; Artemis crews carry personal dosimeters too",
@@ -68,16 +72,24 @@ METRICS = {
     "mood_1to5":    {"device": "tablet",     "method": SELF_REPORT, "cadence": "daily",      "demo_every_s": 20, "unit": "1-5"},
     "exercise_min": {"device": "exercise",   "method": MEASURED,    "cadence": "per session", "demo_every_s": 20, "unit": "min/day"},
     "resistive_load_pct": {"device": "exercise", "method": MEASURED, "cadence": "per session", "demo_every_s": 20, "unit": "% of preflight load"},
+    "pulse_transit_ms": {"device": "wearable", "method": MEASURED,  "cadence": "continuous", "demo_every_s": 1,  "unit": "ms"},
+    "session_hr_avg": {"device": "wearable",   "method": MEASURED,  "cadence": "per session", "demo_every_s": 20, "unit": "bpm"},
+    "hr_recovery_bpm": {"device": "wearable",  "method": MEASURED,  "cadence": "per session", "demo_every_s": 20, "unit": "bpm in 1 min"},
+    "stroke_volume_ml": {"device": "ultrasound", "method": MEASURED, "cadence": "weekly",     "demo_every_s": 60, "unit": "mL per beat"},
+    "quad_thickness_mm": {"device": "ultrasound", "method": MEASURED, "cadence": "weekly",    "demo_every_s": 60, "unit": "mm"},
+    "co2_mmhg":     {"device": "cabin_air",  "method": MEASURED,    "cadence": "continuous", "demo_every_s": 5,  "unit": "mmHg"},
     "dose_msv":     {"device": "dosimeter",  "method": MEASURED,    "cadence": "continuous", "demo_every_s": 5,  "unit": "mSv"},
     "dose_rate_usv_h": {"device": "dosimeter", "method": MEASURED,  "cadence": "continuous", "demo_every_s": 5,  "unit": "µSv/h"},
 }
 
 # How each organ's headline number is obtained. The UI shows this next to the value.
 ORGAN_MEASUREMENT = {
-    "heart": {"method": MEASURED, "metrics": ["heart_rate", "bp_sys"],
-              "how": "Biomonitor shirt (all day) and blood pressure cuff (daily)."},
-    "lungs": {"method": MEASURED, "metrics": ["resp_rate", "spo2"],
-              "how": "Biomonitor shirt: breathing rate and blood oxygen, all day."},
+    "heart": {"method": MEASURED,
+              "metrics": ["heart_rate", "hrv", "pulse_transit_ms", "bp_sys", "bp_dia", "hr_recovery_bpm", "stroke_volume_ml"],
+              "how": "Biomonitor shirt (ECG all day, heart-rate recovery after each workout), blood pressure cuff (daily) "
+                     "and heart ultrasound (weekly)."},
+    "lungs": {"method": MEASURED, "metrics": ["resp_rate", "spo2", "co2_mmhg"],
+              "how": "Biomonitor shirt (breathing rate, blood oxygen) checked against the cabin air monitor."},
     "sleep": {"method": MEASURED, "metrics": ["sleep_hours", "reaction_ms", "mood_1to5"],
               "how": "Sleep wristband (nightly), reaction test and mood check on the tablet (daily)."},
     "eyes": {"method": MEASURED, "metrics": ["onsd_mm"],
@@ -86,9 +98,10 @@ ORGAN_MEASUREMENT = {
               "how": "No bone scanner in flight. Estimated from time in low gravity and your exercise log. "
                      "Confirmed by a DXA scan after landing.",
               "estimated_from": ["time in microgravity", "exercise machine log"]},
-    "muscles": {"method": ESTIMATED, "metrics": ["exercise_min", "resistive_load_pct"],
-                "how": "Estimated from exercise machine loads and missed sessions. No muscle scan in flight.",
-                "estimated_from": ["exercise machine log", "missed sessions"]},
+    "muscles": {"method": MEASURED,
+                "metrics": ["quad_thickness_mm", "resistive_load_pct", "exercise_min", "session_hr_avg", "hrv"],
+                "how": "Thigh muscle ultrasound (weekly) and exercise machine loads, plus training load against "
+                       "recovery from the shirt."},
 }
 
 

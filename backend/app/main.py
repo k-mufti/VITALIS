@@ -23,6 +23,10 @@ from pydantic import BaseModel  # noqa: E402
 from . import director, history, hrp, officer, provenance, triage  # noqa: E402
 from . import constants as C  # noqa: E402
 from . import missions as M  # noqa: E402
+from .analysis import heart as heart_analysis  # noqa: E402
+from .analysis import radiation as radiation_analysis  # noqa: E402
+from .analysis import training as training_analysis  # noqa: E402
+from .analysis.common import Reader  # noqa: E402
 from .devices import catalog  # noqa: E402
 from .devices.simulated import DEVICES  # noqa: E402
 from .engine.physiology import COUNTERMEASURES, apply_change, mission_state  # noqa: E402
@@ -72,7 +76,8 @@ async def sim_loop():
         sim.measure_now = False
         if clients:
             for v in vitals:
-                await broadcast({"type": "vital", **v})
+                if v["quality"] == "good":  # flagged readings are counted, not shown
+                    await broadcast({"type": "vital", **v})
         if tick % 2 == 0:
             state = mission_state(sim)
             triage.update(sim, state)
@@ -246,36 +251,37 @@ def get_space_weather():
 
 @app.get("/api/radiation/curve")
 def get_radiation_curve(mission: str | None = None):
-    """Cumulative dose over the whole mission, for the dose graph. The model is piecewise linear
-    (one dose rate per phase), so the corner days are enough to draw it exactly. Storm dose is
-    added as a step at today, since the sim does not record which day each storm happened."""
+    """Cumulative dose over the whole mission, for the dose graph."""
     check_mission(mission)
-    mission_id = mission or sim.mission
-    m = M.get(mission_id)
-    today = float(min(sim.day, m["end_day"]))
-    days = sorted({0.0, float(min(m["arrival_day"], m["end_day"])), float(M.departure_day(m)), today, float(m["end_day"])})
-    points = [{"day": d, "msv": round(M.cumulative_dose(m, d), 1)} for d in days]
-    storm = sim.mods["extra_dose"]
+    return radiation_analysis.curve(mission or sim.mission, sim.day, sim.mods["extra_dose"])
 
-    # First day the projected dose (model + storms so far) reaches the career limit, if it does.
-    crosses = None
-    for a, b in zip(points, points[1:]):
-        lo = a["msv"] + (storm if a["day"] >= today else 0)
-        hi = b["msv"] + (storm if b["day"] >= today else 0)
-        if lo < C.CAREER_LIMIT_MSV <= hi and hi > lo:
-            crosses = round(a["day"] + (C.CAREER_LIMIT_MSV - lo) / (hi - lo) * (b["day"] - a["day"]))
-            break
-        if lo >= C.CAREER_LIMIT_MSV:
-            crosses = round(a["day"])
-            break
 
-    return {
-        "mission": mission_id, "day": today, "arrival_day": m["arrival_day"],
-        "departure_day": M.departure_day(m), "end_day": m["end_day"],
-        "career_limit_msv": C.CAREER_LIMIT_MSV, "event_limit_msv": C.SPE_EVENT_LIMIT_MSV,
-        "storm_dose_msv": storm, "points": points, "crosses_limit_day": crosses,
-        "source": "Mission model: published dose rates per phase (constants.py), plus director storm dose.",
-    }
+# ---------- analysis pipelines (backend only; see DATA.md) ----------
+
+def _reader():
+    return Reader(sim, sim.mods, sim.relief, sim.mission, sim.day, live=True)
+
+
+def _analysis(system):
+    if system == "heart":
+        return heart_analysis.analyze(_reader())
+    if system == "muscles":
+        return training_analysis.analyze(_reader())
+    if system == "radiation":
+        return radiation_analysis.analyze(_reader(), noaa.latest(), sim.storm)
+    raise HTTPException(status_code=404, detail="unknown system, use heart, muscles or radiation")
+
+
+@app.get("/api/analysis")
+def get_analysis():
+    """Every deep pipeline, layer by layer: inputs (with quality and age), derived measures against
+    the personal baseline, confidence with reasons, cause chains, and the resulting severity."""
+    return {s: _analysis(s) for s in ("heart", "muscles", "radiation")}
+
+
+@app.get("/api/analysis/{system}")
+def get_analysis_system(system: str):
+    return _analysis(system)
 
 
 @app.get("/api/hrp")

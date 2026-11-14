@@ -11,6 +11,7 @@ const EVENTS = [
   ['bad_sleep_week', 'Bad sleep week'],
   ['skipped_exercise', 'Skipped exercise'],
   ['bp_spike', 'Blood pressure spike'],
+  ['cabin_co2', 'Cabin CO2 rise (ship air)'],
   ['reset', 'Reset the crew member'],
 ];
 

@@ -46,7 +46,35 @@ ONSD_WATCH_MM = 4.8
 # ASSUMPTION: dose added by one director "radiation storm" while the crew shelters.
 STORM_DOSE_SHELTERED_MSV = 35
 
-# Crew 03 personal baselines (demo, made up).
+# ---------- heart, training, cabin air, storm shelter ----------
+
+# Crew 03 age (demo). Max heart rate from Tanaka et al. (2001): 208 - 0.7 x age.
+CREW_AGE = 42
+HR_MAX = 208 - 0.7 * CREW_AGE
+
+# Heart-rate recovery: a drop of 12 bpm or less in the first minute after exercise is abnormal
+# and predicts cardiac risk (Cole et al., NEJM 1999).
+HRR_ABNORMAL_BPM = 12
+
+# Acute:chronic workload ratio (7-day vs 28-day training load). Sweet spot 0.8-1.3; above 1.5
+# injury risk climbs (Gabbett, BJSM 2016). Below 0.8 in space means detraining: muscle and bone loss.
+ACWR_LOW, ACWR_HIGH, ACWR_DANGER = 0.8, 1.3, 1.5
+
+# ASSUMPTION: daily exercise prescription (ISS crews exercise about 2 h a day including setup).
+SESSION_MIN = 90
+MISSED_SESSION_MIN = 15
+
+# ASSUMPTION: cabin CO2. ISS runs around 2-4 mmHg; crews report headaches toward the top of that.
+CO2_BASELINE_MMHG = 2.6
+CO2_COMFORT_MMHG = 3.0
+CO2_WATCH_MMHG = 4.0
+
+# ASSUMPTION: during a solar particle event the unshielded dose rate is ~50x background, and the
+# storm shelter (water and supplies packed around the crew) cuts that to about a quarter.
+STORM_RATE_X_BACKGROUND = 50
+SHELTER_FACTOR = 0.25
+
+# Crew 03 personal baselines (demo, made up). Preflight values the pipeline compares against.
 BASELINE = {
     "heart_rate": 58,
     "sleep_hours": 7.4,
@@ -57,4 +85,11 @@ BASELINE = {
     "bp_sys": 118,
     "bp_dia": 76,
     "mood_1to5": 4,
+    "hrv": 55,                 # ms, RMSSD
+    "pulse_transit_ms": 240,   # ECG beat to fingertip pulse
+    "stroke_volume_ml": 75,    # Doppler ultrasound
+    "quad_thickness_mm": 50,   # thigh muscle, ultrasound
+    "hr_recovery_bpm": 30,     # drop in the first minute after exercise
+    "resistive_load_pct": 100,
+    "co2_mmhg": CO2_BASELINE_MMHG,
 }

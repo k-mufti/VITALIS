@@ -9,7 +9,10 @@ ORGANS = ["heart", "bones", "sleep", "eyes", "lungs", "muscles"]
 RECENT_WINDOW = 5
 
 # Upper limits for the body-state knobs, so repeated director clicks stay physiologically sane.
-MOD_LIMITS = {"sleep_debt": 4.0, "missed_exercise_days": 14, "bp_offset": 42.0, "stress": 2.0}
+MOD_LIMITS = {"sleep_debt": 4.0, "missed_exercise_days": 14, "bp_offset": 42.0, "stress": 2.0, "co2_offset": 3.0}
+
+# How many recent quality flags to keep per metric (for the confidence score).
+QUALITY_WINDOW = 120
 
 
 class Sim:
@@ -27,10 +30,12 @@ class Sim:
             "bp_offset": 0.0,            # mmHg added to systolic
             "stress": 0.0,               # 0..2
             "extra_dose": 0.0,           # mSv from storms on top of the normal dose rate
+            "co2_offset": 0.0,           # mmHg of cabin CO2 above normal (ship, not body)
         }
         self.relief = {k: 0.0 for k in ORGANS}  # severity removed by countermeasures
         self.history = defaultdict(lambda: deque(maxlen=30))
         self.latest = {}
+        self.quality = defaultdict(lambda: deque(maxlen=QUALITY_WINDOW))
         self.events = []
         self.storm = None
         self.storm_count = 0
@@ -39,8 +44,19 @@ class Sim:
         self.alert_seq = 0
 
     def record(self, vital):
+        """Keep every quality flag, but only good readings feed the values the engine uses."""
+        self.quality[vital["metric"]].append(vital.get("quality", "good"))
+        if vital.get("quality", "good") != "good":
+            return
         self.latest[vital["metric"]] = vital
         self.history[vital["metric"]].append(vital["value"])
+
+    def good_share(self, metric):
+        """Share of recent readings that were usable (1.0 = no motion or dropouts)."""
+        flags = self.quality.get(metric)
+        if not flags:
+            return None
+        return sum(1 for f in flags if f == "good") / len(flags)
 
     def recent(self, metric):
         """Current value of a metric. Continuous sensors (every second) are smoothed over the last

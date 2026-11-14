@@ -10,6 +10,7 @@ from .engine.physiology import NAMES, mission_state
 # Readable labels for the things the director can throw at the crew.
 EVENT_LABELS = {
     "radiation_storm": "Solar particle event, crew sheltered",
+    "cabin_co2": "Cabin CO2 rose (air scrubber behind)",
     "bad_sleep_week": "Sleep disrupted (heavy workload week)",
     "bp_spike": "Blood pressure spike recorded",
     "skipped_exercise": "Exercise sessions missed",

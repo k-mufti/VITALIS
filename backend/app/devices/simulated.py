@@ -1,110 +1,89 @@
-"""Simulated devices. Values come from Crew 03's baselines plus the current state of the body.
+"""Simulated devices. Each reading is the true value from engine/signals.py plus sensor noise.
 Real hardware replaces these by implementing DeviceAdapter.metrics(); nothing else changes.
 
 These match what can actually be measured in flight (see devices/catalog.py). There is no bone
 density device on purpose: nothing on a spacecraft can measure it, so the engine estimates it."""
-from .. import constants as C
-from .. import missions as M
+from ..engine import signals
 from .base import DeviceAdapter, noise
 
-B = C.BASELINE
+# Sensor noise per metric (one standard deviation), in the metric's unit.
+NOISE = {
+    "heart_rate": 0.8, "hrv": 2.0, "spo2": 0.4, "resp_rate": 0.5, "skin_temp": 0.1, "pulse_transit_ms": 3.0,
+    "session_hr_avg": 2.0, "hr_recovery_bpm": 1.5,
+    "sleep_hours": 0.1, "glucose": 3.0, "bp_sys": 2.0, "bp_dia": 1.5,
+    "onsd_mm": 0.02, "stroke_volume_ml": 2.0, "quad_thickness_mm": 0.4,
+    "reaction_ms": 6.0, "resistive_load_pct": 0.5, "co2_mmhg": 0.05,
+}
 
 
-class Biomonitor(DeviceAdapter):
-    """Smart shirt worn all day: heart, breathing, blood oxygen, skin temperature."""
-    name = "wearable"
-    label = "Biomonitor shirt"
-
-    def metrics(self, sim):
-        m = sim.mods
-        return {
-            "heart_rate": lambda: B["heart_rate"] + 5 * m["sleep_debt"] + 0.25 * m["bp_offset"] + 4 * m["stress"] + noise(0.8),
-            "hrv": lambda: 55 - 6 * m["sleep_debt"] - 5 * m["stress"] + noise(2),
-            "spo2": lambda: B["spo2"] + noise(0.4),
-            "resp_rate": lambda: B["resp_rate"] + 0.05 * m["bp_offset"] + m["stress"] + noise(0.5),
-            "skin_temp": lambda: 33.6 + noise(0.1),
-        }
-
-
-class SleepBand(DeviceAdapter):
-    """Wrist actigraph: total sleep, scored once a night."""
-    name = "actigraph"
-    label = "Sleep wristband"
+class SimulatedDevice(DeviceAdapter):
+    """A device whose metrics all come from the signal model."""
+    reads = ()
 
     def metrics(self, sim):
-        return {"sleep_hours": lambda: B["sleep_hours"] - sim.mods["sleep_debt"] + noise(0.1)}
+        storm = bool(sim.storm)
+
+        def reader(metric):
+            def read():
+                v = signals.value(metric, sim.mods, sim.relief, sim.mission, sim.day, storm)
+                if metric == "dose_rate_usv_h":
+                    return v * (1 + noise(0.03))
+                return v + noise(NOISE.get(metric, 0.0))
+            return read
+
+        return {metric: reader(metric) for metric in self.reads}
 
 
-class GlucosePatch(DeviceAdapter):
-    name = "cgm"
-    label = "Blood sugar patch"
-
-    def metrics(self, sim):
-        return {"glucose": lambda: B["glucose"] + 8 * sim.mods["stress"] + noise(3)}
-
-
-class BPCuff(DeviceAdapter):
-    name = "bp_cuff"
-    label = "Blood pressure cuff"
-
-    def metrics(self, sim):
-        m = sim.mods
-        return {
-            "bp_sys": lambda: B["bp_sys"] + m["bp_offset"] + noise(2),
-            "bp_dia": lambda: B["bp_dia"] + 0.5 * m["bp_offset"] + noise(1.5),
-        }
+class Biomonitor(SimulatedDevice):
+    """Smart shirt worn all day: ECG heart rate and HRV, breathing, blood oxygen, skin temperature,
+    pulse transit time (ECG beat to fingertip pulse), and heart rate during and after each workout."""
+    name, label = "wearable", "Biomonitor shirt"
+    reads = ("heart_rate", "hrv", "spo2", "resp_rate", "skin_temp", "pulse_transit_ms", "session_hr_avg", "hr_recovery_bpm")
 
 
-class Ultrasound(DeviceAdapter):
-    """Weekly optic nerve sheath scan (SANS). Crewmates scan each other with ground guidance."""
-    name = "ultrasound"
-    label = "Handheld ultrasound"
-
-    def metrics(self, sim):
-        from ..engine.physiology import onsd_mm
-        return {"onsd_mm": lambda: onsd_mm(sim.mission, sim.day, sim.relief) + noise(0.02)}
+class SleepBand(SimulatedDevice):
+    name, label = "actigraph", "Sleep wristband"
+    reads = ("sleep_hours",)
 
 
-class CrewTablet(DeviceAdapter):
-    """Daily reaction-time test and mood check."""
-    name = "tablet"
-    label = "Crew tablet tests"
-
-    def metrics(self, sim):
-        m = sim.mods
-        return {
-            "reaction_ms": lambda: B["reaction_ms"] + 18 * m["sleep_debt"] + 15 * m["stress"] + noise(6),
-            "mood_1to5": lambda: max(1, min(5, B["mood_1to5"] - 0.5 * m["sleep_debt"] - m["stress"])),
-        }
+class GlucosePatch(SimulatedDevice):
+    name, label = "cgm", "Blood sugar patch"
+    reads = ("glucose",)
 
 
-class ExerciseMachines(DeviceAdapter):
-    """Treadmill and resistive machine logs. Inputs to the bone and muscle estimates."""
-    name = "exercise"
-    label = "Exercise machines"
-
-    def metrics(self, sim):
-        missed = sim.mods["missed_exercise_days"]
-        return {
-            "exercise_min": lambda: 20 if missed > 0 else 90,
-            # ASSUMPTION: resistive load drifts down with missed sessions (strength falling).
-            "resistive_load_pct": lambda: max(60, 96 - 2.5 * missed + noise(0.5)),
-        }
+class BPCuff(SimulatedDevice):
+    name, label = "bp_cuff", "Blood pressure cuff"
+    reads = ("bp_sys", "bp_dia")
 
 
-class Dosimeter(DeviceAdapter):
-    """Personal dosimeter: total dose so far and the current dose rate."""
-    name = "dosimeter"
-    label = "Personal dosimeter"
-
-    def metrics(self, sim):
-        m = M.get(sim.mission)
-        rate_per_day = M.phase_values(m, M.phase(m, sim.day))["dose"]
-        return {
-            "dose_msv": lambda: M.cumulative_dose(m, sim.day) + sim.mods["extra_dose"],
-            # Background rate for this phase, in the unit dosimeters show (micro-sieverts per hour).
-            "dose_rate_usv_h": lambda: rate_per_day * 1000 / 24 * (1 + noise(0.03)),
-        }
+class Ultrasound(SimulatedDevice):
+    """Weekly scans: optic nerve sheath (eyes), heart stroke volume (Doppler), thigh muscle thickness."""
+    name, label = "ultrasound", "Handheld ultrasound"
+    reads = ("onsd_mm", "stroke_volume_ml", "quad_thickness_mm")
 
 
-DEVICES = [Biomonitor(), SleepBand(), GlucosePatch(), BPCuff(), Ultrasound(), CrewTablet(), ExerciseMachines(), Dosimeter()]
+class CrewTablet(SimulatedDevice):
+    name, label = "tablet", "Crew tablet tests"
+    reads = ("reaction_ms", "mood_1to5")
+
+
+class ExerciseMachines(SimulatedDevice):
+    """Treadmill and resistive machine logs: minutes and the load lifted."""
+    name, label = "exercise", "Exercise machines"
+    reads = ("exercise_min", "resistive_load_pct")
+
+
+class CabinAir(SimulatedDevice):
+    """Ship life-support sensor, not worn: lets the engine tell a cabin air problem from a body problem."""
+    name, label = "cabin_air", "Cabin air monitor"
+    reads = ("co2_mmhg",)
+
+
+class Dosimeter(SimulatedDevice):
+    """Personal dosimeter: total dose so far and the current dose rate (higher in a storm, even sheltered)."""
+    name, label = "dosimeter", "Personal dosimeter"
+    reads = ("dose_msv", "dose_rate_usv_h")
+
+
+DEVICES = [Biomonitor(), SleepBand(), GlucosePatch(), BPCuff(), Ultrasound(), CrewTablet(),
+           ExerciseMachines(), CabinAir(), Dosimeter()]
