@@ -1,20 +1,32 @@
 import { $, $$ } from '../util.js';
 import { state } from '../state.js';
-import { onData, organ } from '../data/client.js';
+import { api, live, onData, organ, refreshState } from '../data/client.js';
 import { GUIDE } from '../data/health-rules.js';
-import { focusOrgan, resetView } from '../three/api.js';
+import { focusOrgan, resetView, playFix } from '../three/api.js';
 import { ORGANS, animateOrgan, initOrganDrag } from '../three/organ-drawings.js';
 import { show } from '../nav.js';
 
-/* Detail view: one body system's reading, week chart, live wave and organ drawing. */
+/* Detail view: one body system in the three parts every detail view has (rules.md 1.5).
+   Left: current state. Right: what could go wrong on this mission, and what to do about it. */
+
+const LEVEL_WORD = { low: 'Low', mild: 'Mild', extreme: 'Extreme' };
+// Longest we wait for the 3D fix animation before showing the result anyway.
+const FIX_WAIT_MS = 5000;
 
 const wave = [];
 let lastSample = 0;
+// The countermeasure being logged, or the last one logged, for the open system.
+let action = null;
+// True while a button in the plan is held down, so a live update cannot replace it mid-click.
+let pressing = false;
+// Last HTML written to each box. Live data repaints this view every second; only real changes touch the DOM.
+const painted = new WeakMap();
 
 export function openSystem(k) {
   const d = organ(k);
   state.current = k;
   state.pastDay = null;
+  if (action && action.phase !== 'busy') action = null;
   focusOrgan(k);
   paint(d);
   renderGuide(k);
@@ -39,23 +51,164 @@ function paint(d) {
   const note = $('#dNote');
   note.textContent = d.note;
   note.classList.toggle('watch', d.level !== 'low');
-  paintWrong(d);
+  paintNow(d);
+  paintPlan(d);
 }
 
-// What this could lead to on this mission, and the best thing to do about it.
-function paintWrong(d) {
-  const box = $('#dWrong');
-  if (!box) return;
-  const wrong = (d.wrong || []).slice(0, 2).map(w => {
-    let when = '';
-    if (w.by_day) when = ` <em>by day ${w.by_day}</em>`;
-    return `<li>${w.title}${when}</li>`;
+function setHtml(box, html) {
+  if (painted.get(box) === html) return;
+  painted.set(box, html);
+  box.innerHTML = html;
+}
+
+// Severity from the backend (0..1) as a whole number out of 100.
+function points(severity) {
+  return Math.round(Math.min(1, Math.max(0, severity || 0)) * 100);
+}
+
+function isLive(d) {
+  return Boolean(live.state && live.state.organs[d.id]);
+}
+
+// Part 1, current state: how bad it is now, where it is heading, and what is causing it.
+function paintNow(d) {
+  const level = d.level || 'low';
+  let html = `<div class="d-now-top"><span class="lvl ${level}">${LEVEL_WORD[level] || level}</span>`;
+  if (isLive(d)) {
+    const now = points(d.severity);
+    html += `<div class="d-sev ${level}"><i style="width:${now}%"></i></div></div>`;
+    html += `<p class="d-trend">Severity ${now} of 100${trend(d, now)}</p>`;
+  } else {
+    html += '</div>';
+  }
+  const drivers = d.drivers || [];
+  if (drivers.length) {
+    html += `<p class="d-head">Why it's flagged</p><div class="d-chips">${drivers.map(x => `<span>${x}</span>`).join('')}</div>`;
+  }
+  setHtml($('#dNow'), html);
+}
+
+// Where the backend's projection ends up if the crew member changes nothing.
+function trend(d, now) {
+  const steps = d.projection || [];
+  const last = steps[steps.length - 1];
+  if (!last) return '';
+  const then = points(last.severity);
+  if (then > now) return ` · heading to ${then} by day ${last.day} if nothing changes`;
+  if (then < now) return ` · easing to ${then} by day ${last.day}`;
+  return ` · holding steady through day ${last.day}`;
+}
+
+// Parts 2 and 3: what could go wrong on this mission, and what to do.
+function paintPlan(d) {
+  if (pressing) return;
+  setHtml($('#dPlan'), wrongHtml(d) + actionsHtml(d));
+}
+
+function wrongHtml(d) {
+  const items = (d.wrong || []).map(w => {
+    const meta = [];
+    if (w.likelihood) meta.push(`${w.likelihood} likelihood`);
+    if (w.by_day) meta.push(`by day ${w.by_day}`);
+    let line = '';
+    if (meta.length) line = `<span class="d-meta">${meta.join(' · ')}</span>`;
+    let signs = '';
+    if (w.signs && w.signs.length) signs = `<p><em>Watch for</em>${w.signs.join(' · ')}</p>`;
+    return `<li class="d-risk ${w.likelihood || ''}"><b>${w.title}</b>${line}${signs}</li>`;
   }).join('');
-  const best = (d.countermeasures || [])[0];
-  let action = '';
-  if (best) action = `<p class="do"><b>Best next step</b>${best.label}</p>`;
-  if (!wrong && !action) { box.innerHTML = ''; return; }
-  box.innerHTML = `<p class="lead"><b>Could lead to</b></p><ul>${wrong}</ul>${action}`;
+  if (!items) return '';
+  return `<section><h3>What could go wrong <em>on this mission</em></h3><ul class="d-risks">${items}</ul></section>`;
+}
+
+function duration(minutes) {
+  if (minutes >= 120 && minutes % 60 === 0) return `${minutes / 60} h`;
+  return `${minutes} min`;
+}
+
+function actionsHtml(d) {
+  const list = d.countermeasures || [];
+  if (!isLive(d)) {
+    return `<section><h3>What to do</h3><p class="d-off">The risk engine is offline, so there are no steps to log right now. Start the backend to see them.</p></section>`;
+  }
+  if (!list.length) {
+    return `<section><h3>What to do</h3><p class="d-off">Nothing to do for this system today.</p></section>`;
+  }
+  const busy = Boolean(action && action.phase === 'busy');
+  const previewing = live.previewDay !== null;
+  const now = points(d.severity);
+  const buttons = list.map((c, i) => {
+    const after = points(d.severity + c.effect);
+    const helps = after < now;
+    const running = busy && action.organ === d.id && action.id === c.id;
+    let tag = '';
+    if (i === 0 && helps) tag = '<span class="d-tag">Best next step</span>';
+    let gain = 'little to gain right now';
+    if (helps) gain = `severity ${now} → ${after}`;
+    let study = '';
+    if (c.research) study = `<span class="d-study">NASA study: ${c.research}</span>`;
+    let go = 'Mark done <i>→</i>';
+    if (running) go = 'Logging…';
+    return `<button class="d-act${running ? ' busy' : ''}" data-cm="${c.id}"${busy || previewing ? ' disabled' : ''}>
+      ${tag}<b>${c.label}</b>
+      <span class="d-meta">${duration(c.minutes)} · ${gain}</span>${study}
+      <span class="d-go">${go}</span>
+    </button>`;
+  }).join('');
+  let lock = '';
+  if (previewing) lock = `<p class="d-off">You are previewing day ${live.previewDay}. Go back to today to log a step.</p>`;
+  return `<section><h3>What to do</h3><div class="d-acts">${buttons}</div>${lock}${resultHtml(d)}</section>`;
+}
+
+// What the last logged countermeasure changed: severity when it was pressed against severity now.
+// Heart, sleep and lungs follow device readings, which take a moment to respond, so this reads the
+// live state on every repaint instead of the before/after in the POST reply.
+function resultHtml(d) {
+  if (!action || action.organ !== d.id) return '';
+  if (action.phase === 'failed') return `<p class="d-result bad">Could not reach the backend. Nothing was logged.</p>`;
+  if (action.phase !== 'done') return '';
+  const before = points(action.before), now = points(d.severity);
+  if (now >= before) return `<p class="d-result"><b>Logged</b>${action.label}. No change in severity yet.</p>`;
+  const word = LEVEL_WORD[d.level] || d.level;
+  let level = `Now ${word}`;
+  if (d.level === action.level) level = `Still ${word}`;
+  return `<p class="d-result"><b>Logged</b>${action.label}. Severity ${before} → ${now}. ${level}.</p>`;
+}
+
+// The fix animation belongs to the 3D side (plan.md 5.4). It must never block or fail the log.
+function fixAnimation(k, id) {
+  let done;
+  try {
+    done = playFix(k, id);
+  } catch (err) {
+    console.error(err);
+  }
+  const timeout = new Promise(resolve => setTimeout(resolve, FIX_WAIT_MS));
+  return Promise.race([Promise.resolve(done).catch(err => console.error(err)), timeout]);
+}
+
+// Log one countermeasure: tell the backend, play the fix on the body, then show what changed.
+async function runAction(k, id) {
+  const d = organ(k);
+  const cm = (d.countermeasures || []).find(c => c.id === id);
+  if (!cm || (action && action.phase === 'busy')) return;
+  action = { organ: k, id, label: cm.label, phase: 'busy', before: d.severity, level: d.level };
+  paintPlan(d);
+  try {
+    await api.countermeasure(k, id);
+    await fixAnimation(k, id);
+    action.phase = 'done';
+    // Refresh the ranking and every view now instead of waiting for the next push.
+    await refreshState();
+  } catch (err) {
+    console.error(err);
+    if (action.phase === 'busy') action.phase = 'failed';
+  }
+  if (state.current !== k) return;
+  paintNow(organ(k));
+  paintPlan(organ(k));
+  // The plan scrolls on short screens: make sure the outcome is in view.
+  const result = $('#dPlan .d-result');
+  if (result) result.scrollIntoView({ block: 'nearest' });
 }
 
 export function leaveDetail(instant) {
@@ -105,7 +258,30 @@ export function tickDetail(now) {
   return pulse;
 }
 
+// The two boxes this view adds to the page: current state under the note, and the plan on the right.
+function buildPanels() {
+  const now = document.createElement('div');
+  now.className = 'd-now';
+  now.id = 'dNow';
+  $('#dNote').after(now);
+
+  const plan = document.createElement('aside');
+  plan.className = 'd-plan';
+  plan.id = 'dPlan';
+  $('#view-detail').append(plan);
+
+  plan.addEventListener('pointerdown', () => { pressing = true; });
+  addEventListener('pointerup', () => { pressing = false; });
+  addEventListener('pointercancel', () => { pressing = false; });
+  plan.addEventListener('click', e => {
+    if (!state.current) return;
+    const cm = e.target.closest('[data-cm]');
+    if (cm) runAction(state.current, cm.dataset.cm);
+  });
+}
+
 export function initDetail() {
+  buildPanels();
   $$('[data-sys]').forEach(b => b.addEventListener('click', () => openSystem(b.dataset.sys)));
   $('#back').addEventListener('click', () => show('body'));
   addEventListener('keydown', e => { if (e.key === 'Escape' && state.view === 'detail') show('body'); });
