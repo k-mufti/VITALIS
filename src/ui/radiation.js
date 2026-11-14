@@ -29,6 +29,12 @@ export function initRadiation() {
     if (e.key === 'Escape') setPop(false);
   });
 
+  // Demo helper: preview how each level looks. vitalisWeatherPreview('raised' | 'storm' | 'quiet' | null)
+  window.vitalisWeatherPreview = lv => {
+    preview = lv || null;
+    renderChip();
+    if (!$('#swPop').hidden) renderPop();
+  };
   renderDose();
   renderChip();
   onData(type => {
@@ -51,6 +57,8 @@ export function initRadiation() {
 let stormKey = null;
 let primed = false;
 let fx = null;
+let stormIntensity = 0; // replayed storm: 1 while the banner is up, 0.25 after Acknowledge, 0 when over
+let preview = null;     // demo override for the weather level: vitalis.weatherPreview('raised')
 
 function checkStorm() {
   const storm = live.state && live.state.storm;
@@ -59,18 +67,34 @@ function checkStorm() {
   if (!primed) {
     primed = true;
     stormKey = key;
-    if (storm) startFx(0.25);
+    stormIntensity = storm ? 0.25 : 0;
+    syncFx();
     return;
   }
   if (key === stormKey) return;
   stormKey = key;
   if (!storm) {
     hideAlert();
-    stopFx();
-    return;
+    stormIntensity = 0;
+  } else {
+    showAlert(storm);
+    stormIntensity = 1;
   }
-  showAlert(storm);
-  startFx(1);
+  syncFx();
+}
+
+/* Weather over the body, by level:
+   quiet    nothing
+   elevated slow amber drizzle
+   storm    red proton rain (full during a replayed storm's banner, lighter after) */
+const RED = '224,68,46', AMBER = '227,155,45';
+
+function syncFx() {
+  if (stormIntensity > 0) return startFx(stormIntensity, RED);
+  const lv = level();
+  if (lv === 'storm') return startFx(0.6, RED);
+  if (lv === 'raised') return startFx(0.3, AMBER);
+  stopFx();
 }
 
 function showAlert(storm) {
@@ -106,7 +130,8 @@ function showAlert(storm) {
   requestAnimationFrame(() => el.classList.add('in'));
   $('#saAck').addEventListener('click', () => {
     hideAlert();
-    if (fx) fx.target = 0.25;
+    stormIntensity = 0.25;
+    syncFx();
   });
   countUp($('#saDose'), storm.dose_msv || 0, 4000);
 }
@@ -131,7 +156,7 @@ function countUp(node, to, ms) {
 }
 
 // Proton streaks over the 3D stage. intensity 1 = full storm, 0.25 = drizzle, 0 = gone.
-function startFx(intensity) {
+function startFx(intensity, color = RED) {
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const stage = $('#stage3d');
   if (!fx) {
@@ -140,10 +165,12 @@ function startFx(intensity) {
     const canvas = document.createElement('canvas');
     wrap.appendChild(canvas);
     stage.appendChild(wrap);
-    fx = { wrap, canvas, ctx: canvas.getContext('2d'), level: 0, target: intensity, streaks: [], raf: 0, reduce };
+    fx = { wrap, canvas, ctx: canvas.getContext('2d'), level: 0, target: intensity, streaks: [], raf: 0, reduce, color };
     fx.raf = requestAnimationFrame(drawFx);
   }
   fx.target = intensity;
+  fx.color = color;
+  fx.wrap.style.setProperty('--fx-rgb', color);
   stage.classList.add('storming');
 }
 
@@ -172,15 +199,17 @@ function drawFx(now) {
     const spawn = f.level * 6;
     const count = Math.floor(spawn) + (Math.random() < spawn % 1 ? 1 : 0);
     for (let i = 0; i < count; i++) {
-      f.streaks.push({ x: Math.random() * (w + h * 0.4) - h * 0.4, y: -20, v: 9 + Math.random() * 14, len: 30 + Math.random() * 90, a: 0.25 + Math.random() * 0.6 });
+      // Weaker weather falls slower and shorter, so drizzle reads differently from a storm.
+      const speed = 0.4 + f.level * 0.8;
+      f.streaks.push({ x: Math.random() * (w + h * 0.4) - h * 0.4, y: -20, v: (9 + Math.random() * 14) * speed, len: (30 + Math.random() * 90) * speed, a: 0.25 + Math.random() * 0.6, c: f.color });
     }
     ctx.lineCap = 'round';
     f.streaks = f.streaks.filter(s => {
       s.x += s.v * 0.35;
       s.y += s.v;
       const g = ctx.createLinearGradient(s.x, s.y, s.x - s.len * 0.35, s.y - s.len);
-      g.addColorStop(0, `rgba(224,68,46,${s.a})`);
-      g.addColorStop(1, 'rgba(224,68,46,0)');
+      g.addColorStop(0, `rgba(${s.c},${s.a})`);
+      g.addColorStop(1, `rgba(${s.c},0)`);
       ctx.strokeStyle = g;
       ctx.lineWidth = 1.4;
       ctx.beginPath();
@@ -228,6 +257,7 @@ function activeStorm() {
 }
 
 function level() {
+  if (preview) return preview;
   const now = weather && weather.now;
   if (activeStorm()) return 'storm';
   if (!now) return 'none';
@@ -249,76 +279,65 @@ function renderChip() {
   if (!live.online) word = 'Offline';
   else if (!weather) word = 'Loading';
   else if (activeStorm() && !(now && now.proton_event_now)) word = 'Storm replay';
+  if (preview) word = WORD[lv];
   $('#swValue').textContent = value;
   $('#swWord').textContent = word;
+  syncFx();
   chip.title = now ? `GOES-${now.satellite} proton flux ${now.energy}, ${now.time_tag}` : 'Live space weather from NOAA and NASA';
 }
+
+/* The panel: what the weather is now, and whether to go inside. Nothing else. */
+const NOW_SAY = {
+  quiet: { word: 'Quiet', say: 'All clear.' },
+  raised: { word: 'Elevated', say: 'Stay near the shelter.' },
+  storm: { word: 'Solar storm', say: 'Go to the storm shelter now.' },
+  none: { word: 'No reading', say: 'Waiting for the satellite.' },
+};
 
 function renderPop() {
   const pop = $('#swPop');
   if (!live.online || !weather) {
-    pop.innerHTML = `<h3>Space weather</h3><p class="sw-muted">Start the backend to see live NOAA and NASA data.</p>`;
+    pop.innerHTML = `<p class="sw-muted">Offline. Start the backend for live data.</p>`;
     return;
   }
   const now = weather.now;
-  const storm = activeStorm();
-  const sep = (weather.recent_solar_particle_events || [])[0];
-  const flare = (weather.recent_flares || [])[0];
-  const status = weather.status || {};
+  const lv = level();
+  const t = NOW_SAY[lv];
+  const flux = now ? now.flux_pfu : null;
+  const shelterAt = now ? now.threshold_pfu : 10;
+  const replay = activeStorm() && !(now && now.proton_event_now) && !preview;
 
-  let html = `<h3>Space weather <span class="sw-tag">live</span></h3>`;
-  if (storm) {
-    html += `<div class="sw-alert"><b>Solar particle event: crew in storm shelter</b>
-      <p>Replaying real event ${esc(storm.sepID)}${storm.instrument ? `, seen by ${esc(storm.instrument)}` : ''}.
-      Adds ${storm.dose_msv} mSv while sheltered.</p>
-      ${link(storm.link, 'Open in NASA DONKI')}</div>`;
-  }
-  if (now) {
-    html += `<div class="sw-row"><span>Proton flux now</span><b>${formatFlux(now.flux_pfu)} <small>pfu</small></b></div>
-      ${meter(now.flux_pfu, now.threshold_pfu)}
-      ${levels(now.flux_pfu)}
-      <p class="sw-muted">GOES-${now.satellite} satellite, ${fmtTime(now.time_tag)}.</p>`;
-  } else {
-    html += `<p class="sw-muted">No GOES reading yet (${esc(status.noaa_protons || 'unavailable')}).</p>`;
-  }
-  if (sep) {
-    const instrument = ((sep.instruments || [])[0] || {}).displayName;
-    html += `<div class="sw-row"><span>Last solar particle event</span><b>${fmtDate(sep.eventTime)}</b></div>
-      <p class="sw-muted">${instrument ? esc(instrument) + '. ' : ''}${link(sep.link, 'DONKI record')}</p>`;
-  }
-  if (flare) {
-    html += `<div class="sw-row"><span>Last solar flare</span><b>${esc(flare.classType || '?')} <small>${fmtDate(flare.peakTime || flare.beginTime)}</small></b></div>`;
-  }
-  html += `<p class="sw-src">Sources: NOAA SWPC GOES (${esc(status.noaa_protons || '?')}) · NASA DONKI (${esc(status.sep || '?')})</p>`;
-  pop.innerHTML = html;
+  pop.dataset.level = lv;
+  pop.innerHTML = `
+    <div class="sw-sky" aria-hidden="true">${skyDrops(lv)}</div>
+    <div class="sw-now">
+      <b class="sw-word">${t.word}</b>
+      <span class="sw-val">${formatFlux(flux)} <small>pfu</small></span>
+    </div>
+    ${now ? meter(flux, shelterAt) : ''}
+    <p class="sw-say">${t.say}</p>
+    <p class="sw-rule">Shelter at ${shelterAt} pfu${replay ? ' · replaying a real NASA storm' : ''}</p>
+    ${now ? `<p class="sw-src">Live · NOAA GOES-${now.satellite} · ${fmtTime(now.time_tag)}</p>` : ''}`;
 }
 
-/* What a pfu reading means for the crew, in plain words. pfu = high-energy protons hitting each
-   square centimetre every second. Bands follow NOAA's solar radiation storm scale (S1 = 10 pfu,
-   S2 = 100, S3 = 1000). The "for the crew" column is our plain-language reading, not NOAA's text. */
-const LEVELS = [
-  { min: 0, label: 'Normal', say: 'Background. Nothing to do.' },
-  { min: 1, label: 'Elevated', say: 'Above normal. Keep watching.' },
-  { min: 10, label: 'Storm', say: 'Go to the storm shelter.' },
-  { min: 100, label: 'Strong', say: 'Dose climbs fast outside the shelter.' },
-  { min: 1000, label: 'Severe', say: 'Stay sheltered. Spacewalks off.' },
-];
-
-function levels(flux) {
-  let idx = 0;
-  LEVELS.forEach((l, i) => { if (flux >= l.min) idx = i; });
-  const rows = LEVELS.map((l, i) => {
-    const range = i < LEVELS.length - 1 ? `${l.min === 0 ? '<' + LEVELS[1].min : l.min + '+'}` : `${l.min}+`;
-    return `<li class="${i === idx ? 'on' : ''}" data-band="${i}"><span>${range}</span><b>${l.label}</b><em>${l.say}</em></li>`;
-  }).join('');
-  return `<ul class="sw-levels">${rows}</ul><p class="sw-muted">pfu = protons hitting each cm² every second.</p>`;
+// Particles for the little sky at the top of the panel. Count, speed and colour follow the level.
+function skyDrops(lv) {
+  const n = { quiet: 6, raised: 14, storm: 28, none: 0 }[lv] || 0;
+  let out = '';
+  for (let i = 0; i < n; i++) {
+    const x = (i * 37 + 11) % 100;
+    const delay = ((i * 0.53) % 2).toFixed(2);
+    const dur = (0.8 + ((i * 7) % 10) / 10).toFixed(2);
+    out += `<i style="left:${x}%;animation-delay:-${delay}s;animation-duration:${dur}s"></i>`;
+  }
+  return out;
 }
 
 // Log scale from 0.1 to 1000 pfu, with the storm threshold marked.
 function meter(flux, threshold) {
   const pos = v => Math.max(0, Math.min(100, (Math.log10(Math.max(v, 0.1)) + 1) * 25));
   return `<div class="sw-meter"><i style="width:${pos(flux)}%"></i><em style="left:${pos(threshold)}%"></em></div>
-    <div class="sw-meter-scale"><span>0.1</span><span>1</span><span>10 storm</span><span>100</span><span>1000</span></div>`;
+    <div class="sw-meter-scale"><span>0.1</span><span>1</span><span>10 shelter</span><span>100</span><span>1000</span></div>`;
 }
 
 // ---------- dose graph ----------
@@ -425,13 +444,6 @@ function fmtTime(iso) {
   const d = new Date(iso);
   if (isNaN(d)) return esc(iso);
   return d.toISOString().slice(11, 16) + ' UTC ' + d.toISOString().slice(0, 10);
-}
-
-function fmtDate(iso) {
-  if (!iso) return '?';
-  const d = new Date(iso.replace(/Z?$/, 'Z'));
-  if (isNaN(d)) return esc(iso);
-  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
 function link(url, text) {
