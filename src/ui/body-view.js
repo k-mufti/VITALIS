@@ -7,6 +7,7 @@ import { setHoverOrgan } from '../three/api.js';
 export function initBodyView() {
   $$('.spot').forEach(s => {
     if (SYS[s.dataset.sys].state === 'watch') s.classList.add('watch');
+    if (SYS[s.dataset.sys].state === 'act') s.classList.add('act');
     if (['lungs', 'muscles'].includes(s.dataset.sys)) s.classList.add('l');
     s.addEventListener('pointerenter', () => setHoverOrgan(s.dataset.sys));
     s.addEventListener('pointerleave', () => setHoverOrgan(null));

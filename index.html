@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css?v=2" />
+  <link rel="stylesheet" href="styles/data-ui.css?v=1" />
 </head>
 <body>
 
@@ -64,6 +65,7 @@
         <div class="day"><span>Day</span>184</div>
         <button class="status" data-sys="heart"><i class="dot amber"></i>2 things to watch <span>→</span></button>
       </div>
+      <aside class="today" id="today" aria-label="Today's health checks"></aside>
       <p class="hint">Drag to turn</p>
     </section>
 
@@ -76,6 +78,7 @@
         <div class="big"><span id="dValue">16</span></div>
         <p class="unit" id="dUnit">breaths a minute</p>
         <p class="note" id="dNote"></p>
+        <details class="guide" id="dGuide"></details>
       </div>
 
       <div class="organ" id="organ"></div>
@@ -114,10 +117,15 @@
       <div class="people" id="people"></div>
       <p class="person-note" id="personNote">Tap a crew member</p>
 
-      <div class="facts">
-        <div class="fact"><span>Radiation</span><b>148 <small>of 200 mSv</small></b><div class="meter"><i style="width:74%"></i></div></div>
-        <div class="fact"><span>Cabin air</span><b>Good</b><small>O₂ 21% · 22 °C</small></div>
-        <div class="fact"><span>Ship</span><b>All OK</b><small>No alerts</small></div>
+      <div class="hazards">
+        <h3 class="t-label">The five space hazards <small>NASA Human Research Program</small></h3>
+        <div class="facts five">
+          <div class="fact"><span><i class="dot watch"></i>Radiation</span><b>148 <small>of 200 mSv</small></b><div class="meter"><i style="width:74%"></i></div><small>Storm shelter ready</small></div>
+          <div class="fact"><span><i class="dot ok"></i>Isolation</span><b>3.8 <small>of 5 mood</small></b><small>Crew average this week · 1 low day</small></div>
+          <div class="fact"><span><i class="dot ok"></i>Distance</span><b>12.4 <small>min</small></b><small>Message delay to Earth, one way</small></div>
+          <div class="fact"><span><i class="dot ok"></i>Gravity</span><b>0 <small>g</small></b><small>Bone and muscle loss · 2 h exercise a day</small></div>
+          <div class="fact"><span><i class="dot watch"></i>Cabin air</span><b>2.6 <small>mmHg CO₂</small></b><div class="meter"><i style="width:87%"></i></div><small>Limit 3.0 · O₂ 21% · 22 °C</small></div>
+        </div>
       </div>
     </section>
 
@@ -135,6 +143,10 @@
       </div>
       <aside class="proof" id="proof"></aside>
     </section>
+
+    <div class="ci-shade" id="ciShade"></div>
+    <aside class="checkin" id="checkin" aria-label="Check in"></aside>
+    <div class="toast" id="toast" role="status"></div>
 
     <footer class="foot">Demo · all readings are made up</footer>
   </div>

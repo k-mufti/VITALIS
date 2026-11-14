@@ -5,6 +5,8 @@ import { initNav } from './nav.js';
 import { initDetail, tickDetail } from './ui/detail.js';
 import { initCrew } from './ui/crew.js';
 import { initAsk } from './ui/ask.js';
+import { initToday } from './ui/today.js';
+import { initCheckin } from './ui/checkin.js';
 
 /* VITALIS demo. Every reading here is made up.
    Boot + main loop only. Features live in src/three, src/ui and src/data. */
@@ -16,6 +18,8 @@ initNav();
 initDetail();
 initCrew();
 initAsk();
+initToday();
+initCheckin();
 
 (function loop(now) {
   const pulse = tickDetail(now);
