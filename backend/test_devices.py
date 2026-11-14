@@ -34,6 +34,6 @@ assert "heart_rate" in again and "onsd_mm" not in again and "bp_sys" not in agai
 # Organs say how they are measured; bones and muscles are estimates
 s = mission_state(sim)
 assert s["organs"]["bones"]["measurement"]["method"] == "estimated"
-assert s["organs"]["muscles"]["measurement"]["method"] == "estimated"
+assert s["organs"]["muscles"]["measurement"]["method"] == "measured"  # ultrasound + machine loads
 assert s["organs"]["eyes"]["measurement"]["method"] == "measured"
 print("device checks passed")
