@@ -131,6 +131,7 @@ Build against these and we can work in parallel without touching each other's fi
 | `lungs`   | Lungs         | light  | existing, tooltip + simple state        |
 | `eyes`    | Eyes          | DEEP   | SANS: NASA's #1 spaceflight health risk (NEW, needs a 3D region) |
 | `muscles` | Muscles       | light  | existing, tooltip + simple state        |
+| `digestion` | Digestion   | light  | 3D model + body region only; no data yet (NEW, needs backend data) |
 
 DEEP = live state + projection + fix animation. Light = status + info only.
 Do not rename existing IDs. New organs need a new row here first.

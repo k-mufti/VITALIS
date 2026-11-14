@@ -1,5 +1,8 @@
 {
-  "body": { "file": "body.glb", "scale": 1.0 },
+  "body": {
+    "file": "body.glb",
+    "scale": 1.0
+  },
   "organs": {
     "heart": {
       "file": "heart.glb",
@@ -45,6 +48,30 @@
         "v": 0.5,
         "half": 0.54
       }
+    },
+    "sleep": {
+      "file": "brain.glb",
+      "color": "#2b3134",
+      "anchor": [
+        0,
+        0.95
+      ],
+      "scale": 1.0,
+      "height": 0.068,
+      "depth": 0.054,
+      "fill": 0.62
+    },
+    "digestion": {
+      "file": "digestive.glb",
+      "color": "#262c2f",
+      "anchor": [
+        0,
+        0.58
+      ],
+      "scale": 1.0,
+      "height": 0.28,
+      "depth": 0.043,
+      "fill": 0.72
     }
   }
 }
