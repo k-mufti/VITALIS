@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { $, $$ } from '../util.js';
-import { pivot, HOME, cam, twin } from './scene.js';
+import { pivot, HOME, cam, twin, renderer } from './scene.js';
+import { createHalftoneSkin, createAuraMaterials, halftoneUniforms } from './effects.js';
 
 /* Body model, skin shader, and the body regions each system lives at. */
 
@@ -16,30 +17,58 @@ export const REGIONS = {
 export const uni = {
   uRegionCenter: { value: new THREE.Vector3(0, 99, 0) }, uRegionRadius: { value: .3 },
   uHighlight: { value: 0 }, uGhost: { value: 0 }, uPulse: { value: 0 }, uCyan: { value: new THREE.Color('#0aa5bd') },
-  uFade: { value: 1 },
+  uFade: { value: 1 },   // écorché crossfade: 0 hides the skin
+  ...halftoneUniforms(renderer.getPixelRatio()),
 };
 
-// Charcoal body. Shader adds a thin cyan ring on the hovered region and turns the body to glass when zoomed in.
-export const skin = new THREE.MeshStandardMaterial({ color: '#131516', roughness: .6, metalness: 0, transparent: true });
-skin.onBeforeCompile = sh => {
-  Object.assign(sh.uniforms, uni);
-  sh.vertexShader = sh.vertexShader
-    .replace('#include <common>', '#include <common>\nvarying vec3 vW;')
-    .replace('#include <project_vertex>', '#include <project_vertex>\nvW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-  sh.fragmentShader = sh.fragmentShader
-    .replace('#include <common>', `#include <common>
-varying vec3 vW; uniform vec3 uRegionCenter; uniform float uRegionRadius, uHighlight, uGhost, uPulse, uFade; uniform vec3 uCyan;`)
-    .replace('#include <opaque_fragment>', `
-float facing = clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);
-float rim = pow(1.0 - facing, 2.4);
-float dR = distance(vW, uRegionCenter);
-float region = (1.0 - smoothstep(uRegionRadius * .5, uRegionRadius, dR)) * uHighlight;
-float ring = (1.0 - smoothstep(0.0, .03, abs(dR / uRegionRadius - .9))) * uHighlight;
-outgoingLight = mix(outgoingLight, uCyan, clamp(smoothstep(.42, .8, rim) * region + ring * (1.0 - .6 * uGhost) + region * .1 * (1.0 - uGhost), 0.0, 1.0));
-outgoingLight = mix(outgoingLight, uCyan, region * uGhost * (.25 + .35 * uPulse));
-diffuseColor.a *= mix(1.0, clamp(.045 + rim * .42 + region * (.16 + .22 * uPulse) + ring * .5, 0.0, 1.0), uGhost) * uFade;
-#include <opaque_fragment>`);
-};
+// Pitch-black halftone body (see effects.js).
+export const skin = createHalftoneSkin(uni);
+const auraMats = createAuraMaterials(uni);
+const auraMeshes = [];
+
+// Camera framing. size = how big the body looks (1 = whole body, bigger = closer).
+// lift = how far up the camera aims, as a fraction of body height.
+export const framing = { H: 4.65, size: 2.02, lift: .23 };
+export function applyFraming() {
+  const { H, size, lift } = framing;
+  HOME.pos.set(0, H * lift, H * 2.4 / size);
+  HOME.look.set(0, H * lift, 0);
+  if (!twin.focus && !twin.fly) {
+    cam.pos.copy(HOME.pos);
+    cam.look.copy(HOME.look);
+  }
+}
+
+// Turn aura shells on/off (skip drawing them when strength is 0).
+export function setAuraVisible(on) {
+  auraMeshes.forEach(m => m.visible = on);
+}
+
+// Glow shells share the body's geometry (and skeleton, if skinned).
+function addAura(obj) {
+  const bodyMeshes = [];
+  obj.traverse(m => { if (m.isMesh) bodyMeshes.push(m); });
+  bodyMeshes.forEach(m => {
+    m.renderOrder = 1;  // body draws after the glow
+    auraMats.forEach(mat => {
+      let a;
+      if (m.isSkinnedMesh) {
+        a = new THREE.SkinnedMesh(m.geometry, mat);
+        a.bind(m.skeleton, m.bindMatrix);
+      } else {
+        a = new THREE.Mesh(m.geometry, mat);
+      }
+      a.position.copy(m.position);
+      a.quaternion.copy(m.quaternion);
+      a.scale.copy(m.scale);
+      a.frustumCulled = false;
+      a.renderOrder = 0;
+      a.visible = uni.uAura.value > 0;
+      m.parent.add(a);
+      auraMeshes.push(a);
+    });
+  });
+}
 
 export function loadBody() {
   new FBXLoader().load('./malebody.fbx', obj => {
@@ -60,8 +89,9 @@ export function loadBody() {
       const core = surf.clone(); core.z -= r.radius * .45; if (r.coreX !== undefined) core.x = r.coreX;
       r.surface = obj.worldToLocal(surf); r.core = obj.worldToLocal(core);
     });
-    HOME.pos.set(0, 0, Math.max(8, H * 2.4));
-    cam.pos.copy(HOME.pos);
+    addAura(obj);  // after the raycasts, so rays only hit the body
+    framing.H = H;
+    applyFraming();
     twin.body = obj;
     twin.bodyBox = b.clone();
     $('#loadNote').remove();
