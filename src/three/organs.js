@@ -35,6 +35,18 @@ export function has3dOrgan(k) {
 // Models are meshopt-compressed .glb files that carry only geometry and a WebP normal map.
 const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 
+// Starting pose: joints where a straight-down limb bends, no turns.
+const LIMB_JOINTS = {
+  arms: [[.06, .822], [.06, .682], [.06, .485]],   // shoulder, elbow, wrist [from centre, height]
+  legs: [[.05, .52], [.05, .285], [.045, .04]],    // hip, knee, ankle
+};
+function limbPose(limb) {
+  return LIMB_JOINTS[limb].map(([px, py]) => ({ rx: 0, ry: 0, rz: 0, px, py, pz: 0 }));
+}
+function limbRig(limb) {
+  return { on: true, start: limb === 'arms' ? .09 : .015, L: limbPose(limb), R: limbPose(limb) };
+}
+
 // Organ look + skeleton arm fit. The FX panel (devpanel.js) changes these; updateOrgans() applies them.
 export const organFx = {
   style: 0,                 // 0 = halftone, 1 = flat silhouette
@@ -60,18 +72,6 @@ export const organFx = {
   place: {},
 };
 const DEFAULT_TINT = '#1846c4';
-
-// Starting pose: joints where a straight-down limb bends, no turns.
-const LIMB_JOINTS = {
-  arms: [[.06, .822], [.06, .682], [.06, .485]],   // shoulder, elbow, wrist [from centre, height]
-  legs: [[.05, .52], [.05, .285], [.045, .04]],    // hip, knee, ankle
-};
-function limbPose(limb) {
-  return LIMB_JOINTS[limb].map(([px, py]) => ({ rx: 0, ry: 0, rz: 0, px, py, pz: 0 }));
-}
-function limbRig(limb) {
-  return { on: true, start: limb === 'arms' ? .09 : .015, L: limbPose(limb), R: limbPose(limb) };
-}
 
 // Uniforms shared by every organ material.
 const shared = {
