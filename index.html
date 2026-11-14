@@ -8,9 +8,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css?v=2" />
-  <link rel="stylesheet" href="styles/data-ui.css?v=1" />
+  <link rel="stylesheet" href="styles/data-ui.css?v=2" />
   <link rel="stylesheet" href="styles/three.css" />
-  <link rel="stylesheet" href="styles/radiation.css?v=2" />
+  <link rel="stylesheet" href="styles/radiation.css?v=3" />
   <link rel="stylesheet" href="styles/health.css" />
 </head>
 <body>
@@ -76,11 +76,9 @@
       <div class="body-foot">
         <div class="day"><span>Day</span><b id="bodyDay">184</b></div>
         <p class="mission-line" id="missionLine">Mars transit · day 184</p>
-        <div class="dose" id="dose" aria-label="Radiation dose">
-          <div class="dose-head"><span>Radiation dose</span><b id="doseValue">—</b></div>
-          <div class="dose-bar"><i class="dose-base" id="doseBase"></i><i class="dose-storm" id="doseStorm"></i></div>
-          <div class="dose-scale"><span>0</span><span id="doseLimit">600 mSv career limit</span></div>
-          <p class="dose-sub" id="doseSub"></p>
+        <div class="dose" id="dose" aria-label="Radiation dose over the mission">
+          <div class="dose-head"><span>Radiation</span><b id="doseValue">—</b></div>
+          <svg class="dose-chart" id="doseChart" viewBox="0 0 320 130" role="img"></svg>
         </div>
       </div>
 
@@ -174,6 +172,6 @@
   </div>
 
   <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
-  <script type="module" src="src/main.js?v=5"></script>
+  <script type="module" src="src/main.js?v=7"></script>
 </body>
 </html>

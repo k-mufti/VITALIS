@@ -39,27 +39,35 @@
 .sw-meter em { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--red); }
 .sw-meter-scale { display: flex; justify-content: space-between; margin-top: 4px; font: 500 10px var(--cond); letter-spacing: .08em; color: var(--soft); text-transform: uppercase; }
 
-/* ---------- dose gauge ---------- */
-.dose { position: relative; margin: 18px 0 0 -14px; width: 348px; padding: 12px 14px; background: color-mix(in srgb, var(--paper) 86%, transparent); backdrop-filter: blur(6px); }
+/* ---------- dose graph ---------- */
+.dose { position: relative; margin: 18px 0 0 -14px; width: 348px; padding: 12px 14px 8px; background: color-mix(in srgb, var(--paper) 86%, transparent); backdrop-filter: blur(6px); }
 .dose-head { display: flex; justify-content: space-between; align-items: baseline; }
 .dose-head span { font: 600 13px var(--cond); letter-spacing: .2em; text-transform: uppercase; color: var(--soft); }
 .dose-head b { font: 300 34px/1 var(--cond); font-variant-numeric: tabular-nums; }
 .dose-head small { font: 500 14px var(--cond); letter-spacing: .08em; color: var(--soft); }
-.dose-bar { position: relative; height: 10px; margin-top: 10px; background: var(--line); overflow: hidden; }
-.dose-bar i { position: absolute; top: 0; bottom: 0; transition: width .8s var(--ease), left .8s var(--ease); }
-.dose-base { left: 0; background: var(--cyan); }
-.dose-storm { background: var(--red); background-image: repeating-linear-gradient(-45deg, transparent 0 3px, rgba(255,255,255,.35) 3px 6px); }
-.dose[data-level="mid"] .dose-base { background: var(--amber); }
-.dose[data-level="high"] .dose-base { background: var(--red); }
-.dose-scale { display: flex; justify-content: space-between; margin-top: 5px; font: 500 11px var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--soft); }
-.dose-sub { margin-top: 8px; font: 400 13px/1.4 var(--sans); color: var(--soft); max-width: 320px; }
-.dose-sub b { color: var(--ink); font-weight: 600; }
-.dose-storm-note { color: var(--red); font-weight: 500; }
+.dose-chart { display: block; width: 100%; height: auto; margin-top: 6px; overflow: visible; --dc: var(--cyan); }
+.dose[data-level="mid"] .dose-chart { --dc: var(--amber); }
+.dose[data-level="high"] .dose-chart { --dc: var(--red); }
+.dose-chart text { font: 500 10px var(--cond); letter-spacing: .08em; fill: var(--soft); text-transform: uppercase; }
+.dc-axis { stroke: var(--line); stroke-width: 1; }
+.dc-limit { stroke: var(--red); stroke-width: 1; stroke-dasharray: 4 3; }
+.dose-chart .dc-limit-t { fill: var(--red); font-size: 12px; font-weight: 600; }
+.dose-chart .dc-limit-s { fill: var(--red); opacity: .8; }
+.dc-area { fill: var(--dc); opacity: .14; }
+.dc-past { fill: none; stroke: var(--dc); stroke-width: 2.2; stroke-linejoin: round; }
+.dc-future { fill: none; stroke: var(--ink); stroke-width: 1.4; stroke-dasharray: 3 4; opacity: .55; }
+.dc-storm { stroke: var(--red); stroke-width: 3; }
+.dc-now { fill: var(--dc); stroke: var(--white); stroke-width: 2; }
+.dose-chart .dc-now-t { fill: var(--ink); font-weight: 600; }
+.dose-chart .dc-end { fill: var(--ink); font-size: 12px; }
+.dc-cross { fill: var(--red); }
+.dc-cross-l { stroke: var(--red); stroke-width: 1; opacity: .4; }
+.dose-chart .dc-cross-t { fill: var(--red); font-weight: 600; }
 
 @media (max-width: 900px) {
   .sw-label { display: none; }
   .sw-pop { width: min(340px, calc(100vw - 32px)); }
-  .dose { width: min(320px, calc(100vw - 80px)); }
+  .dose { width: min(348px, calc(100vw - 52px)); }
 }
 
 /* ---------- storm alert ---------- */
@@ -106,3 +114,15 @@
 @media (prefers-reduced-motion: reduce) {
   .sa-icon i { animation: none; opacity: .6; }
 }
+
+/* What each pfu band means */
+.sw-levels { list-style: none; margin: 12px 0 0; padding: 0; }
+.sw-levels li { display: grid; grid-template-columns: 44px 64px 1fr; gap: 8px; align-items: baseline; padding: 5px 8px; font-size: 12px; color: var(--soft); border-left: 3px solid transparent; }
+.sw-levels li span { font: 600 12px var(--cond); letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+.sw-levels li b { font: 600 12px var(--cond); letter-spacing: .12em; text-transform: uppercase; }
+.sw-levels li em { font-style: normal; }
+.sw-levels li[data-band="0"] { --band: var(--green); }
+.sw-levels li[data-band="1"] { --band: var(--amber); }
+.sw-levels li[data-band="2"], .sw-levels li[data-band="3"], .sw-levels li[data-band="4"] { --band: var(--red); }
+.sw-levels li b { color: var(--band); }
+.sw-levels li.on { background: color-mix(in srgb, var(--band) 10%, var(--white)); border-left-color: var(--band); color: var(--ink); }

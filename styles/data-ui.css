@@ -342,3 +342,10 @@
 .src-links { margin-top: 6px; display: flex; gap: 14px; }
 .src-links a { font: 600 10px var(--cond); letter-spacing: .14em; text-transform: uppercase; color: var(--cyan); text-decoration: none; }
 .src-links a:hover { color: var(--ink); }
+
+/* How a reading is obtained in flight (detail view) */
+.d-how { margin-top: 10px; max-width: 300px; font: 400 13px/1.45 var(--sans); color: var(--soft); }
+.d-how-tag { display: inline-block; margin-right: 8px; padding: 1px 6px; font: 600 11px var(--cond); letter-spacing: .14em; text-transform: uppercase; color: var(--white); background: var(--green); vertical-align: 1px; }
+.d-how-tag.estimated { background: var(--amber); }
+.d-how-tag.self-report { background: var(--cyan); }
+.d-how-last { display: block; margin-top: 3px; font: 500 11px var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--ink); opacity: .7; }

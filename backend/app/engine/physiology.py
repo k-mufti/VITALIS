@@ -10,6 +10,7 @@ import copy
 from .. import constants as C
 from .. import hrp
 from .. import missions as M
+from ..devices.catalog import ORGAN_MEASUREMENT, describe
 from ..state import ORGANS
 
 B = C.BASELINE
@@ -25,11 +26,11 @@ NAMES = {"heart": "Heart", "bones": "Bones", "sleep": "Sleep & mind", "eyes": "E
 
 UNITS = {
     "heart": ("beats a minute at rest", "54-62"),
-    "bones": ("% of preflight density", "97-100"),
+    "bones": ("% of preflight density (estimated)", "97-100"),
     "sleep": ("hours slept", "7-8 h"),
     "eyes": ("mm optic nerve sheath (ultrasound)", "under 5.0 mm"),
     "lungs": ("breaths a minute", "14-18"),
-    "muscles": ("recovery out of 100", "80-95"),
+    "muscles": ("strength estimate out of 100", "80-95"),
 }
 
 SOURCES = {
@@ -43,7 +44,7 @@ SOURCES = {
 
 WHAT_COULD_GO_WRONG = {
     "bones": [
-        ("Hip or spine fracture after landing", "arrival", ["density below 92%", "back pain under load"]),
+        ("Hip or spine fracture after landing", "arrival", ["estimate below 92%", "back pain under load"]),
         ("Kidney stones from calcium released by bone", None, ["side or back pain", "less urine"]),
     ],
     "heart": [
@@ -180,6 +181,9 @@ def organ_severity(sim, organ, mission_id, day, mods, relief, live):
         return clamp((100 - density) / 8), density
     if organ == "eyes":
         onsd = onsd_mm(mission_id, day, relief)
+        scan = sim.latest.get("onsd_mm") if live else None
+        if scan:
+            onsd = scan["value"]  # the last weekly ultrasound, not a continuous value
         return clamp((onsd - C.ONSD_WATCH_MM) / 1.0), onsd
     if organ == "heart":
         hr = reading(sim, mods, "heart_rate", live)
@@ -207,7 +211,7 @@ def organ_severity(sim, organ, mission_id, day, mods, relief, live):
 
 def note_for(organ, severity, value, mods):
     if organ == "bones":
-        return f"Hip and spine density down {100 - value:.1f}% since launch."
+        return f"Estimated hip and spine density down {100 - value:.1f}% since launch. Scanned after landing."
     if organ == "eyes":
         if value < 5.0:
             return f"Optic nerve sheath is {value:.1f} mm, in the normal range."
@@ -236,7 +240,7 @@ def note_for(organ, severity, value, mods):
 def drivers_for(organ, mission_id, day, mods, dose_frac):
     out = []
     m = M.get(mission_id)
-    low_gravity = m[M.phase(m, day)]["gravity"] < 0.2
+    low_gravity = M.phase_values(m, M.phase(m, day))["gravity"] < 0.2
     if low_gravity and organ in ("bones", "muscles", "heart", "eyes"):
         out.append("microgravity")
     if low_gravity and organ == "eyes":
@@ -264,7 +268,24 @@ def apply_change(mods, relief, cm):
 def horizon_day(m, day):
     if day < m["arrival_day"]:
         return m["arrival_day"]
+    if day < M.departure_day(m):
+        return M.departure_day(m)
     return m["end_day"]
+
+
+def measurement_for(sim, organ, live):
+    """How this organ's number is obtained in flight, and when each input was last taken."""
+    meta = ORGAN_MEASUREMENT[organ]
+    inputs = []
+    for metric in meta["metrics"]:
+        d = describe(metric)
+        last = sim.latest.get(metric) if live else None
+        inputs.append({"metric": metric, "sensor": d["sensor"], "method": d["method"], "cadence": d["cadence"],
+                       "last_ts": last["ts"] if last else None})
+    out = {"method": meta["method"], "how": meta["how"], "inputs": inputs}
+    if meta.get("estimated_from"):
+        out["estimated_from"] = meta["estimated_from"]
+    return out
 
 
 def organ_state(sim, organ, mission_id, day, mods, relief, live, dose_frac):
@@ -321,6 +342,7 @@ def organ_state(sim, organ, mission_id, day, mods, relief, live, dose_frac):
         "drivers": drivers_for(organ, mission_id, day, mods, dose_frac),
         "projection": projection, "countermeasures": cms, "what_could_go_wrong": wrong,
         "source": SOURCES[organ],
+        "measurement": measurement_for(sim, organ, live),
     }
     state.update(hrp.tags_for(organ))
     return state

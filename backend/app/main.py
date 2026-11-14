@@ -21,7 +21,9 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
 from . import director, history, hrp, officer, provenance, triage  # noqa: E402
+from . import constants as C  # noqa: E402
 from . import missions as M  # noqa: E402
+from .devices import catalog  # noqa: E402
 from .devices.simulated import DEVICES  # noqa: E402
 from .engine.physiology import COUNTERMEASURES, apply_change, mission_state  # noqa: E402
 from .sources import donki, horizons, noaa  # noqa: E402
@@ -67,6 +69,7 @@ async def sim_loop():
             for v in device.read(sim):
                 sim.record(v)
                 vitals.append(v)
+        sim.measure_now = False
         if clients:
             for v in vitals:
                 await broadcast({"type": "vital", **v})
@@ -148,7 +151,15 @@ def get_organ(organ_id: str):
 
 @app.get("/api/vitals")
 def get_vitals():
-    return {"latest": sim.latest, "devices": [{"name": d.name, "label": d.label, "simulated": True} for d in DEVICES]}
+    devices = []
+    for d in DEVICES:
+        metrics = [k for k, v in catalog.METRICS.items() if v["device"] == d.name]
+        devices.append({"name": d.name, "label": d.label, "simulated": True,
+                        "real": catalog.DEVICES[d.name]["real"],
+                        "metrics": [{"metric": k, **catalog.METRICS[k]} for k in metrics]})
+    return {"latest": sim.latest, "devices": devices,
+            "not_measurable_in_flight": {k: v["how"] for k, v in catalog.ORGAN_MEASUREMENT.items()
+                                         if v["method"] == catalog.ESTIMATED}}
 
 
 @app.post("/api/countermeasure")
@@ -222,6 +233,40 @@ def get_space_weather():
         "recent_flares": donki.flares()[:10],
         "active_storm": sim.storm,
         "status": {**donki.status, **noaa.status},
+    }
+
+
+@app.get("/api/radiation/curve")
+def get_radiation_curve(mission: str | None = None):
+    """Cumulative dose over the whole mission, for the dose graph. The model is piecewise linear
+    (one dose rate per phase), so the corner days are enough to draw it exactly. Storm dose is
+    added as a step at today, since the sim does not record which day each storm happened."""
+    check_mission(mission)
+    mission_id = mission or sim.mission
+    m = M.get(mission_id)
+    today = float(min(sim.day, m["end_day"]))
+    days = sorted({0.0, float(min(m["arrival_day"], m["end_day"])), float(M.departure_day(m)), today, float(m["end_day"])})
+    points = [{"day": d, "msv": round(M.cumulative_dose(m, d), 1)} for d in days]
+    storm = sim.mods["extra_dose"]
+
+    # First day the projected dose (model + storms so far) reaches the career limit, if it does.
+    crosses = None
+    for a, b in zip(points, points[1:]):
+        lo = a["msv"] + (storm if a["day"] >= today else 0)
+        hi = b["msv"] + (storm if b["day"] >= today else 0)
+        if lo < C.CAREER_LIMIT_MSV <= hi and hi > lo:
+            crosses = round(a["day"] + (C.CAREER_LIMIT_MSV - lo) / (hi - lo) * (b["day"] - a["day"]))
+            break
+        if lo >= C.CAREER_LIMIT_MSV:
+            crosses = round(a["day"])
+            break
+
+    return {
+        "mission": mission_id, "day": today, "arrival_day": m["arrival_day"],
+        "departure_day": M.departure_day(m), "end_day": m["end_day"],
+        "career_limit_msv": C.CAREER_LIMIT_MSV, "event_limit_msv": C.SPE_EVENT_LIMIT_MSV,
+        "storm_dose_msv": storm, "points": points, "crosses_limit_day": crosses,
+        "source": "Mission model: published dose rates per phase (constants.py), plus director storm dose.",
     }
 
 
