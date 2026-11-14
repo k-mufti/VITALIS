@@ -51,8 +51,42 @@ function paint(d) {
   const note = $('#dNote');
   note.textContent = d.note;
   note.classList.toggle('watch', d.level !== 'low');
+  paintHow(d);
   paintNow(d);
   paintPlan(d);
+}
+
+/* How this number is obtained in flight: measured by a sensor, or estimated because nothing on
+   board can measure it (bone density, muscle). Comes from backend devices/catalog.py. */
+const METHOD_WORD = { measured: 'Measured', estimated: 'Estimated', 'self-report': 'Self-report' };
+
+function paintHow(d) {
+  let box = $('#dHow');
+  if (!box) {
+    box = document.createElement('p');
+    box.className = 'd-how';
+    box.id = 'dHow';
+    $('#dUnit').after(box);
+  }
+  const m = d.measurement;
+  if (!m) {
+    setHtml(box, '');
+    return;
+  }
+  // Most recent input with a timestamp, e.g. the last weekly ultrasound.
+  const timed = (m.inputs || []).filter(i => i.last_ts).sort((a, b) => b.last_ts - a.last_ts)[0];
+  let last = '';
+  if (timed && m.method !== 'estimated') {
+    last = ` <span class="d-how-last">${timed.sensor.toLowerCase()} · ${timed.cadence} · ${ago(timed.last_ts)}</span>`;
+  }
+  setHtml(box, `<b class="d-how-tag ${m.method}">${METHOD_WORD[m.method] || m.method}</b>${m.how}${last}`);
+}
+
+function ago(ts) {
+  const s = Math.max(0, Math.round(Date.now() / 1000 - ts));
+  if (s < 5) return 'just now';
+  if (s < 60) return `${s}s ago`;
+  return `${Math.round(s / 60)} min ago`;
 }
 
 function setHtml(box, html) {

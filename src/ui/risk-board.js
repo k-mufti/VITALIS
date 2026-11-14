@@ -10,7 +10,7 @@ import { openSystem } from './detail.js';
    clicking the system on the body (rules.md section 1.5). */
 
 const LEVEL_WORD = { low: 'Low', mild: 'Mild', extreme: 'Extreme' };
-const PHASE_WORD = { cruise: 'transit', surface: 'surface' };
+const PHASE_WORD = { cruise: 'transit', surface: 'surface', return: 'return trip' };
 
 function card(o) {
   const level = o.level || 'low';
