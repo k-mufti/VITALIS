@@ -39,16 +39,21 @@ def value(metric, mods, relief, mission_id, day, storm=False):
     """Noise-free value of one metric."""
     m = mods
     unprotected = months(mission_id, day) * (1 - C.EXERCISE_PROTECTION)
-    rest_hr = B["heart_rate"] + 5 * m["sleep_debt"] + 0.25 * m["bp_offset"] + 4 * m["stress"]
+    hypoxia = max(0.0, C.PPO2_RANGE_KPA[0] - ppo2(m))       # kPa of oxygen below the safe floor
+    high_co2 = max(0.0, cabin_co2(m) - C.CO2_COMFORT_MMHG)
+    # ASSUMPTION: low oxygen and high CO2 both push the resting heart rate up.
+    rest_hr = (B["heart_rate"] + 5 * m["sleep_debt"] + 0.25 * m["bp_offset"] + 4 * m["stress"]
+               + 3.0 * hypoxia + 1.5 * high_co2)
 
     if metric == "heart_rate":
         return rest_hr
     if metric == "hrv":
         return B["hrv"] - 6 * m["sleep_debt"] - 5 * m["stress"]
     if metric == "spo2":
-        return B["spo2"] - 0.2 * max(0.0, cabin_co2(m) - C.CO2_COMFORT_MMHG)
+        # ASSUMPTION: blood oxygen falls about 1.5 points per kPa of oxygen below the safe floor.
+        return B["spo2"] - 0.2 * high_co2 - 1.5 * hypoxia
     if metric == "resp_rate":
-        return B["resp_rate"] + 0.05 * m["bp_offset"] + m["stress"] + 0.6 * max(0.0, cabin_co2(m) - C.CO2_COMFORT_MMHG)
+        return B["resp_rate"] + 0.05 * m["bp_offset"] + m["stress"] + 0.6 * high_co2 + 0.5 * hypoxia
     if metric == "skin_temp":
         return 33.6
     if metric == "pulse_transit_ms":
@@ -82,12 +87,26 @@ def value(metric, mods, relief, mission_id, day, storm=False):
         return max(60.0, 100 - 0.6 * unprotected - 2.5 * m["missed_exercise_days"] + 40 * relief["muscles"])
     if metric == "session_hr_avg":
         # Same protocol workload every day; a less fit body needs a higher heart rate for it.
-        return rest_hr + 70 + 40 * (1 - fitness(m, mission_id, day))
+        return rest_hr + 70 + 40 * (1 - fitness(m, mission_id, day)) + 4.0 * hypoxia
     if metric == "hr_recovery_bpm":
         # Heart-rate drop in the first minute after the session. Under 12 bpm is abnormal (Cole 1999).
         return B["hr_recovery_bpm"] * fitness(m, mission_id, day) + 25 * relief["heart"]
     if metric == "co2_mmhg":
         return cabin_co2(m)
+    if metric == "cabin_pressure_kpa":
+        return cabin_pressure(m)
+    if metric == "ppo2_kpa":
+        return ppo2(m)
+    if metric == "noise_dba":
+        return C.NOISE_BASELINE_DBA + m.get("noise_offset", 0.0)
+    if metric == "hearing_shift_db":
+        # ASSUMPTION: slow drift from months of module noise, plus a temporary shift after loud days.
+        return 0.01 * day * max(0.0, (C.NOISE_BASELINE_DBA - 60) / 10) + 0.5 * m.get("noise_offset", 0.0)
+    if metric == "motion_sickness_0to10":
+        # Space motion sickness comes with gravity changes (arrival, departure) and fades in days.
+        mm = M.get(mission_id)
+        since = min(abs(day - mm["arrival_day"]), abs(day - M.departure_day(mm)), day)
+        return max(0.0, 6.0 - 2.0 * since) + 0.3 * m.get("pressure_drop_kpa", 0.0)
     if metric == "dose_msv":
         return M.cumulative_dose(M.get(mission_id), day) + m["extra_dose"]
     if metric == "dose_rate_usv_h":
@@ -101,6 +120,15 @@ def value(metric, mods, relief, mission_id, day, storm=False):
 
 def cabin_co2(mods):
     return C.CO2_BASELINE_MMHG + mods.get("co2_offset", 0.0)
+
+
+def cabin_pressure(mods):
+    return C.CABIN_PRESSURE_KPA - mods.get("pressure_drop_kpa", 0.0)
+
+
+def ppo2(mods):
+    """Oxygen partial pressure: what the lungs actually get. Falls with cabin pressure."""
+    return cabin_pressure(mods) * C.O2_FRACTION
 
 
 def session_minutes(missed):

@@ -12,6 +12,8 @@ const EVENTS = [
   ['skipped_exercise', 'Skipped exercise'],
   ['bp_spike', 'Blood pressure spike'],
   ['cabin_co2', 'Cabin CO2 rise (ship air)'],
+  ['cabin_leak', 'Cabin pressure leak (less oxygen)'],
+  ['noisy_module', 'Noisy module (failing fan)'],
   ['reset', 'Reset the crew member'],
 ];
 

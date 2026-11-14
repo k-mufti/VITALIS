@@ -13,6 +13,7 @@ NOISE = {
     "sleep_hours": 0.1, "glucose": 3.0, "bp_sys": 2.0, "bp_dia": 1.5,
     "onsd_mm": 0.02, "stroke_volume_ml": 2.0, "quad_thickness_mm": 0.4,
     "reaction_ms": 6.0, "resistive_load_pct": 0.5, "co2_mmhg": 0.05,
+    "cabin_pressure_kpa": 0.05, "ppo2_kpa": 0.03, "noise_dba": 0.8, "hearing_shift_db": 0.5,
 }
 
 
@@ -63,8 +64,9 @@ class Ultrasound(SimulatedDevice):
 
 
 class CrewTablet(SimulatedDevice):
+    """Reaction test, mood and nausea check (daily), hearing test with headphones (monthly)."""
     name, label = "tablet", "Crew tablet tests"
-    reads = ("reaction_ms", "mood_1to5")
+    reads = ("reaction_ms", "mood_1to5", "motion_sickness_0to10", "hearing_shift_db")
 
 
 class ExerciseMachines(SimulatedDevice):
@@ -74,9 +76,16 @@ class ExerciseMachines(SimulatedDevice):
 
 
 class CabinAir(SimulatedDevice):
-    """Ship life-support sensor, not worn: lets the engine tell a cabin air problem from a body problem."""
+    """Ship life-support sensors, not worn: CO2, oxygen and total pressure. Lets the engine tell a
+    cabin air problem from a body problem."""
     name, label = "cabin_air", "Cabin air monitor"
-    reads = ("co2_mmhg",)
+    reads = ("co2_mmhg", "ppo2_kpa", "cabin_pressure_kpa")
+
+
+class NoiseDosimeter(SimulatedDevice):
+    """Worn on the collar: the crew member's own noise exposure, averaged over the day."""
+    name, label = "acoustic", "Noise dosimeter"
+    reads = ("noise_dba",)
 
 
 class Dosimeter(SimulatedDevice):
@@ -86,4 +95,4 @@ class Dosimeter(SimulatedDevice):
 
 
 DEVICES = [Biomonitor(), SleepBand(), GlucosePatch(), BPCuff(), Ultrasound(), CrewTablet(),
-           ExerciseMachines(), CabinAir(), Dosimeter()]
+           ExerciseMachines(), CabinAir(), NoiseDosimeter(), Dosimeter()]

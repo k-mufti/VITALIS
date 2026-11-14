@@ -21,7 +21,9 @@ Everything here runs in the backend. The app only shows the results.
 | Handheld ultrasound | Optic nerve sheath, heart stroke volume (Doppler), thigh muscle thickness | weekly |
 | Exercise machines | Minutes, resistive load | per session |
 | Sleep wristband, crew tablet | Sleep, reaction time, mood | nightly / daily |
-| Cabin air monitor (ship) | CO2 | continuous |
+| Cabin air monitor (ship) | CO2, oxygen partial pressure, total cabin pressure | continuous |
+| Noise dosimeter (worn) | Personal noise exposure | daily average |
+| Crew tablet | Hearing test (headphones), balance and nausea check | monthly / daily |
 | Personal dosimeter | Total dose, dose rate | continuous |
 
 Nothing on board can measure bone density, so it is **estimated** and labelled that way.
@@ -80,7 +82,30 @@ The sim keeps one body state, not a diary, so the 28-day log is rebuilt from the
   - Mars cruise 1.84 mSv/day and surface 0.64 mSv/day (Curiosity RAD).
   - 240 days out, 300 on the surface, 200 home (the phase split is an assumption).
 
-## 6. API
+## 6. Cabin atmosphere and ears
+
+The cabin air monitor lets the engine tell a **ship problem** from a **body problem**.
+
+- **Oxygen** follows pressure: ppO2 = cabin pressure × 0.21. When a leak drops pressure, the lungs get less oxygen. Blood oxygen falls and resting heart rate rises. The heart's cause chain traces it back to the leak.
+- **High CO2** speeds breathing and nudges heart rate up. The lungs note says it's the ship's air.
+- **Ears** (new organ):
+  - noise exposure vs a 24 h limit of 80.2 dBA, from NIOSH's 85 dBA over 8 h with a 3 dB exchange rate
+  - hearing test vs the OSHA 10 dB standard threshold shift
+  - cabin pressure (eardrum and sinus squeeze)
+  - balance and nausea after gravity changes (NASA HRP sensorimotor risk)
+- **Director events:** `cabin_co2`, `cabin_leak` (−10 kPa), `noisy_module` (+14 dBA).
+
+## 7. Checks (what an organ shows when clicked)
+
+Every organ state has `checks`, built by `analysis/checks.py`. Each check has:
+- the measured value
+- the healthy range and its **source**
+- a verdict (ok / watch / act)
+- why
+
+Sources include the AHA blood pressure guideline, Cole 1999 (heart-rate recovery), WHO pulse oximetry, NIOSH and OSHA (noise, hearing), the ISS atmosphere spec, AASM (sleep) and Gabbett 2016 (training load). Where no universal norm exists (HRV, muscle thickness), the reference is the crew member's own preflight value. Ranges marked `approx` (CO2 target, ISS pressure and O2 band, stroke volume, nerve sheath cutoff) should be checked against the primary source before quoting.
+
+## 8. API
 
 - `GET /api/analysis`: all three pipelines, layer by layer.
 - `GET /api/analysis/{heart|muscles|radiation}`: one pipeline.

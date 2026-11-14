@@ -3,13 +3,13 @@ from collections import defaultdict, deque
 
 from . import missions as M
 
-ORGANS = ["heart", "bones", "sleep", "eyes", "lungs", "muscles"]
+ORGANS = ["heart", "bones", "sleep", "eyes", "lungs", "muscles", "ears"]
 
 # Seconds of continuous readings averaged for the current value (smooths sensor noise).
 RECENT_WINDOW = 5
 
 # Upper limits for the body-state knobs, so repeated director clicks stay physiologically sane.
-MOD_LIMITS = {"sleep_debt": 4.0, "missed_exercise_days": 14, "bp_offset": 42.0, "stress": 2.0, "co2_offset": 3.0}
+MOD_LIMITS = {"sleep_debt": 4.0, "missed_exercise_days": 14, "bp_offset": 42.0, "stress": 2.0, "co2_offset": 3.0, "pressure_drop_kpa": 12.0, "noise_offset": 20.0}
 
 # How many recent quality flags to keep per metric (for the confidence score).
 QUALITY_WINDOW = 120
@@ -31,6 +31,8 @@ class Sim:
             "stress": 0.0,               # 0..2
             "extra_dose": 0.0,           # mSv from storms on top of the normal dose rate
             "co2_offset": 0.0,           # mmHg of cabin CO2 above normal (ship, not body)
+            "pressure_drop_kpa": 0.0,    # cabin pressure below normal (leak), takes oxygen down with it
+            "noise_offset": 0.0,         # dBA above the usual module noise (failing fan, pump)
         }
         self.relief = {k: 0.0 for k in ORGANS}  # severity removed by countermeasures
         self.history = defaultdict(lambda: deque(maxlen=30))

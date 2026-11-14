@@ -21,7 +21,7 @@ export const LAYERS = [
 // What lives in each layer, head to toe.
 const PARTS = [
   { sys: 'eyes',    name: 'Eyes',    layer: 'organs' },
-  { sys: 'ears',    name: 'Inner ear', layer: 'organs', noData: true },   // TODO(backend): balance data
+  { sys: 'ears',    name: 'Ears',    layer: 'organs' },
   { sys: 'sleep',   name: 'Brain',   layer: 'organs' },
   { sys: 'heart',   name: 'Heart',   layer: 'organs' },
   { sys: 'lungs',   name: 'Lungs',   layer: 'organs' },

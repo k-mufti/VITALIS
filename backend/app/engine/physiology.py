@@ -12,6 +12,7 @@ from .. import hrp
 from .. import missions as M
 from ..analysis import heart as heart_analysis
 from ..analysis import training as training_analysis
+from ..analysis import checks as organ_checks
 from ..analysis.common import Reader
 from ..devices.catalog import ORGAN_MEASUREMENT, describe
 from . import signals
@@ -22,12 +23,13 @@ B = C.BASELINE
 
 # ASSUMPTION: how much each mission's hazards weigh on each organ over the remaining mission.
 HAZARD_WEIGHT = {
-    "mars": {"bones": 1.25, "heart": 1.1, "sleep": 1.0, "eyes": 1.15, "muscles": 1.0, "lungs": 0.6},
-    "moon": {"bones": 0.8, "heart": 0.9, "sleep": 0.9, "eyes": 0.7, "muscles": 0.8, "lungs": 1.0},
-    "iss": {"bones": 1.0, "heart": 0.9, "sleep": 0.9, "eyes": 1.0, "muscles": 0.9, "lungs": 0.6},
+    "mars": {"bones": 1.25, "heart": 1.1, "sleep": 1.0, "eyes": 1.15, "muscles": 1.0, "lungs": 0.6, "ears": 0.7},
+    "moon": {"bones": 0.8, "heart": 0.9, "sleep": 0.9, "eyes": 0.7, "muscles": 0.8, "lungs": 1.0, "ears": 0.8},
+    "iss": {"bones": 1.0, "heart": 0.9, "sleep": 0.9, "eyes": 1.0, "muscles": 0.9, "lungs": 0.6, "ears": 0.7},
 }
 
-NAMES = {"heart": "Heart", "bones": "Bones", "sleep": "Sleep & mind", "eyes": "Eyes", "lungs": "Lungs", "muscles": "Muscles"}
+NAMES = {"heart": "Heart", "bones": "Bones", "sleep": "Sleep & mind", "eyes": "Eyes", "lungs": "Lungs", "muscles": "Muscles",
+         "ears": "Ears & balance"}
 
 UNITS = {
     "heart": ("beats a minute at rest", "54-62"),
@@ -36,6 +38,7 @@ UNITS = {
     "eyes": ("mm optic nerve sheath (ultrasound)", "under 5.0 mm"),
     "lungs": ("breaths a minute", "14-18"),
     "muscles": ("strength estimate out of 100", "80-95"),
+    "ears": ("dBA noise, day average", "under 70"),
 }
 
 SOURCES = {
@@ -45,6 +48,7 @@ SOURCES = {
     "eyes": "NASA HRP: Spaceflight Associated Neuro-ocular Syndrome, NASA's leading spaceflight health risk",
     "muscles": "NASA HRP: Reduced Cardiorespiratory and Musculoskeletal Fitness",
     "lungs": "NASA HRP: Hypoxia; Host-Microorganism Interactions",
+    "ears": "NASA HRP: Altered Sensorimotor and Vestibular Function; NIOSH noise limits",
 }
 
 WHAT_COULD_GO_WRONG = {
@@ -69,6 +73,11 @@ WHAT_COULD_GO_WRONG = {
     ],
     "lungs": [
         ("Breathing problems from cabin air or dust", None, ["oxygen below 95%", "breathing faster at rest"]),
+    ],
+    "ears": [
+        ("Hearing loss from months of cabin noise", None, ["hearing test worse", "ringing in the ears"]),
+        ("Dizziness and falls after landing while balance readjusts", "arrival", ["nausea score rising", "unsteady when turning the head"]),
+        ("Ear and sinus pain from a cabin pressure change", None, ["ears not clearing", "cabin pressure dropping"]),
     ],
 }
 
@@ -98,6 +107,12 @@ COUNTERMEASURES = {
     "muscles": [
         {"id": "ared_60", "label": "60 min resistive exercise", "minutes": 60,
          "mods": {"missed_exercise_days": -3}, "relief": {"bones": 0.08, "muscles": 0.05}},
+    ],
+    "ears": [
+        {"id": "ear_protection", "label": "Earplugs for sleep + fix the noisy fan", "minutes": 20,
+         "mods": {"noise_offset": -10.0}, "relief": {"ears": 0.05}},
+        {"id": "leak_check", "label": "Find and seal the cabin leak, repressurise", "minutes": 60,
+         "mods": {"pressure_drop_kpa": -10.0}, "relief": {}},
     ],
     "lungs": [
         {"id": "air_check", "label": "Cabin air check + scrubber reset", "minutes": 15,
@@ -172,11 +187,19 @@ def organ_severity(sim, organ, mission_id, day, mods, relief, live):
         mood = reader("mood_1to5")
         sev = max(0, B["sleep_hours"] - hours) / 4.0 + max(0, react - 260) / 200 + max(0, 3 - mood) / 6
         return clamp(sev - relief["sleep"]), hours
+    if organ == "ears":
+        noise, shift = reader("noise_dba"), reader("hearing_shift_db")
+        pressure, sick = reader("cabin_pressure_kpa"), reader("motion_sickness_0to10")
+        sev = (0.4 * clamp((noise - 70) / (C.NOISE_24H_LIMIT_DBA - 70)) + 0.3 * clamp(shift / C.HEARING_SHIFT_DB)
+               + 0.2 * clamp((C.CABIN_PRESSURE_RANGE_KPA[0] - pressure) / 6) + 0.1 * clamp(sick / 6))
+        return clamp(sev - relief["ears"]), noise
     if organ == "lungs":
         spo2 = reader("spo2")
         resp = reader("resp_rate")
         co2 = reader("co2_mmhg")
-        sev = max(0, 97.5 - spo2) / 5 + abs(resp - B["resp_rate"]) / 10 + 0.3 * clamp((co2 - C.CO2_COMFORT_MMHG) / 3)
+        ppo2 = reader("ppo2_kpa")
+        sev = (max(0, 97.5 - spo2) / 5 + abs(resp - B["resp_rate"]) / 10 + 0.3 * clamp((co2 - C.CO2_COMFORT_MMHG) / 3)
+               + 0.4 * clamp((C.PPO2_RANGE_KPA[0] - ppo2) / 2.5))
         return clamp(sev - relief["lungs"]), resp
     return 0.0, 0
 
@@ -204,7 +227,15 @@ def note_for(organ, severity, value, mods):
         if mods["missed_exercise_days"] > 0:
             return f"{mods['missed_exercise_days']:.0f} missed workout days are slowing recovery."
         return "Recovering well from workouts."
+    if organ == "ears":
+        if mods.get("pressure_drop_kpa", 0) > 2:
+            return f"Cabin pressure is down {mods['pressure_drop_kpa']:.0f} kPa: ears and sinuses feel it, and oxygen drops with it."
+        if value > 70:
+            return f"Noise averaging {value:.0f} dBA today. Above 70 the ears need protection."
+        return "Hearing, balance and cabin pressure are normal."
     if organ == "lungs":
+        if mods.get("pressure_drop_kpa", 0) > 2:
+            return "Cabin pressure is low, so every breath carries less oxygen. The ship's air, not your lungs."
         co2 = C.CO2_BASELINE_MMHG + mods.get("co2_offset", 0.0)
         if co2 > C.CO2_COMFORT_MMHG:
             return f"Breathing faster because cabin CO2 is {co2:.1f} mmHg. The ship's air, not your lungs."
@@ -230,8 +261,12 @@ def drivers_for(organ, mission_id, day, mods, dose_frac):
         out.append("stress")
     if dose_frac > 0.4 and organ in ("heart", "sleep"):
         out.append("radiation dose")
-    if organ == "lungs" and C.CO2_BASELINE_MMHG + mods.get("co2_offset", 0) > C.CO2_COMFORT_MMHG:
+    if organ in ("lungs", "heart") and C.CO2_BASELINE_MMHG + mods.get("co2_offset", 0) > C.CO2_COMFORT_MMHG:
         out.append("cabin CO2 high (ship air, not your lungs)")
+    if organ in ("lungs", "heart", "ears") and mods.get("pressure_drop_kpa", 0) > 2:
+        out.append("cabin pressure low (less oxygen)")
+    if organ == "ears" and mods.get("noise_offset", 0) > 3:
+        out.append("noisy module")
     return out
 
 
@@ -263,6 +298,20 @@ def measurement_for(sim, organ, live):
     if meta.get("estimated_from"):
         out["estimated_from"] = meta["estimated_from"]
     return out
+
+
+def checks_for(sim, organ, mission_id, day, mods, relief, live, analysis, value):
+    """What the app shows when the organ is clicked: value, healthy range, source, verdict, why."""
+    reader = Reader(sim, mods, relief, mission_id, day, live)
+    if organ == "heart":
+        return organ_checks.heart_checks(analysis, reader)
+    if organ == "muscles":
+        return organ_checks.muscle_checks(analysis, reader)
+    if organ == "lungs":
+        return organ_checks.lung_checks(reader)
+    if organ == "ears":
+        return organ_checks.ear_checks(reader)
+    return organ_checks.simple_checks(organ, reader, value)
 
 
 def organ_state(sim, organ, mission_id, day, mods, relief, live, dose_frac):
@@ -324,6 +373,7 @@ def organ_state(sim, organ, mission_id, day, mods, relief, live, dose_frac):
     }
     if analysis:
         state["analysis"] = analysis
+    state["checks"] = checks_for(sim, organ, mission_id, day, mods, relief, live, analysis, value)
     state.update(hrp.tags_for(organ))
     return state
 

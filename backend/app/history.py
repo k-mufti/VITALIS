@@ -11,6 +11,8 @@ from .engine.physiology import NAMES, mission_state
 EVENT_LABELS = {
     "radiation_storm": "Solar particle event, crew sheltered",
     "cabin_co2": "Cabin CO2 rose (air scrubber behind)",
+    "cabin_leak": "Cabin pressure dropped (slow leak)",
+    "noisy_module": "Module noise rose (failing fan)",
     "bad_sleep_week": "Sleep disrupted (heavy workload week)",
     "bp_spike": "Blood pressure spike recorded",
     "skipped_exercise": "Exercise sessions missed",

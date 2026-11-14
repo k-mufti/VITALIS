@@ -136,7 +136,22 @@ function trend(d, now) {
 // Parts 2 and 3: what could go wrong on this mission, and what to do.
 function paintPlan(d) {
   if (pressing) return;
-  setHtml($('#dPlan'), wrongHtml(d) + actionsHtml(d));
+  setHtml($('#dPlan'), checksHtml(d) + wrongHtml(d) + actionsHtml(d));
+}
+
+/* Checks from the backend: each measured value against a healthy range from a named source.
+   "~" marks ranges the backend flags as approximate. */
+const VERDICT_WORD = { ok: 'OK', watch: 'Watch', act: 'Act' };
+
+function checksHtml(d) {
+  const list = d.checks || [];
+  if (!list.length) return '';
+  const rows = list.map(c => `<li class="d-check ${c.verdict}">
+      <div class="dc-top"><b>${c.name}</b><span class="dc-val">${c.value}<small> ${c.unit}</small></span><span class="dc-verdict">${VERDICT_WORD[c.verdict] || c.verdict}</span></div>
+      <p class="dc-ref">Healthy ${c.approx ? '~' : ''}${c.healthy} <em>· ${c.source}</em></p>
+      ${c.why && c.verdict !== 'ok' ? `<p class="dc-why">${c.why}</p>` : ''}
+    </li>`).join('');
+  return `<section><h3>Checks <em>vs healthy range</em></h3><ul class="d-checks">${rows}</ul></section>`;
 }
 
 function wrongHtml(d) {

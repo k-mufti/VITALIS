@@ -5,7 +5,7 @@ from .engine.physiology import mission_state
 from .sources import donki
 from .state import MOD_LIMITS
 
-EVENTS = ["radiation_storm", "bad_sleep_week", "bp_spike", "skipped_exercise", "cabin_co2", "reset"]
+EVENTS = ["radiation_storm", "bad_sleep_week", "bp_spike", "skipped_exercise", "cabin_co2", "cabin_leak", "noisy_module", "reset"]
 
 
 def trigger(sim, kind):
@@ -33,6 +33,10 @@ def trigger(sim, kind):
         m["missed_exercise_days"] += 5
     elif kind == "cabin_co2":
         m["co2_offset"] += 2.0  # ship air scrubber falling behind, not a body problem
+    elif kind == "cabin_leak":
+        m["pressure_drop_kpa"] += 10.0  # slow leak: pressure and oxygen fall together
+    elif kind == "noisy_module":
+        m["noise_offset"] += 14.0  # failing fan or pump
     else:
         return {"ok": False, "error": f"unknown event, use one of {EVENTS}"}
     for key, limit in MOD_LIMITS.items():
