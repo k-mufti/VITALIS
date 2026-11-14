@@ -5,7 +5,7 @@ import { REGIONS, uni, skin, loadBody, pt } from './body.js';
 import { organs, loadOrgan, prefetchOrgans, updateOrgans, has3dOrgan, organFrame } from './organs.js';
 import { DRAWINGS } from './organ-drawings.js';
 import { initAnatomyPanel } from './anatomy-panel.js';
-import { applyDefaultLook } from './look.js';
+import { initDevPanel } from './devpanel.js';
 import { MAX_HOTSPOTS } from './effects.js';
 
 /* The ONLY 3D functions the rest of the app should call (plan.md section 5.4).
@@ -14,8 +14,8 @@ import { MAX_HOTSPOTS } from './effects.js';
 export function initTwin() {
   initScene();
   loadBody();
-  initAnatomyPanel(setHoverOrgan);
-  applyDefaultLook();
+  initAnatomyPanel(setHoverOrgan, focusOrgan, resetView);
+  initDevPanel();   // with ?dev in the URL: the FX panel; otherwise just the default look
 }
 
 // Layers that show the body as glass, so what's inside can be seen.

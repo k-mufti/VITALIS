@@ -69,10 +69,10 @@ export const DRAWINGS = {
 const EMPTY = '<svg viewBox="0 0 400 400"></svg>';
 const LOADING = '<svg viewBox="0 0 400 400"><text x="200" y="204" text-anchor="middle">Loading 3D model</text></svg>';
 export const ORGANS = {};
-Object.keys(DRAWINGS).forEach(k => Object.defineProperty(ORGANS, k, {
+[...Object.keys(DRAWINGS), 'eyes'].forEach(k => Object.defineProperty(ORGANS, k, {
   enumerable: true,
   get() {
-    if (!has3dOrgan(k)) return DRAWINGS[k];
+    if (!has3dOrgan(k)) return DRAWINGS[k] || '';
     if (organs[k]?.group) return EMPTY;
     return LOADING;
   },
