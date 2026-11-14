@@ -49,7 +49,7 @@ function limbRig(limb) {
   return { on: true, start: limb === 'arms' ? .09 : .015, L: limbPose(limb), R: limbPose(limb) };
 }
 
-// Organ look + limb rigs. look.js sets these; updateOrgans() applies them.
+// Organ look + limb rigs. look.js (and the ?dev FX panel) set these; updateOrgans() applies them.
 export const organFx = {
   style: 0,                 // 0 = halftone, 1 = flat silhouette
   edge: 1,                  // edge dots 0..1
@@ -441,6 +441,7 @@ function placeOrgan(k, cfg, model, o) {
     other.scale.x = -1;
     other.position.x = -half;
     holder.add(one, other);
+    o.pairHalf = half;
   } else {
     holder.add(model);
   }
@@ -611,6 +612,11 @@ export function updateOrgans(now, dt) {
       }
       o.u.uMinY.value = cy + (o.minY0 - o.basePos.y) * p.s;
       o.u.uMaxY.value = cy + (o.maxY0 - o.basePos.y) * p.s;
+      // Paired organs (eyes, ears): FX panel gap between the two copies.
+      if (o.pairHalf) {
+        o.group.children[0].position.x = o.pairHalf * (p.g ?? 1);
+        o.group.children[1].position.x = -o.pairHalf * (p.g ?? 1);
+      }
     }
     o.group.visible = o.reveal > 0;
   }
