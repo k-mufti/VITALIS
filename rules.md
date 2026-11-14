@@ -17,6 +17,16 @@ Agents: read `plan.md` and this file fully before making any change.
 - SHARED files: tell your teammate before editing, keep the change small, and push it right away.
   Add new things at the end of the file. Do not reorder, reformat, or rename existing code.
 
+## 1.5 Product rules (do not break these)
+
+- Navigation is risk-first. The main screen is the Risk Board: organs ranked by `mission_risk`
+  for the current mission. Users open an organ ONLY by clicking its risk card
+  (later also from a triage alert or the medical officer).
+- Do not make the 3D body or organ meshes clickable to open details. No `onOrganClick` handlers.
+- The ranking comes from the engine (`/api/risks`, or `mock.js` when the backend is off).
+  Never hardcode the order in 3D or UI code.
+- Every detail view has three parts: Current state, What could go wrong (on this mission), What to do.
+
 ## 2. Git workflow
 
 - `main` must always run. Never push broken code to `main`.
