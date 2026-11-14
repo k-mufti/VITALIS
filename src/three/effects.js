@@ -1,63 +1,80 @@
 import * as THREE from 'three';
 
 /*
-  Halftone print look for the 3D twin.
+  Visual styles for the 3D twin (all tunable from the FX panel, devpanel.js).
 
-  Body (solid):  pitch black. The silhouette edge breaks up into paper-coloured
-                 halftone dots, like a newspaper photo.
-  Hover:         the region fills with cyan dots and gets a thin cyan ring.
-  Zoomed in:     the body turns into an x-ray of black dots (bigger at the edges),
-                 the focused region pulses in cyan dots with the breath / heartbeat.
-  Backdrop:      a halftone floor shadow and faint halo behind the body.
+  uStyle 0  Halftone:   black body, paper-coloured dots on the edge + lit side.
+  uStyle 1  Silhouette: flat pitch black.
+  uStyle 2  Matte:      soft grey clay shading.
+  uStyle 3  Outline:    paper-white body with a black ink edge.
+  Aura:                 soft cyan glow shells around the body (any style).
+
+  Hover:      region fills with cyan dots + thin cyan ring.
+  Zoomed in:  body turns into an x-ray of black dots; focused region pulses cyan.
+  Backdrop:   halftone floor shadow + halo behind the body.
 */
 
 const PAPER = '#f5f5f2';
-const DOT_PX = 6;   // halftone cell size in CSS pixels
+export const STYLES = ['Halftone', 'Silhouette', 'Matte', 'Outline'];
 
-// Extra uniforms the halftone shader needs, merged into the body's uniforms.
+// Extra uniforms for the body + aura shaders, merged into the body's uniforms.
 export function halftoneUniforms(pixelRatio) {
   return {
     uPaper: { value: new THREE.Color(PAPER) },
-    uCell: { value: DOT_PX * pixelRatio },
+    uCell: { value: 6 * pixelRatio },  // halftone cell size in device pixels
+    uStyle: { value: 0 },
+    uEdge: { value: .55 },             // 0..1 edge dot band
+    uShade: { value: .2 },             // 0..1 dots on the lit side
+    uAura: { value: 0 },               // 0..1 aura strength (0 = off)
+    uAuraSize: { value: .06 },         // aura thickness in world units
+    uAuraColor: { value: new THREE.Color('#0aa5bd') },
   };
 }
 
-// Pitch-black material with the halftone shader. `uni` must hold the region + halftone uniforms.
+// Shared vertex chunk: world position, view normal, view vector.
+function addVaryings(sh) {
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', '#include <common>\nvarying vec3 vW; varying vec3 vN; varying vec3 vV;')
+    .replace('#include <project_vertex>', `#include <project_vertex>
+vW = (modelMatrix * vec4(transformed, 1.0)).xyz;
+vN = normalize(normalMatrix * normal);
+vV = -mvPosition.xyz;`);
+}
+
+// Body material. `uni` must hold the region + halftone uniforms.
 export function createHalftoneSkin(uni) {
   const skin = new THREE.MeshBasicMaterial({ color: '#000000', transparent: true });
   skin.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, uni);
-    sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vW; varying vec3 vN; varying vec3 vV;')
-      .replace('#include <project_vertex>', `#include <project_vertex>
-vW = (modelMatrix * vec4(transformed, 1.0)).xyz;
-// MeshBasicMaterial only builds objectNormal for skinning / env maps.
-#if defined( USE_ENVMAP ) || defined( USE_SKINNING )
-vN = normalize(normalMatrix * objectNormal);
-#else
-vN = normalize(normalMatrix * normal);
-#endif
-vV = -mvPosition.xyz;`);
+    addVaryings(sh);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
 varying vec3 vW; varying vec3 vN; varying vec3 vV;
 uniform vec3 uRegionCenter, uCyan, uPaper;
-uniform float uRegionRadius, uHighlight, uGhost, uPulse, uCell;
+uniform float uRegionRadius, uHighlight, uGhost, uPulse, uCell, uStyle, uEdge, uShade;
 // 1 inside a dot of radius r (cell = 1), 0 outside, with a soft edge.
 float dotMask(float d, float r) { return 1.0 - smoothstep(r - .06, r + .06, d); }`)
       .replace('#include <opaque_fragment>', `
+vec3 n = normalize(vN);
 // rim: 0 facing the camera, 1 at the silhouette edge.
-float rim = 1.0 - clamp(abs(dot(normalize(vN), normalize(vV))), 0.0, 1.0);
+float rim = 1.0 - clamp(abs(dot(n, normalize(vV))), 0.0, 1.0);
+float lam = clamp(dot(n, normalize(vec3(-.55, .65, .55))), 0.0, 1.0);
 // Screen-space halftone grid, rotated 45 degrees like print screens.
 vec2 g = mat2(.7071, -.7071, .7071, .7071) * gl_FragCoord.xy / uCell;
 float d = length(fract(g) - .5);
 
-// Solid: black, edge dissolves into paper dots.
-// Wide edge band of dots, plus halftone "light" from the upper left so the form reads in dots.
-float edge = smoothstep(.35, .97, rim);
-float htLit = smoothstep(.45, 1.0, dot(normalize(vN), normalize(vec3(-.55, .65, .55))));
-float htR = max(edge * .74, htLit * .42);
-vec3 col = mix(vec3(0.0), uPaper, dotMask(d, htR) * step(.03, htR));
+vec3 col = vec3(0.0);
+if (uStyle < .5) {
+  float htR = max(uEdge * smoothstep(.35, .97, rim) * .74, uShade * smoothstep(.45, 1.0, lam) * .45);
+  col = mix(vec3(0.0), uPaper, dotMask(d, htR) * step(.03, htR));
+} else if (uStyle < 1.5) {
+  col = vec3(0.0);
+} else if (uStyle < 2.5) {
+  float l = .15 + .85 * lam;
+  col = mix(vec3(.02), vec3(.5), l * l);
+} else {
+  col = mix(uPaper * .93, vec3(0.0), smoothstep(.55, .75, rim));
+}
 col = mix(col, vec3(0.0), uGhost);
 
 // Region highlight: cyan dots inside, thin cyan ring at the border.
@@ -77,11 +94,39 @@ diffuseColor.a *= mix(1.0, clamp(ink * .6 + ring + region * rDot, 0.0, 1.0), uGh
   return skin;
 }
 
+// Aura: a few soft glow shells pushed out along the normals. Returns one material per shell.
+export function createAuraMaterials(uni, shells = 4) {
+  const mats = [];
+  for (let i = 1; i <= shells; i++) {
+    const k = i / shells;
+    const m = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false });
+    m.onBeforeCompile = sh => {
+      Object.assign(sh.uniforms, uni);
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nuniform float uAuraSize;')
+        .replace('#include <begin_vertex>', `#include <begin_vertex>\ntransformed += normalize(normal) * uAuraSize * ${k.toFixed(3)};`);
+      addVaryings(sh);
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', `#include <common>
+varying vec3 vW; varying vec3 vN; varying vec3 vV;
+uniform float uAura, uGhost; uniform vec3 uAuraColor;`)
+        .replace('#include <opaque_fragment>', `
+float f = 1.0 - abs(dot(normalize(vN), normalize(vV)));
+outgoingLight = uAuraColor;
+diffuseColor.a = pow(f, 1.6) * uAura * (1.0 - uGhost) * ${((1.15 - k) / shells * 1.8).toFixed(3)};
+#include <opaque_fragment>`);
+    };
+    mats.push(m);
+  }
+  return mats;
+}
+
 // Halftone backdrop canvas, drawn behind the WebGL canvas inside `host`.
 export function createHalftoneBackdrop(host) {
   const canvas = document.createElement('canvas');
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;transition:opacity .9s;';
   host.prepend(canvas);
+  let strength = .5;
 
   function draw() {
     const { width: w, height: h } = host.getBoundingClientRect();
@@ -91,6 +136,7 @@ export function createHalftoneBackdrop(host) {
     canvas.height = h * dpr;
     const c = canvas.getContext('2d');
     c.scale(dpr, dpr);
+    if (strength <= 0) return;
     c.fillStyle = '#c4c4be';
     const s = 7, cos = Math.SQRT1_2, sin = Math.SQRT1_2, R = Math.hypot(w, h) / s;
     // Distance inside an ellipse: 0 at the centre, 1 on the edge.
@@ -100,13 +146,12 @@ export function createHalftoneBackdrop(host) {
         const x = w / 2 + (i * cos - j * sin) * s;
         const y = h / 2 + (i * sin + j * cos) * s;
         if (x < -s || y < -s || x > w + s || y > h + s) continue;
-        // Body now fills the screen, so the floor shadow sits at the very bottom edge.
         const floor = Math.max(0, 1 - ell(x, y, w / 2, h * 1.02, h * .3, h * .07)) ** .7;
         const halo = Math.max(0, 1 - ell(x, y, w / 2, h * .5, h * .42, h * .62)) ** 1.6 * .55;
-        const k = Math.max(floor, halo);
+        const k = Math.max(floor, halo) * strength * 1.6;
         if (k < .04) continue;
         c.beginPath();
-        c.arc(x, y, k * s * .48, 0, Math.PI * 2);
+        c.arc(x, y, Math.min(k, 1) * s * .48, 0, Math.PI * 2);
         c.fill();
       }
     }
@@ -114,8 +159,10 @@ export function createHalftoneBackdrop(host) {
 
   new ResizeObserver(draw).observe(host);
   return {
-    // Hide the floor shadow while the camera is zoomed into an organ.
+    // Hide while the camera is zoomed into an organ.
     setVisible(on) { canvas.style.opacity = on ? '1' : '0'; },
+    // 0 = off, 1 = strong.
+    setStrength(v) { strength = v; draw(); },
   };
 }
 

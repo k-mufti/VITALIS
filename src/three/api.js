@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { $, $$, ease } from '../util.js';
 import { scene, camera, renderer, host, pivot, HOME, cam, twin, flyTo, initScene, backdrop } from './scene.js';
 import { REGIONS, uni, skin, loadBody, pt } from './body.js';
+import { initDevPanel } from './devpanel.js';
 
 /* The ONLY 3D functions the rest of the app should call (plan.md section 5.4).
    Anything inside src/three/ can change as long as these keep working. */
@@ -9,6 +10,7 @@ import { REGIONS, uni, skin, loadBody, pt } from './body.js';
 export function initTwin() {
   initScene();
   loadBody();
+  initDevPanel();
 }
 
 // Highlight a region while the mouse is over its spot (null to clear).
@@ -65,6 +67,7 @@ export function onOrganClick(callback) {}
 // Called every frame from main.js. pulse = 0..1 from the open organ's animation.
 const v = new THREE.Vector3();
 export function renderTwin(now, pulse) {
+  if (twin.autoTurn && !twin.focus) twin.rotTarget += .004;
   twin.rot += (twin.rotTarget - twin.rot) * .08;
   pivot.rotation.y = twin.rot;
   if (twin.fly) {
