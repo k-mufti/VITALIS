@@ -72,6 +72,7 @@ export const organFx = {
   place: {},
 };
 const DEFAULT_TINT = '#1846c4';
+const NAVY = new THREE.Color('#0A1F6B');   // plan.md 5.2 severe end of the blue scale
 
 // Uniforms shared by every organ material.
 const shared = {
