@@ -1,7 +1,8 @@
-"""JPL Horizons: real Earth-Mars one-way light time for a date.
+"""JPL Horizons: real Earth-Mars one-way light time for every day of the mission.
 
 https://ssd-api.jpl.nasa.gov/doc/horizons.html  (quantity 21 = one-way light time, minutes)
-Falls back to a simple circular-orbit model if the API is unreachable.
+One request fetches the whole mission (one row per day). Falls back to the cache, then to a
+simple circular-orbit model if the API is unreachable.
 """
 import datetime as dt
 import math
@@ -12,6 +13,7 @@ from . import cache
 
 URL = "https://ssd.jpl.nasa.gov/api/horizons.api"
 status = {"horizons": "not loaded"}
+errors = {"horizons": None}
 _lt_by_date = {}
 
 
@@ -25,44 +27,56 @@ def _model_light_time_min(date):
     return au * 499.005 / 60
 
 
-def _parse(text):
+def parse(text):
+    """Return {iso_date: light_time_min} from a Horizons ephemeris block."""
+    out = {}
     if "$$SOE" not in text:
-        return None
+        return out
     body = text.split("$$SOE")[1].split("$$EOE")[0]
     for line in body.strip().splitlines():
         parts = line.split()
-        try:
-            return float(parts[-1])
-        except (ValueError, IndexError):
+        if len(parts) < 2:
             continue
-    return None
+        try:
+            day = dt.datetime.strptime(parts[0], "%Y-%b-%d").date()
+            out[day.isoformat()] = float(parts[-1])
+        except ValueError:
+            continue
+    return out
 
 
-async def refresh(date):
-    key = date.isoformat()
+async def refresh_range(start, stop):
     params = {
         "format": "json", "COMMAND": "'499'", "EPHEM_TYPE": "'OBSERVER'", "CENTER": "'500@399'",
-        "START_TIME": f"'{key}'", "STOP_TIME": f"'{(date + dt.timedelta(days=1)).isoformat()}'",
+        "START_TIME": f"'{start.isoformat()}'", "STOP_TIME": f"'{stop.isoformat()}'",
         "STEP_SIZE": "'1 d'", "QUANTITIES": "'21'", "MAKE_EPHEM": "'YES'", "OBJ_DATA": "'NO'",
     }
     try:
-        async with httpx.AsyncClient(timeout=8) as client:
+        async with httpx.AsyncClient(timeout=20) as client:
             r = await client.get(URL, params=params)
-            r.raise_for_status()
-            minutes = _parse(r.json().get("result", ""))
-        if minutes:
-            _lt_by_date[key] = minutes
-            cache.save("horizons_lt", _lt_by_date)
-            status["horizons"] = f"live ({minutes:.1f} min on {key})"
-            return
-    except Exception:
-        pass
+        if r.status_code != 200:
+            raise RuntimeError(f"HTTP {r.status_code}")
+        rows = parse(r.json().get("result", ""))
+        if not rows:
+            raise RuntimeError("no ephemeris rows in response")
+        _lt_by_date.update(rows)
+        cache.save("horizons_lt", _lt_by_date)
+        errors["horizons"] = None
+        status["horizons"] = f"live ({len(rows)} days, {start} to {stop})"
+        return
+    except Exception as e:
+        errors["horizons"] = f"{type(e).__name__}: {e}"
     cached = cache.load("horizons_lt") or {}
-    if key in cached:
-        _lt_by_date[key] = cached[key]
-        status["horizons"] = f"cache ({cached[key]:.1f} min on {key})"
+    _lt_by_date.update(cached)
+    if cached:
+        status["horizons"] = f"cache ({len(cached)} days)"
     else:
         status["horizons"] = "model (circular orbits, Horizons unreachable)"
+
+
+async def refresh(date):
+    """Single-day refresh, kept for compatibility."""
+    await refresh_range(date, date + dt.timedelta(days=1))
 
 
 def earth_mars_light_time_min(date):
@@ -70,3 +84,7 @@ def earth_mars_light_time_min(date):
     if key in _lt_by_date:
         return _lt_by_date[key]
     return _model_light_time_min(date)
+
+
+def is_real(date):
+    return date.isoformat() in _lt_by_date

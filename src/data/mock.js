@@ -29,5 +29,5 @@ export const sleepHistory = [7.2, 7.0, 7.1, 6.9, 6.8, 6.6, 6.7, 6.5, 6.4, 6.4, 6
 // Radiation = 184 days x 1.84 mSv/day (Curiosity RAD cruise rate). Limit = NASA-STD-3001 career limit.
 export const MOCK_MISSION = {
   mission: 'mars', mission_name: 'Mars', day: 184, arrival_day: 240,
-  comms_delay_min: 6.9, radiation_msv: 338.6, radiation_career_limit_msv: 600, radiation_event_limit_msv: 250,
+  comms_delay_min: 5.44, radiation_msv: 338.6, radiation_career_limit_msv: 600, radiation_event_limit_msv: 250,
 };

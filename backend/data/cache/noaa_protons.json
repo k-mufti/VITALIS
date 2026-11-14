@@ -1,10 +1,10 @@
 {
-  "saved_at": 1794678383.067163,
+  "saved_at": 1794678923.1188018,
   "data": {
-    "time_tag": "2026-11-14T17:35:00Z",
+    "time_tag": "2026-11-14T17:45:00Z",
     "satellite": 18,
     "energy": ">=10 MeV",
-    "flux_pfu": 0.223,
+    "flux_pfu": 0.239,
     "threshold_pfu": 10,
     "proton_event_now": false
   }
