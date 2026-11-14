@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css?v=2" />
+  <link rel="stylesheet" href="styles/data-ui.css?v=1" />
 </head>
 <body>
 
@@ -56,15 +57,38 @@
     <section class="view body on" id="view-body">
       <div class="spots" id="spots">
         <button class="spot" data-sys="sleep"><i></i><span><b>Sleep</b><em>6.2 h</em></span></button>
+        <button class="spot" data-sys="eyes"><i></i><span><b>Eyes</b><em>5.2</em></span></button>
         <button class="spot" data-sys="heart"><i></i><span><b>Heart</b><em>64</em></span></button>
         <button class="spot" data-sys="lungs"><i></i><span><b>Lungs</b><em>16</em></span></button>
+        <button class="spot" data-sys="bones"><i></i><span><b>Bones</b><em>95.9</em></span></button>
         <button class="spot" data-sys="muscles"><i></i><span><b>Muscles</b><em>87</em></span></button>
       </div>
       <div class="body-foot">
-        <div class="day"><span>Day</span>184</div>
-        <button class="status" data-sys="heart"><i class="dot amber"></i>2 things to watch <span>→</span></button>
+        <div class="day"><span>Day</span><b id="bodyDay">184</b></div>
+        <div class="mission-pick">
+          <span>Mission</span>
+          <div class="mission-btns" id="missionBtns">
+            <button data-mission="mars" class="on">Mars</button>
+            <button data-mission="moon">Moon</button>
+            <button data-mission="iss">ISS</button>
+          </div>
+          <label class="day-slider">
+            <input type="range" id="dayRange" min="0" max="740" step="1" value="184" aria-label="Mission day" />
+            <em id="dayLabel">Day 184 · cruise</em>
+          </label>
+        </div>
       </div>
-      <p class="hint">Drag to turn</p>
+
+      <aside class="risk-panel">
+        <header>
+          <h2>Things to watch</h2>
+          <p id="riskSub">Mars · day 184</p>
+        </header>
+        <div class="risk-list" id="riskList"></div>
+        <button class="history-btn" id="historyBtn">Medical history <span>→</span></button>
+      </aside>
+
+      <p class="hint">Drag to turn · click a system on the body or the list</p>
     </section>
 
     <!-- DETAIL -->
@@ -76,6 +100,7 @@
         <div class="big"><span id="dValue">16</span></div>
         <p class="unit" id="dUnit">breaths a minute</p>
         <p class="note" id="dNote"></p>
+        <div class="d-wrong" id="dWrong"></div>
       </div>
 
       <div class="organ" id="organ"></div>
@@ -137,6 +162,21 @@
     </section>
 
     <footer class="foot">Demo · all readings are made up</footer>
+
+    <!-- MEDICAL HISTORY -->
+    <div class="history" id="history">
+      <div class="scrim" id="historyScrim"></div>
+      <div class="sheet">
+        <button class="close" id="historyClose">Close ✕</button>
+        <h2>Medical history</h2>
+        <p id="histWho" class="hist-sec" style="border:0;padding:0"></p>
+        <div class="hist-sum" id="histSum"></div>
+        <p class="hist-sec">Mission record</p>
+        <div class="timeline" id="histTimeline"></div>
+        <p class="hist-sec">Preflight baselines</p>
+        <div class="hist-sum" id="histBase"></div>
+      </div>
+    </div>
   </div>
 
   <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
