@@ -15,7 +15,8 @@ const DEFAULTS = {
   style: 0, dot: 6, edge: .34, shade: .23, aura: 0, auraSize: .245,
   outWidth: .63, outSoft: .98, outColor: 0, outFill: .1, outShade: .31, outDots: .23,
   // Background
-  bgIntensity: 0, bgCell: 7,  // background dots off by default bgDot: .48, bgShape: 0, bgAngle: 45,
+  bgIntensity: 0,  // background dots off by default
+  bgCell: 7, bgDot: .48, bgShape: 0, bgAngle: 45,
   bgGlowW: 1, bgGlowH: 1, bgGlowY: .5, bgFloor: 1,
   bgGradient: 0, bgColA: '#c4c4be', bgColB: '#0aa5bd', bgPulse: 0, bgPulseSpeed: .25,
   // Adaptive
