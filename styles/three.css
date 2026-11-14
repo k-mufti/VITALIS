@@ -34,3 +34,5 @@
 .an-tile span { font: 500 15px var(--sans); }
 .an-tile:hover, .an-tile:focus-visible { border-color: var(--ink); background: var(--white); outline: none; }
 .an-tile:hover img, .an-tile:focus-visible img { transform: scale(1.05); }
+.an-tile.no-data { cursor: default; }
+.an-tile small { font: 400 11px var(--sans); color: var(--soft); margin: -3px 0 -6px; white-space: nowrap; }
