@@ -16,7 +16,7 @@ import { LAYER_MODELS } from './anatomy-panel.js';
    clipTop cut the model off above this share of its height (trims the lungs' long trachea)
    fullBody  model replaces the skin (the écorché), framed by `frame`
    region  light up the body region on this model (used for the thigh on the écorché)
-   color   graphite shade, so organs that overlap (heart in front of the lungs) read apart */
+   color   (no longer used: organ colours now come from organFx.tints below) */
 
 const MODEL_DIR = 'assets/models/';
 let manifest = null;
@@ -35,34 +35,103 @@ export function has3dOrgan(k) {
 // Models are meshopt-compressed .glb files that carry only geometry and a WebP normal map.
 const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 
-// Graphite organ with a thin cyan edge. Appears with an upward scan line, then a faint sweep repeats.
-function organMaterial(u, source, doubleSided, color) {
+// Organ look + skeleton arm fit. The FX panel (devpanel.js) changes these; updateOrgans() applies them.
+export const organFx = {
+  style: 0,                 // 0 = halftone, 1 = flat silhouette
+  edge: .45,                // edge dots 0..1
+  shade: .3,                // dots on the lit side 0..1
+  dotColor: '#7fe9ff',
+  tints: { heart: '#0a1f6b', lungs: '#1f5fd1', bones: '#13308f', muscles: '#1846c4' },
+  // Swing the skeleton's straight-down arms out to the body's A-pose.
+  // Positions are fractions of body height: x from the centre line, y from the feet.
+  arm: { on: true, muscles: false, angle: 18, elbow: 8, shoulderX: .105, shoulderY: .81, elbowY: .63, start: .095, blend: .015 },
+};
+const DEFAULT_TINT = '#1846c4';
+const NAVY = new THREE.Color('#0A1F6B');   // plan.md 5.2 severe end of the blue scale
+
+// Uniforms shared by every organ material.
+const shared = {
+  uOrgStyle: { value: 0 }, uOrgEdge: { value: .45 }, uOrgShade: { value: .3 }, uOrgDot: { value: new THREE.Color() },
+  uPivot: { value: new THREE.Matrix4() }, uPivotInv: { value: new THREE.Matrix4() },
+  uBodyCX: { value: 0 }, uBodyMinY: { value: 0 }, uBodyH: { value: 1 },
+  uArmAngle: { value: 0 }, uElbowAngle: { value: 0 }, uShoulderX: { value: .1 }, uShoulderY: { value: .8 },
+  uElbowY: { value: .6 }, uArmStart: { value: .1 }, uArmBlend: { value: .02 },
+};
+
+// Arm bend, in the body's own (pivot) space. Returns the bent position; `ang` = total turn for the normal.
+const ARM_GLSL = `
+uniform mat4 uPivot, uPivotInv;
+uniform float uArmOn, uBodyCX, uBodyMinY, uBodyH, uArmAngle, uElbowAngle, uShoulderX, uShoulderY, uElbowY, uArmStart, uArmBlend;
+vec2 rot2(vec2 v, float a) { float c = cos(a), s = sin(a); return vec2(c * v.x - s * v.y, s * v.x + c * v.y); }
+vec4 armBend(vec4 pv, out float ang, out float side) {
+  side = pv.x < uBodyCX ? -1.0 : 1.0;
+  vec2 q = vec2(abs(pv.x - uBodyCX), pv.y - uBodyMinY) / uBodyH;
+  // Only the arms: outside the ribcage and below the shoulder.
+  float w = smoothstep(uArmStart, uArmStart + uArmBlend, q.x) * (1.0 - smoothstep(uShoulderY - .03, uShoulderY + .01, q.y));
+  vec2 sp = vec2(uShoulderX, uShoulderY);
+  float a1 = radians(uArmAngle) * w;
+  vec2 v = sp + rot2(q - sp, a1);
+  vec2 elbow = sp + rot2(vec2(uShoulderX, uElbowY) - sp, a1);
+  float a2 = radians(uElbowAngle) * w * (1.0 - smoothstep(uElbowY - .015, uElbowY + .015, q.y));
+  v = elbow + rot2(v - elbow, a2);
+  ang = a1 + a2;
+  return vec4(uBodyCX + side * v.x * uBodyH, uBodyMinY + v.y * uBodyH, pv.z, 1.0);
+}`;
+
+// Organ material: tinted silhouette with halftone dots, plus the scan-in line, hover edge and region glow.
+function organMaterial(u, source, doubleSided) {
   const m = new THREE.MeshStandardMaterial({
-    color: color || '#1b2022', roughness: .42, metalness: 0,
+    color: '#000000', roughness: .5, metalness: 0,
     normalMap: source?.normalMap || null,
     side: doubleSided ? THREE.DoubleSide : THREE.FrontSide,
   });
   if (source?.normalScale) m.normalScale.copy(source.normalScale);
   m.onBeforeCompile = sh => {
-    Object.assign(sh.uniforms, u, { uCyan: uni.uCyan, uRegionCenter: uni.uRegionCenter, uRegionRadius: uni.uRegionRadius, uPulse: uni.uPulse });
+    Object.assign(sh.uniforms, u, shared, { uCyan: uni.uCyan, uRegionCenter: uni.uRegionCenter, uRegionRadius: uni.uRegionRadius, uPulse: uni.uPulse, uCell: uni.uCell });
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vW;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vW;' + ARM_GLSL)
+      .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
+if (uArmOn > .5) {
+  float ang, side;
+  armBend(uPivotInv * modelMatrix * vec4(position, 1.0), ang, side);
+  vec3 n = mat3(uPivotInv * modelMatrix) * objectNormal;
+  n.x *= side; n.xy = rot2(n.xy, ang); n.x *= side;
+  objectNormal = normalize(inverse(mat3(uPivotInv * modelMatrix)) * n);
+}`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+if (uArmOn > .5) {
+  float ang, side;
+  vec4 bent = armBend(uPivotInv * modelMatrix * vec4(transformed, 1.0), ang, side);
+  transformed = (inverse(modelMatrix) * uPivot * bent).xyz;
+}`)
       .replace('#include <project_vertex>', '#include <project_vertex>\nvW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
-varying vec3 vW; uniform vec3 uCyan, uRegionCenter; uniform float uRegionRadius, uPulse, uReveal, uMinY, uMaxY, uTime, uRegionOn, uHover;`)
+varying vec3 vW; uniform vec3 uCyan, uRegionCenter, uTint, uOrgDot;
+uniform float uRegionRadius, uPulse, uReveal, uMinY, uMaxY, uTime, uRegionOn, uHover, uCell, uOrgStyle, uOrgEdge, uOrgShade, uSeverity;
+float dotMask(float d, float r) { return 1.0 - smoothstep(r - .06, r + .06, d); }`)
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
 float span = uMaxY - uMinY;
 float edgeY = uMinY + span * uReveal;
 if (vW.y > edgeY) discard;`)
       .replace('#include <opaque_fragment>', `
-float facing = clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);
-float rim = pow(1.0 - facing, 3.0);
+vec3 n = normalize(normal);
+float rim = 1.0 - clamp(abs(dot(n, normalize(vViewPosition))), 0.0, 1.0);
+float lam = clamp(dot(n, normalize(vec3(-.55, .65, .55))), 0.0, 1.0);
+vec2 g = mat2(.7071, -.7071, .7071, .7071) * gl_FragCoord.xy / uCell;
+float d = length(fract(g) - .5);
+vec3 col = uTint;
+if (uOrgStyle < .5) {
+  float dense = 1.0 + uSeverity * .4;
+  float htR = max(uOrgEdge * smoothstep(.35, .97, rim) * .74, uOrgShade * smoothstep(.45, 1.0, lam) * .45) * dense;
+  col = mix(col, uOrgDot, dotMask(d, htR) * step(.03, htR));
+}
 float scanLine = (1.0 - smoothstep(0.0, span * .012, abs(vW.y - edgeY))) * step(uReveal, .999);
 float sweepY = uMinY + span * (fract(uTime * .16) * 1.4 - .2);
 float sweep = (1.0 - smoothstep(0.0, span * .006, abs(vW.y - sweepY))) * .45 * step(.999, uReveal);
 float reg = uRegionOn * (1.0 - smoothstep(uRegionRadius * .45, uRegionRadius, distance(vW, uRegionCenter)));
-outgoingLight = mix(outgoingLight, uCyan, clamp(rim * (.6 + uHover * .4) + uHover * .18 + scanLine + sweep + reg * (.22 + .3 * uPulse), 0.0, 1.0));
+float hoverEdge = smoothstep(.55, .95, rim) * uHover;
+outgoingLight = mix(col, uCyan, clamp(hoverEdge + scanLine + sweep + reg * (.22 + .3 * uPulse), 0.0, 1.0));
 #include <opaque_fragment>`);
   };
   return m;
@@ -73,7 +142,10 @@ export function loadOrgan(k) {
   if (organs[k]) return organs[k].promise;
   const o = organs[k] = {
     reveal: 0,
-    u: { uReveal: { value: 0 }, uMinY: { value: 0 }, uMaxY: { value: 1 }, uTime: { value: 0 }, uRegionOn: { value: 0 }, uHover: { value: 0 } },
+    u: {
+      uReveal: { value: 0 }, uMinY: { value: 0 }, uMaxY: { value: 1 }, uTime: { value: 0 }, uRegionOn: { value: 0 }, uHover: { value: 0 },
+      uTint: { value: new THREE.Color(DEFAULT_TINT) }, uSeverity: { value: 0 }, uArmOn: { value: 0 },
+    },
   };
   o.promise = manifestReady.then(() => {
     const cfg = manifest.organs[k];
@@ -85,7 +157,7 @@ export function loadOrgan(k) {
         if (!m.isMesh) return;
         // Keep the model's normal map for surface detail, swap everything else for the VITALIS look.
         if (m.material.normalMap) m.material.normalMap.anisotropy = renderer.capabilities.getMaxAnisotropy();
-        m.material = organMaterial(o.u, m.material, !!cfg.clipTop, cfg.color);
+        m.material = organMaterial(o.u, m.material, !!cfg.clipTop);
       });
       placeOrgan(k, cfg, model, o);
       pivot.add(o.group);
@@ -154,8 +226,35 @@ function wanted(k, now) {
   return (LAYER_MODELS[twin.layer] || []).includes(k);
 }
 
+// Push the FX settings into the shared uniforms (cheap, runs every frame).
+const tmpColor = new THREE.Color();
+function applyOrganFx() {
+  shared.uOrgStyle.value = organFx.style;
+  shared.uOrgEdge.value = organFx.edge;
+  shared.uOrgShade.value = organFx.shade;
+  shared.uOrgDot.value.set(organFx.dotColor);
+  const a = organFx.arm;
+  shared.uArmAngle.value = a.angle;
+  shared.uElbowAngle.value = a.elbow;
+  shared.uShoulderX.value = a.shoulderX;
+  shared.uShoulderY.value = a.shoulderY;
+  shared.uElbowY.value = a.elbowY;
+  shared.uArmStart.value = a.start;
+  shared.uArmBlend.value = a.blend;
+  pivot.updateMatrixWorld();
+  shared.uPivot.value.copy(pivot.matrixWorld);
+  shared.uPivotInv.value.copy(pivot.matrixWorld).invert();
+  const B = twin.bodyBox;
+  if (B) {
+    shared.uBodyCX.value = (B.min.x + B.max.x) / 2;
+    shared.uBodyMinY.value = B.min.y;
+    shared.uBodyH.value = B.max.y - B.min.y;
+  }
+}
+
 // Called every frame: scan organs in and out.
 export function updateOrgans(now, dt) {
+  applyOrganFx();
   for (const [k, o] of Object.entries(organs)) {
     if (!o.group) continue;
     const want = wanted(k, now);
@@ -168,6 +267,12 @@ export function updateOrgans(now, dt) {
     else o.reveal = Math.max(0, o.reveal - dt / .5);
     o.u.uReveal.value = o.reveal < .5 ? 4 * o.reveal ** 3 : 1 - Math.pow(-2 * o.reveal + 2, 3) / 2;
     o.u.uTime.value = now / 1000;
+    // Tint darkens toward navy as severity rises (plan.md 5.2).
+    const sev = twin.severity?.[k] || 0;
+    o.u.uSeverity.value = sev;
+    o.u.uTint.value.set(organFx.tints[k] || DEFAULT_TINT).lerp(tmpColor.copy(NAVY), sev * .8);
+    const arm = organFx.arm;
+    o.u.uArmOn.value = arm.on && (k === 'bones' || (k === 'muscles' && arm.muscles)) ? 1 : 0;
     o.group.visible = o.reveal > 0;
   }
 }
