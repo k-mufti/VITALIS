@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { $, $$, ease } from '../util.js';
 import { scene, camera, renderer, host, pivot, HOME, cam, twin, flyTo, initScene, backdrop } from './scene.js';
 import { REGIONS, uni, skin, loadBody, pt } from './body.js';
-import { organs, loadOrgan, prefetchOrgans, updateOrgans, has3dOrgan } from './organs.js';
+import { organs, loadOrgan, prefetchOrgans, updateOrgans, has3dOrgan, organFrame } from './organs.js';
 import { DRAWINGS } from './organ-drawings.js';
 import { initAnatomyPanel } from './anatomy-panel.js';
 import { initDevPanel } from './devpanel.js';
@@ -53,11 +53,11 @@ export function focusOrgan(organId) {
 
 // Camera flight to the organ model (or the body region if there is no model yet), then orbit there.
 function frameOrgan(organId, dur) {
-  const o = organs[organId];
+  const frame = organFrame(organId);   // follows the FX panel's position / size nudges
   let point, dist;
-  if (o?.frame) {
-    point = o.frame.point.clone();
-    dist = o.frame.dist;
+  if (frame) {
+    point = frame.point;
+    dist = frame.dist;
   } else {
     point = pt(organId, 'core');
     dist = REGIONS[organId].dist + .6;

@@ -38,8 +38,8 @@ const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 // Organ look + skeleton arm fit. The FX panel (devpanel.js) changes these; updateOrgans() applies them.
 export const organFx = {
   style: 0,                 // 0 = halftone, 1 = flat silhouette
-  edge: .45,                // edge dots 0..1
-  shade: .3,                // dots on the lit side 0..1
+  edge: 1,                  // edge dots 0..1
+  shade: 1,                 // dots on the lit side 0..1
   dotColor: '#7fe9ff',
   tints: { heart: '#0a1f6b', lungs: '#1f5fd1', bones: '#13308f', muscles: '#1846c4', sleep: '#3d6ff0', digestion: '#22409e' },
   // Swing the skeleton's straight-down arms out to the body's A-pose. Each bone moves as one rigid piece.
@@ -47,7 +47,7 @@ export const organFx = {
   // A bone counts as arm if its centre is further out than `start` and below the shoulder;
   // below `elbowY` it is forearm/hand and also turns at the elbow.
   // Below `wristY` it is the hand and also turns at the wrist.
-  arm: { on: true, angle: 18, elbow: -12, wrist: 0, shoulderX: .105, shoulderY: .81, elbowY: .63, wristY: .485, start: .095 },
+  arm: { on: true, angle: 25.5, elbow: -.5, wrist: 0, shoulderX: .06, shoulderY: .822, elbowY: .682, wristY: .485, start: .09 },
   // Per-organ nudge from the FX panel: { x, y, z } as fractions of body height, s = size multiplier.
   place: {},
 };
@@ -319,6 +319,22 @@ function placeOrgan(k, cfg, model, o) {
     const shownTop = Math.min(maxY, topY);
     o.frame = { point: new THREE.Vector3(center.x, (minY + shownTop) / 2, center.z), dist: (shownTop - minY) / 2 / tanHalf / cfg.fill };
   }
+}
+
+// Where the camera should look at an organ right now: the fitted frame, moved and scaled
+// by any FX panel nudge (organFx.place). Returns null if the organ has no model yet.
+export function organFrame(k) {
+  const o = organs[k];
+  if (!o?.frame) return null;
+  const point = o.frame.point.clone();
+  let dist = o.frame.dist;
+  const p = organFx.place[k];
+  if (p && o.basePos) {
+    point.sub(o.basePos).multiplyScalar(p.s).add(o.basePos);
+    point.add(new THREE.Vector3(p.x, p.y, p.z).multiplyScalar(o.H));
+    dist *= p.s;
+  }
+  return { point, dist };
 }
 
 // Load the heart and lungs in the background. The écorché is big, so it only loads when opened.
