@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { $, $$, ease } from '../util.js';
-import { scene, camera, renderer, host, pivot, HOME, cam, twin, flyTo, initScene } from './scene.js';
+import { scene, camera, renderer, host, pivot, HOME, cam, twin, flyTo, initScene, backdrop } from './scene.js';
 import { REGIONS, uni, skin, loadBody, pt } from './body.js';
 import { organs, loadOrgan, prefetchOrgans, updateOrgans, has3dOrgan } from './organs.js';
 import { DRAWINGS } from './organ-drawings.js';
 import { initAnatomyPanel } from './anatomy-panel.js';
+import { initDevPanel } from './devpanel.js';
 
 /* The ONLY 3D functions the rest of the app should call (plan.md section 5.4).
    Anything inside src/three/ can change as long as these keep working. */
@@ -13,6 +14,7 @@ export function initTwin() {
   initScene();
   loadBody();
   initAnatomyPanel(setHoverOrgan);
+  initDevPanel();
 }
 
 // Layers that show the body as glass, so what's inside can be seen.
@@ -38,6 +40,7 @@ export function focusOrgan(organId) {
     frameOrgan(organId, 1500);
   }
   twin.ghostTarget = 1;
+  backdrop.setVisible(false);
   if (has3dOrgan(organId) && !organs[organId]?.group) {
     loadOrgan(organId).then(o => {
       if (twin.focus !== organId) return;
@@ -69,6 +72,7 @@ export function resetView(instant) {
   twin.focus = null;
   twin.ghostTarget = 0;
   twin.orbit.on = false;
+  backdrop.setVisible(true);
   if (instant) {
     twin.fly = null;
     cam.pos.copy(HOME.pos);
@@ -80,8 +84,11 @@ export function resetView(instant) {
   flyTo({ pos: HOME.pos.clone(), look: HOME.look.clone(), done: () => twin.body && $('#spots').classList.remove('hide') }, 1200);
 }
 
-// TODO(3d): severity 0..1 drives the blue scale + halftone density (plan.md 5.2).
-export function setOrganSeverity(organId, severity) {}
+// Severity 0..1 per organ (plan.md 5.2). The worst organ drives the background halftone.
+// TODO(3d): also tint the organ itself on the blue scale.
+export function setOrganSeverity(organId, severity) {
+  twin.severity[organId] = Math.min(1, Math.max(0, severity));
+}
 
 // TODO(3d): play a fix animation, resolve when it ends.
 export function playFix(organId, fixId) {
@@ -104,6 +111,8 @@ export function renderTwin(now, pulse) {
   // Start loading the heart and lungs once sign-in is over, so the parse doesn't stutter the fingerprint screen.
   if (!prefetched && twin.body && !$('#signin')) { prefetched = true; prefetchOrgans(); }
 
+  if (twin.autoTurn && !twin.focus) twin.rotTarget += .004;
+  backdrop.update(now, Math.max(twin.testSeverity, ...Object.values(twin.severity)));
   twin.rot += (twin.rotTarget - twin.rot) * .08;
   pivot.rotation.y = twin.rot;
   const orbit = twin.orbit;

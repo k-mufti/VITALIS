@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { $ } from '../util.js';
+import { createHalftoneBackdrop } from './effects.js';
 
 /* Renderer, camera, lights, resize, drag-to-turn, camera flights. */
 
@@ -9,8 +10,9 @@ export const camera = new THREE.PerspectiveCamera(30, 1, .01, 200);
 export const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMapping = THREE.NoToneMapping;  // keep the black pure and the paper dots exact
 host.append(renderer.domElement);
+export const backdrop = createHalftoneBackdrop(scene, renderer);
 scene.add(new THREE.HemisphereLight(0xffffff, 0x2a2f31, 1.1));
 const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(-3, 5, 6); scene.add(key);
 const rim = new THREE.DirectionalLight(0xffffff, 2.4); rim.position.set(3, 3, -5); scene.add(rim);
@@ -33,6 +35,8 @@ export const twin = {
   bodyBox: null,
   // Detail view camera: orbits the focused organ (drag to turn, scroll to zoom).
   orbit: { on: false, focus: new THREE.Vector3(), yaw: 0, yawT: 0, pitch: 0, pitchT: 0, dist: 3, distT: 3, base: 3 },
+  severity: {},      // organId -> 0..1, from setOrganSeverity
+  testSeverity: 0,   // FX panel preview
 };
 
 export function flyTo(t, dur = 1500) {

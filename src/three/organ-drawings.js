@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { $, $$ } from '../util.js';
 import { twin } from './scene.js';
 import { organs, has3dOrgan, animate3dOrgan } from './organs.js';
+import { ORGAN_HALFTONE_DEFS } from './effects.js';
 
 /* Organ drawings shown in the Detail view, their live motion, and drag-to-turn. */
 
@@ -126,4 +127,12 @@ export function initOrganDrag() {
   }, { passive: false });
   el.addEventListener('dblclick', () => { orbit.yawT = 0; orbit.pitchT = 0; orbit.distT = orbit.base; });
   (function loop() { rx += (tx - rx) * .1; ry += (ty - ry) * .1; const s = el.querySelector('svg'); if (s) s.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`; requestAnimationFrame(loop); })();
+}
+
+// Halftone fill for the organ shapes (pattern from effects.js). Applied to the drawings;
+// ORGANS hands these out for systems without a 3D model.
+for (const k of Object.keys(DRAWINGS)) {
+  DRAWINGS[k] = DRAWINGS[k]
+    .replace('<svg viewBox="0 0 400 400">', '<svg viewBox="0 0 400 400">' + ORGAN_HALFTONE_DEFS)
+    .replaceAll('class="shape"', 'class="shape" style="fill:url(#ht)"');
 }
