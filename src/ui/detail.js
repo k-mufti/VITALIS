@@ -1,7 +1,6 @@
 import { $, $$ } from '../util.js';
 import { state } from '../state.js';
-import { SYS } from '../data/mock.js';
-import { onData } from '../data/client.js';
+import { onData, organ } from '../data/client.js';
 import { focusOrgan, resetView } from '../three/api.js';
 import { ORGANS, animateOrgan, initOrganDrag } from '../three/organ-drawings.js';
 import { show } from '../nav.js';
@@ -12,23 +11,49 @@ const wave = [];
 let lastSample = 0;
 
 export function openSystem(k) {
-  const d = SYS[k];
+  const d = organ(k);
   state.current = k;
   state.pastDay = null;
   focusOrgan(k);
+  paint(d);
+  $('.big').classList.remove('past');
+  // Not every system has a hand-drawn organ yet (bones, eyes). Show the numbers either way.
+  $('#organ').innerHTML = ORGANS[k] || '';
+  const svg = $('#organ svg');
+  if (svg) svg.classList.add('organ-in');
+  buildWeek(d);
+  wave.length = 0;
+  setTimeout(() => show('detail'), 350);
+}
+
+// Fill the detail view from one organ's data.
+function paint(d) {
   $('#dName').textContent = d.name;
   $('#dValue').textContent = d.value;
   $('#dUnit').textContent = d.unit;
   $('#dUsual').textContent = d.usual;
   $('#d2Label').textContent = d.l2;
   $('#d2Value').textContent = d.v2;
-  const note = $('#dNote'); note.textContent = d.note; note.classList.toggle('watch', d.state === 'watch');
-  $('.big').classList.remove('past');
-  $('#organ').innerHTML = ORGANS[k];
-  $('#organ svg').classList.add('organ-in');
-  buildWeek(d);
-  wave.length = 0;
-  setTimeout(() => show('detail'), 350);
+  const note = $('#dNote');
+  note.textContent = d.note;
+  note.classList.toggle('watch', d.level !== 'low');
+  paintWrong(d);
+}
+
+// What this could lead to on this mission, and the best thing to do about it.
+function paintWrong(d) {
+  const box = $('#dWrong');
+  if (!box) return;
+  const wrong = (d.wrong || []).slice(0, 2).map(w => {
+    let when = '';
+    if (w.by_day) when = ` <em>by day ${w.by_day}</em>`;
+    return `<li>${w.title}${when}</li>`;
+  }).join('');
+  const best = (d.countermeasures || [])[0];
+  let action = '';
+  if (best) action = `<p class="do"><b>Best next step</b>${best.label}</p>`;
+  if (!wrong && !action) { box.innerHTML = ''; return; }
+  box.innerHTML = `<p class="lead"><b>Could lead to</b></p><ul>${wrong}</ul>${action}`;
 }
 
 export function leaveDetail(instant) {
@@ -37,6 +62,7 @@ export function leaveDetail(instant) {
 }
 
 function buildWeek(d) {
+  if (!d.week) { $('#week').innerHTML = ''; return; }
   const lo = Math.min(...d.week), hi = Math.max(...d.week);
   $('#week').innerHTML = d.week.map((x, i) =>
     `<button class="${i === 6 ? 'today on' : ''}" data-i="${i}"><i style="height:${14 + ((x - lo) / (hi - lo || 1)) * 40}px"></i><span>${i === 6 ? 'TODAY' : 'DAY ' + (178 + i)}</span></button>`).join('');
@@ -52,9 +78,10 @@ function buildWeek(d) {
 
 /* ---------- live wave ---------- */
 function sample(k, t) {
-  if (k === 'lungs') return Math.sin(t * 2 * Math.PI * SYS.lungs.value / 60);
+  const value = organ(k).value;
+  if (k === 'lungs') return Math.sin(t * 2 * Math.PI * value / 60);
   if (k === 'heart') {
-    const x = (t * SYS.heart.value / 60) % 1;
+    const x = (t * value / 60) % 1;
     const g = (c, w, a) => a * Math.exp(-(((x - c) / w) ** 2));
     return g(.1, .03, .15) + g(.19, .008, -.2) + g(.21, .012, 1) + g(.235, .01, -.3) + g(.45, .05, .25) - .1;
   }
@@ -71,7 +98,7 @@ function drawWave(k, now) {
 // Called every frame from main.js. Returns the pulse for the 3D body (0 when no system is open).
 export function tickDetail(now) {
   if (state.view !== 'detail' || !state.current) return 0;
-  const pulse = animateOrgan(state.current, now / 1000, SYS[state.current].value);
+  const pulse = animateOrgan(state.current, now / 1000, organ(state.current).value);
   drawWave(state.current, now);
   return pulse;
 }
@@ -86,17 +113,6 @@ export function initDetail() {
   onData(type => {
     if (type !== 'state' && type !== 'vital') return;
     if (!state.current || state.pastDay !== null) return;
-    const d = SYS[state.current];
-    $('#dValue').textContent = d.value;
-    $('#dUsual').textContent = d.usual;
-    $('#d2Value').textContent = d.v2;
-    const note = $('#dNote'); note.textContent = d.note; note.classList.toggle('watch', d.state === 'watch');
+    paint(organ(state.current));
   });
-
-  // Small live wobble on the big number
-  setInterval(() => {
-    if (!state.current || state.pastDay !== null || !SYS[state.current].jitter) return;
-    const [a, b] = SYS[state.current].jitter;
-    $('#dValue').textContent = a + Math.floor(Math.random() * (b - a + 1));
-  }, 3500);
 }

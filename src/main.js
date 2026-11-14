@@ -5,6 +5,8 @@ import { initNav } from './nav.js';
 import { initDetail, tickDetail } from './ui/detail.js';
 import { initCrew } from './ui/crew.js';
 import { initAsk } from './ui/ask.js';
+import { initRiskBoard } from './ui/risk-board.js';
+import { initHistory } from './ui/history.js';
 import { initData } from './data/client.js';
 
 /* VITALIS demo. Every reading here is made up.
@@ -17,6 +19,8 @@ initNav();
 initDetail();
 initCrew();
 initAsk();
+initRiskBoard();
+initHistory();
 initData();
 
 (function loop(now) {

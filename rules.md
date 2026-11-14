@@ -19,13 +19,17 @@ Agents: read `plan.md` and this file fully before making any change.
 
 ## 1.5 Product rules (do not break these)
 
-- Navigation is risk-first. The main screen is the Risk Board: organs ranked by `mission_risk`
-  for the current mission. Users open an organ ONLY by clicking its risk card
-  (later also from a triage alert or the medical officer).
-- Do not make the 3D body or organ meshes clickable to open details. No `onOrganClick` handlers.
+- Navigation is risk-first. The main screen shows the body with the risk panel beside it:
+  every system ranked by `mission_risk` for the current mission, worst first, each with how bad
+  it is now (Low / Mild / Extreme) and what it could lead to.
+- There are TWO ways into an organ and both must keep working: clicking its card in the risk
+  panel, and clicking the system on the body itself. Both call `openSystem(id)` in `src/ui/detail.js`.
+- The risk panel is the answer to "where do I look"; the body is the answer to "where is it".
+  Never let them disagree: both read the same organ data from `src/data/client.js`.
 - The ranking comes from the engine (`/api/risks`, or `mock.js` when the backend is off).
   Never hardcode the order in 3D or UI code.
 - Every detail view has three parts: Current state, What could go wrong (on this mission), What to do.
+- Severity words come from the backend's `level` field (low / mild / extreme). Never recompute them in the UI.
 
 ## 2. Git workflow
 

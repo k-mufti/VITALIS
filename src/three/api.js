@@ -84,6 +84,7 @@ export function renderTwin(now, pulse) {
     const { width: w, height: h } = host.getBoundingClientRect();
     const show = Math.cos(twin.rot) > .5;
     $$('.spot').forEach(s => {
+      if (!REGIONS[s.dataset.sys]) { s.style.opacity = 0; return; }
       v.copy(pt(s.dataset.sys)).project(camera);
       s.style.transform = `translate(${(v.x + 1) / 2 * w}px, ${(1 - v.y) / 2 * h}px)`;
       s.style.opacity = show ? '' : 0;
