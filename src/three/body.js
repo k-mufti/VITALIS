@@ -27,7 +27,7 @@ const auraMeshes = [];
 
 // Camera framing. size = how big the body looks (1 = whole body, bigger = closer).
 // lift = how far up the camera aims, as a fraction of body height.
-export const framing = { H: 4.65, size: 1.4, lift: .08 };
+export const framing = { H: 4.65, size: 2.02, lift: .23 };
 export function applyFraming() {
   const { H, size, lift } = framing;
   HOME.pos.set(0, H * lift, H * 2.4 / size);
