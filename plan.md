@@ -33,6 +33,17 @@ Working prototype, vanilla JS, no build step, three.js from CDN via importmap.
 Gaps vs. the plan: no backend, no live data, no bones system, no timeline projection,
 no fix animations, no triage queue, no voice, no halftone style, no Engineer Mode, no director panel.
 
+Added Sat afternoon to cover the challenge text directly (branch `feature/challenge-gaps`):
+- Self check-in drawer (`src/ui/checkin.js`): astronaut enters blood pressure, blood sugar,
+  temperature, mood and symptoms by hand. Instant OK / Watch / Act result with a plain next step.
+  "Act" results say the crew doctor is told and a copy goes to Earth with the comms delay.
+- How to measure + why it matters in space + source, for every check-in field and every body system
+  (`src/data/health-rules.js`, also shown in the Detail view).
+- Today panel on the Body view (`src/ui/today.js`): timed health routine with a "Due" item,
+  a reminder prompt after sign-in, latest self readings with status dots, and a day streak (gamification).
+- Status colors: green / amber / red dots for OK / Watch / Act (see 5.2).
+- Crew view now shows NASA HRP's five hazards: radiation, isolation, distance, gravity, cabin air (CO₂).
+
 ## 3. Stack decisions
 
 - Frontend: stay on vanilla JS + ES modules + three.js (CDN importmap). No React migration,
@@ -109,6 +120,9 @@ Do not rename existing IDs. New organs need a new row here first.
   Lerp between `#7FE9FF` (0) and `#0A1F6B` (1).
 - Halftone dots get denser and pulse faster as severity rises, so dark blue stays visible on black.
 - Status bands for UI text: 0 to 0.33 "OK", 0.33 to 0.66 "Watch", 0.66 to 1 "Act".
+- UI status color (text, dots, borders; NOT the 3D organ blue): OK = `--green`, Watch = `--amber`,
+  Act = `--red`. CSS classes `.dot.ok / .watch / .act`, `.spot.act`. Body-system `state` may be
+  `ok`, `watch` or `act`. The blue scale stays for the 3D twin; color makes status readable at a glance.
 
 ### 5.3 Data shapes (backend -> frontend)
 
@@ -118,6 +132,10 @@ Vital (one reading from one device):
 ```
 Devices: `watch` (heart_rate, hrv, spo2, skin_temp, sleep_hours, steps),
 `cgm` (glucose mg/dL), `medbay` (bp_sys, bp_dia, bone_density_pct, reaction_ms, mood_1to5).
+Added: `self` (astronaut check-in typed by hand: bp_sys, bp_dia, glucose, body_temp, mood_1to5, symptoms[]).
+Same Vital shape, e.g. `{ "device": "self", "metric": "body_temp", "value": 37.2, "unit": "C", "ts": ... }`.
+Blood sugar, blood pressure, temperature and mood have no organ: they show in the Body view's
+Today panel (`VITALS` in `src/data/mock.js`), judged by `JUDGE` in `src/data/health-rules.js`.
 
 OrganState:
 ```json
