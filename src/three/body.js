@@ -42,8 +42,11 @@ export function loadBody() {
       const core = surf.clone(); core.z -= r.radius * .45; if (r.coreX !== undefined) core.x = r.coreX;
       r.surface = obj.worldToLocal(surf); r.core = obj.worldToLocal(core);
     });
-    HOME.pos.set(0, 0, Math.max(8, H * 2.4));
+    // Close framing: body fills the screen, feet cropped just below the shins.
+    HOME.pos.set(0, H * .08, H * 1.7);
+    HOME.look.set(0, H * .08, 0);
     cam.pos.copy(HOME.pos);
+    cam.look.copy(HOME.look);
     twin.body = obj;
     $('#loadNote').remove();
     $('#spots').classList.remove('hide');
