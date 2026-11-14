@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Fingerprint Lab</title>
+<!-- Dev tool only: compare the 25 prints in assets/fingerprints and three sign-in animations.
+     Run the repo server and open http://localhost:8000/tools/fingerprint-lab.html -->
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Barlow:wght@400&display=swap" rel="stylesheet" />
+<style>
+  :root { --paper: #f5f5f2; --white: #fff; --ink: #0e0e0e; --soft: #8a8a85; --line: #e1e1dc; --grey: #c9c9c4; --cyan: #0aa5bd; --ease: cubic-bezier(.65, 0, .2, 1); }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--white); color: var(--ink); font: 400 14px var(--sans, 'Barlow', sans-serif); padding: 32px 40px; }
+  h1, h2, label { font: 600 13px 'Barlow Condensed', sans-serif; letter-spacing: .2em; text-transform: uppercase; }
+  h1 { font-size: 16px; } h2 { color: var(--soft); margin: 28px 0 14px; }
+  .stage { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  .cell { border: 1px solid var(--line); padding: 20px; display: grid; justify-items: center; gap: 14px; }
+  .cell svg { width: 180px; height: 240px; overflow: visible; }
+  .cell button { font: 600 12px 'Barlow Condensed'; letter-spacing: .16em; text-transform: uppercase; padding: 6px 12px; border: 1px solid var(--ink); background: none; cursor: pointer; }
+  .grid { display: grid; grid-template-columns: repeat(13, 1fr); gap: 8px; }
+  .grid button { border: 1px solid var(--line); background: none; padding: 8px 4px 4px; cursor: pointer; display: grid; justify-items: center; font: 500 11px 'Barlow Condensed'; color: var(--soft); }
+  .grid button.on { border-color: var(--ink); color: var(--ink); }
+  .grid svg { width: 100%; height: 64px; }
+  path { transition: fill .35s; }
+  /* A: scan line sweeps up, ridges below it turn black */
+  .A path { fill: var(--grey); }
+  .A path.on { fill: var(--ink); }
+  .A .line, .B .line { stroke: var(--cyan); stroke-width: .5; }
+  /* B: ridges darken from the core outward, then a cyan wave on match */
+  .B path { fill: var(--grey); }
+  .B path.on { fill: var(--ink); }
+  .B path.lit, .A path.lit, .C path.lit { fill: var(--cyan); }
+  /* C: outlines trace in, then fill */
+  .C path { fill: transparent; stroke: var(--ink); stroke-width: .25; stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 1.4s var(--ease), fill .5s; }
+  .C path.on { stroke-dashoffset: 0; }
+  .C path.full { fill: var(--ink); }
+</style>
+</head>
+<body>
+<h1>Fingerprint lab <span style="color:var(--soft)">· pick a print, replay each animation</span></h1>
+<h2>Animations</h2>
+<div class="stage">
+  <div class="cell"><label>A · Scan line</label><svg id="A" class="A"></svg><button data-play="A">Play</button></div>
+  <div class="cell"><label>B · Core outward</label><svg id="B" class="B"></svg><button data-play="B">Play</button></div>
+  <div class="cell"><label>C · Trace</label><svg id="C" class="C"></svg><button data-play="C">Play</button></div>
+</div>
+<h2>Prints</h2>
+<div class="grid" id="grid"></div>
+<script type="module">
+const N = 25, cache = {};
+const name = i => `print-${String(i).padStart(2, '0')}`;
+async function load(i) {
+  if (!cache[i]) cache[i] = await (await fetch(`../assets/fingerprints/${name(i)}.svg`)).text();
+  return new DOMParser().parseFromString(cache[i], 'image/svg+xml').documentElement;
+}
+let pick = +(location.hash.slice(1) || 21);
+
+// Put a print into a stage svg, and tag each ridge with its distance from the core (0..1) and height (0..1).
+async function mount(id) {
+  const src = await load(pick), svg = document.getElementById(id);
+  svg.setAttribute('viewBox', src.getAttribute('viewBox'));
+  svg.innerHTML = src.innerHTML;
+  const [x, y, w, h] = src.getAttribute('viewBox').split(' ').map(Number);
+  const cx = x + w / 2, cy = y + h * .45;
+  const ps = [...svg.querySelectorAll('path')];
+  ps.forEach(p => {
+    const b = p.getBBox();
+    p.dataset.d = Math.hypot((b.x + b.width / 2 - cx) / w, (b.y + b.height / 2 - cy) / h) * 1.6;
+    p.dataset.y = 1 - (b.y + b.height / 2 - y) / h;
+    if (id === 'C') p.setAttribute('pathLength', 1);
+  });
+  if (id !== 'C') svg.insertAdjacentHTML('beforeend', `<line class="line" x1="${x - 4}" x2="${x + w + 4}" y1="${y + h}" y2="${y + h}" opacity="0"/>`);
+  return { svg, ps, x, y, w, h };
+}
+const wait = ms => new Promise(r => setTimeout(r, ms));
+
+async function play(id) {
+  const m = await mount(id);
+  const t0 = performance.now(), dur = 1500;
+  if (id === 'C') {
+    await wait(50);
+    m.ps.forEach(p => setTimeout(() => p.classList.add('on'), +p.dataset.d * 600));
+    await wait(1900); m.ps.forEach(p => p.classList.add('full'));
+    await wait(500); wave(m); return;
+  }
+  const line = m.svg.querySelector('.line'); line.setAttribute('opacity', 1);
+  await new Promise(done => {
+    (function tick(now) {
+      const p = Math.min(1, (now - t0) / dur);
+      if (id === 'A') {
+        line.setAttribute('y1', m.y + m.h * (1 - p)); line.setAttribute('y2', m.y + m.h * (1 - p));
+        m.ps.forEach(r => r.classList.toggle('on', +r.dataset.y < p));
+      } else {
+        const s = (Math.sin(now / 160) + 1) / 2; // line bounces while scanning
+        line.setAttribute('y1', m.y + m.h * s); line.setAttribute('y2', m.y + m.h * s);
+        m.ps.forEach(r => r.classList.toggle('on', +r.dataset.d < p * 1.05));
+      }
+      if (p < 1) requestAnimationFrame(tick); else done();
+    })(t0);
+  });
+  line.setAttribute('opacity', 0);
+  wave(m);
+}
+// Match: a cyan wave runs from the core outward, then settles back to black.
+function wave(m) {
+  m.ps.forEach(p => {
+    setTimeout(() => p.classList.add('lit'), +p.dataset.d * 420);
+    setTimeout(() => p.classList.remove('lit'), +p.dataset.d * 420 + 380);
+  });
+}
+
+async function buildGrid() {
+  const g = document.getElementById('grid');
+  for (let i = 1; i <= N; i++) {
+    const s = await load(i);
+    const b = document.createElement('button');
+    b.innerHTML = s.outerHTML + i; b.classList.toggle('on', i === pick);
+    b.onclick = () => { pick = i; location.hash = i; [...g.children].forEach(x => x.classList.toggle('on', x === b)); ['A', 'B', 'C'].forEach(play); };
+    g.append(b);
+  }
+}
+document.querySelectorAll('[data-play]').forEach(b => b.onclick = () => play(b.dataset.play));
+await buildGrid();
+['A', 'B', 'C'].forEach(play);
+</script>
+</body>
+</html>

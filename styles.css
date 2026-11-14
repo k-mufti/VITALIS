@@ -221,3 +221,16 @@ form button:hover { transform: translateX(4px); }
 .chart .usual { font-size: 13px; color: var(--soft); margin-top: 4px; }
 .verdict { border: 1px solid var(--ink); padding: 16px; }
 .verdict b { display: block; font: 600 22px var(--cond); letter-spacing: .06em; text-transform: uppercase; margin-top: 4px; }
+
+/* Sign-in print (assets/fingerprints): trace in gray, fill black from the core while holding, cyan wave on match. */
+#ridges path { fill: transparent; stroke: #c9c9c4; stroke-width: .28; stroke-dasharray: 1; stroke-dashoffset: 1;
+  transition: stroke-dashoffset 1.5s var(--ease) var(--delay, 0s), fill .7s var(--ease) calc(var(--delay, 0s) + .9s); }
+.print.ready #ridges path { stroke-dashoffset: 0; fill: #d3d3ce; }
+.print.settled #ridges path { stroke: transparent; transition: fill .3s var(--ease), stroke .6s; }
+/* .print.ready prefix keeps these stronger than the gray fill above */
+.print.ready #ridges path.on { fill: var(--ink); }
+.print.ready #ridges path.lit { fill: var(--cyan); transition: fill .12s; }
+#ridges path.drawn { fill: none; stroke: #c9c9c4; stroke-width: 1.15; }
+#ridges path.drawn.on { stroke: var(--ink); fill: none; }
+#ridges path.drawn.lit { stroke: var(--cyan); fill: none; }
+#scanLine { transition: opacity .3s; }
