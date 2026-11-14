@@ -11,7 +11,6 @@ export const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.NoToneMapping;  // keep the black pure and the paper dots exact
-renderer.domElement.style.position = 'relative';  // sit above the halftone backdrop
 host.append(renderer.domElement);
 export const backdrop = createHalftoneBackdrop(scene, renderer);
 scene.add(new THREE.HemisphereLight(0xffffff, 0x2a2f31, 1.1));
