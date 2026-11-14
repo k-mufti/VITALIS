@@ -76,43 +76,55 @@ for (const [m] of RIG_MODELS) for (const [limb] of LIMBS) {
 }
 Object.assign(DEFAULTS, limbDefaults);
 
-// The look chosen in the FX panel on Nov 14 ("Copy settings", muscle arms updated later that day). Paste a newer copy here to change the defaults.
+// The look chosen in the FX panel on Nov 14 ("Copy settings", final skeleton + muscle fit).
+// Paste a newer copy here to change the defaults.
 const CHOSEN_LOOK = {
-  size: 2.02, lift: 0.23, autoTurn: false, style: 0, dot: 6, edge: 0.34, shade: 0.23, aura: 0, auraSize: 0.245,
+  size: 2.08, lift: 0.23, autoTurn: false, style: 0, dot: 6, edge: 0.34, shade: 0.23, aura: 0, auraSize: 0.245,
   outWidth: 0.63, outSoft: 0.98, outColor: 0, outFill: 0.1, outShade: 0.31, outDots: 0.23, bgIntensity: 0,
   bgCell: 13, bgDot: 0.42, bgShape: 0, bgAngle: 53, bgGlowW: 0.92, bgGlowH: 1.02, bgGlowY: 0.5, bgFloor: 0.43,
   bgGradient: 0, bgColA: '#009dd1', bgColB: '#ff0000', bgPulse: 0.38, bgPulseSpeed: 0.73, adaptive: false,
   health: 1, orgStyle: 0, orgEdge: 1, orgShade: 1, orgDot: '#7fe9ff', tintHeart: '#0a1f6b',
   tintLungs: '#1f5fd1', tintBones: '#13308f', tintMuscles: '#1846c4', tintBrain: '#3d6ff0',
-  tintDigestion: '#22409e', armJoints: false,
-  rigModel_arms: 1, rig_bones_arms_on: true, rig_bones_arms_start: 0.09, rig_bones_arms_mirror: true,
-  rig_bones_arms_side: 0, rig_muscles_arms_on: true, rig_muscles_arms_start: 0.09, rig_muscles_arms_cut: 0.76,
-  rig_muscles_arms_soft: 0.02, rig_muscles_arms_mirror: true, rig_muscles_arms_side: 0,
-  posOrgan: 5, pos_heart_x: 0, pos_heart_y: 0.048, pos_heart_z: -0.044, pos_heart_s: 1.07, pos_lungs_x: 0,
+  tintDigestion: '#22409e', rigModel_arms: 0, rigModel_legs: 0, armJoints: false,
+  posOrgan: 4, pos_heart_x: 0, pos_heart_y: 0.048, pos_heart_z: -0.044, pos_heart_s: 1.07, pos_lungs_x: 0,
   pos_lungs_y: 0.017, pos_lungs_z: 0.007, pos_lungs_s: 1.05, pos_sleep_x: 0, pos_sleep_y: 0.004,
   pos_sleep_z: 0.005, pos_sleep_s: 1.14, pos_digestion_x: 0, pos_digestion_y: 0.048, pos_digestion_z: -0.038,
   pos_digestion_s: 1, pos_bones_x: 0, pos_bones_y: 0, pos_bones_z: 0, pos_bones_s: 1, pos_muscles_x: 0,
   pos_muscles_y: -0.005, pos_muscles_z: 0, pos_muscles_s: 1,
-  ja_bones_L_sh_rz: 25.5, ja_bones_L_sh_rx: 6.5, ja_bones_L_sh_ry: 7, ja_bones_L_sh_px: 0.039,
-  ja_bones_L_sh_py: 0.819, ja_bones_L_sh_pz: 0.036, ja_bones_L_el_rz: 5.5, ja_bones_L_el_rx: 19.5,
-  ja_bones_L_el_ry: -10, ja_bones_L_el_px: 0.22, ja_bones_L_el_py: 0.303, ja_bones_L_el_pz: 0.011,
-  ja_bones_L_wr_rz: 12.5, ja_bones_L_wr_rx: -1.5, ja_bones_L_wr_ry: -4, ja_bones_L_wr_px: 0.02,
-  ja_bones_L_wr_py: 0.3, ja_bones_L_wr_pz: 0.12,
-  ja_bones_R_sh_rz: 25.5, ja_bones_R_sh_rx: 0, ja_bones_R_sh_ry: 0, ja_bones_R_sh_px: 0.06,
-  ja_bones_R_sh_py: 0.822, ja_bones_R_sh_pz: 0, ja_bones_R_el_rz: -4, ja_bones_R_el_rx: 0, ja_bones_R_el_ry: 0,
-  ja_bones_R_el_px: 0.06, ja_bones_R_el_py: 0.682, ja_bones_R_el_pz: 0, ja_bones_R_wr_rz: -1.5,
-  ja_bones_R_wr_rx: 0, ja_bones_R_wr_ry: 0, ja_bones_R_wr_px: 0.06, ja_bones_R_wr_py: 0.485,
-  ja_bones_R_wr_pz: 0,
-  ja_muscles_L_sh_rz: -11.5, ja_muscles_L_sh_rx: -15, ja_muscles_L_sh_ry: 0, ja_muscles_L_sh_px: 0.06,
-  ja_muscles_L_sh_py: 0.822, ja_muscles_L_sh_pz: 0, ja_muscles_L_el_rz: -0.5, ja_muscles_L_el_rx: 0,
-  ja_muscles_L_el_ry: 0, ja_muscles_L_el_px: 0.06, ja_muscles_L_el_py: 0.682, ja_muscles_L_el_pz: 0,
-  ja_muscles_L_wr_rz: 0, ja_muscles_L_wr_rx: 0, ja_muscles_L_wr_ry: 0, ja_muscles_L_wr_px: 0.06,
+  rig_bones_arms_on: true, rig_bones_arms_mirror: true, rig_bones_arms_side: 0, rig_bones_arms_start: 0.09,
+  ja_bones_L_sh_rx: 6.5, ja_bones_L_sh_ry: 7, ja_bones_L_sh_rz: 25.5, ja_bones_L_sh_px: 0.039,
+  ja_bones_L_sh_py: 0.819, ja_bones_L_sh_pz: 0.036, ja_bones_L_el_rx: 19.5, ja_bones_L_el_ry: -10,
+  ja_bones_L_el_rz: 5.5, ja_bones_L_el_px: 0.22, ja_bones_L_el_py: 0.303, ja_bones_L_el_pz: 0.011,
+  ja_bones_L_wr_rx: -1.5, ja_bones_L_wr_ry: -4, ja_bones_L_wr_rz: 12.5, ja_bones_L_wr_px: 0.02,
+  ja_bones_L_wr_py: 0.3, ja_bones_L_wr_pz: 0.12, ja_bones_L_hp_rx: 2.5, ja_bones_L_hp_ry: 0,
+  ja_bones_L_hp_rz: 9.5, ja_bones_L_hp_px: 0.05, ja_bones_L_hp_py: 0.52, ja_bones_L_hp_pz: 0,
+  ja_bones_L_kn_rx: -2, ja_bones_L_kn_ry: 0, ja_bones_L_kn_rz: -3, ja_bones_L_kn_px: 0.05,
+  ja_bones_L_kn_py: 0.285, ja_bones_L_kn_pz: 0, ja_bones_L_an_rx: 0, ja_bones_L_an_ry: 0, ja_bones_L_an_rz: 0,
+  ja_bones_L_an_px: 0.045, ja_bones_L_an_py: 0.04, ja_bones_L_an_pz: 0,
+  ja_bones_R_sh_rx: 0, ja_bones_R_sh_ry: 0, ja_bones_R_sh_rz: 25.5, ja_bones_R_sh_px: 0.06,
+  ja_bones_R_sh_py: 0.822, ja_bones_R_sh_pz: 0, ja_bones_R_el_rx: 0, ja_bones_R_el_ry: 0, ja_bones_R_el_rz: -4,
+  ja_bones_R_el_px: 0.06, ja_bones_R_el_py: 0.682, ja_bones_R_el_pz: 0, ja_bones_R_wr_rx: 0,
+  ja_bones_R_wr_ry: 0, ja_bones_R_wr_rz: -1.5, ja_bones_R_wr_px: 0.06, ja_bones_R_wr_py: 0.485,
+  ja_bones_R_wr_pz: 0, ja_bones_R_hp_rx: 0, ja_bones_R_hp_ry: 0, ja_bones_R_hp_rz: 0, ja_bones_R_hp_px: 0.05,
+  ja_bones_R_hp_py: 0.52, ja_bones_R_hp_pz: 0, ja_bones_R_kn_rx: 0, ja_bones_R_kn_ry: 0, ja_bones_R_kn_rz: 0,
+  ja_bones_R_kn_px: 0.05, ja_bones_R_kn_py: 0.285, ja_bones_R_kn_pz: 0, ja_bones_R_an_rx: 0,
+  ja_bones_R_an_ry: 0, ja_bones_R_an_rz: 0, ja_bones_R_an_px: 0.045, ja_bones_R_an_py: 0.04,
+  ja_bones_R_an_pz: 0,
+  rig_bones_legs_on: true, rig_bones_legs_mirror: true, rig_bones_legs_side: 0, rig_bones_legs_start: 0.015,
+  rig_muscles_arms_on: true, rig_muscles_arms_mirror: true, rig_muscles_arms_side: 0,
+  rig_muscles_arms_start: 0.09, rig_muscles_arms_cut: 0.76, rig_muscles_arms_soft: 0.02,
+  ja_muscles_L_sh_rx: -15, ja_muscles_L_sh_ry: 0, ja_muscles_L_sh_rz: -11.5, ja_muscles_L_sh_px: 0.06,
+  ja_muscles_L_sh_py: 0.822, ja_muscles_L_sh_pz: 0, ja_muscles_L_el_rx: 0, ja_muscles_L_el_ry: 0,
+  ja_muscles_L_el_rz: -0.5, ja_muscles_L_el_px: 0.06, ja_muscles_L_el_py: 0.682, ja_muscles_L_el_pz: 0,
+  ja_muscles_L_wr_rx: 0, ja_muscles_L_wr_ry: 0, ja_muscles_L_wr_rz: 0, ja_muscles_L_wr_px: 0.06,
   ja_muscles_L_wr_py: 0.485, ja_muscles_L_wr_pz: 0,
-  ja_muscles_R_sh_rz: 25.5, ja_muscles_R_sh_rx: 0, ja_muscles_R_sh_ry: 0, ja_muscles_R_sh_px: 0.06,
-  ja_muscles_R_sh_py: 0.822, ja_muscles_R_sh_pz: 0, ja_muscles_R_el_rz: -0.5, ja_muscles_R_el_rx: 0,
-  ja_muscles_R_el_ry: 0, ja_muscles_R_el_px: 0.06, ja_muscles_R_el_py: 0.682, ja_muscles_R_el_pz: 0,
-  ja_muscles_R_wr_rz: 0, ja_muscles_R_wr_rx: 0, ja_muscles_R_wr_ry: 0, ja_muscles_R_wr_px: 0.06,
+  ja_muscles_R_sh_rx: 0, ja_muscles_R_sh_ry: 0, ja_muscles_R_sh_rz: 25.5, ja_muscles_R_sh_px: 0.06,
+  ja_muscles_R_sh_py: 0.822, ja_muscles_R_sh_pz: 0, ja_muscles_R_el_rx: 0, ja_muscles_R_el_ry: 0,
+  ja_muscles_R_el_rz: -0.5, ja_muscles_R_el_px: 0.06, ja_muscles_R_el_py: 0.682, ja_muscles_R_el_pz: 0,
+  ja_muscles_R_wr_rx: 0, ja_muscles_R_wr_ry: 0, ja_muscles_R_wr_rz: 0, ja_muscles_R_wr_px: 0.06,
   ja_muscles_R_wr_py: 0.485, ja_muscles_R_wr_pz: 0,
+  rig_muscles_legs_on: true, rig_muscles_legs_mirror: true, rig_muscles_legs_side: 0,
+  rig_muscles_legs_start: 0.015, rig_muscles_legs_cut: 0.47, rig_muscles_legs_soft: 0.02,
 };
 Object.assign(DEFAULTS, CHOSEN_LOOK);
 // Which side the sliders edit: left when mirrored, otherwise the picked side.
@@ -314,6 +326,10 @@ function apply() {
         for (const [pr] of JOINT_PROPS) rig[sd][i][pr] = fx[jk(m, from, j, pr)];
       });
     }
+  }
+  // Organ positions (FX panel nudges, see organs.js organFx.place)
+  for (const [id] of ORGAN_LIST) {
+    organFx.place[id] = { x: fx[`pos_${id}_x`], y: fx[`pos_${id}_y`], z: fx[`pos_${id}_z`], s: fx[`pos_${id}_s`] };
   }
   // Framing
   framing.size = fx.size;
