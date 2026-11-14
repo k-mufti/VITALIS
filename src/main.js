@@ -9,6 +9,7 @@ import { initRiskBoard } from './ui/risk-board.js';
 import { initHistory } from './ui/history.js';
 import { initDirector } from './ui/director.js';
 import { initSources } from './ui/sources.js';
+import { initRadiation } from './ui/radiation.js';
 import { initData } from './data/client.js';
 
 /* VITALIS demo. Crew readings are simulated; mission data is live from NASA/JPL/NOAA.
@@ -25,6 +26,7 @@ initRiskBoard();
 initHistory();
 initDirector();
 initSources();
+initRadiation();
 initData();
 
 (function loop(now) {

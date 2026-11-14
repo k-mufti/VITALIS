@@ -137,6 +137,11 @@ export async function setMission(mission) {
   applyState(await api.state(live.previewDay ?? undefined));
 }
 
+// Pull the latest state now instead of waiting for the next push (after logging a countermeasure).
+export async function refreshState() {
+  applyState(await api.state(live.previewDay ?? undefined));
+}
+
 function applyState(state) {
   live.state = state;
   live.risks = state.risk_ranking.map(id => state.organs[id]);
