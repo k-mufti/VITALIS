@@ -15,6 +15,7 @@
   "risk_ranking": [
     "bones",
     "sleep",
+    "eyes",
     "heart",
     "muscles",
     "lungs"
@@ -23,7 +24,7 @@
     "heart": {
       "id": "heart",
       "name": "Heart",
-      "rank": 3,
+      "rank": 4,
       "mission_risk": 0.643,
       "severity": 0.484,
       "status": "Watch",
@@ -286,7 +287,7 @@
     "lungs": {
       "id": "lungs",
       "name": "Lungs",
-      "rank": 5,
+      "rank": 6,
       "mission_risk": 0.0,
       "severity": 0.0,
       "status": "OK",
@@ -357,7 +358,7 @@
     "muscles": {
       "id": "muscles",
       "name": "Muscles",
-      "rank": 4,
+      "rank": 5,
       "mission_risk": 0.314,
       "severity": 0.281,
       "status": "OK",
@@ -427,6 +428,72 @@
         }
       ],
       "source": "NASA HRP: risk of muscle loss in microgravity"
+    },
+    "eyes": {
+      "id": "eyes",
+      "name": "Eyes",
+      "rank": 3,
+      "mission_risk": 0.655,
+      "severity": 0.42,
+      "status": "Watch",
+      "value": 5.2,
+      "unit": "mm optic nerve sheath (ultrasound)",
+      "usual": "under 5.0 mm",
+      "note": "Fluid shifting toward the head is widening the optic nerve sheath. Worth watching.",
+      "drivers": [
+        "microgravity",
+        "fluid shift toward the head"
+      ],
+      "projection": [
+        {
+          "day": 184,
+          "severity": 0.42
+        },
+        {
+          "day": 212,
+          "severity": 0.47
+        },
+        {
+          "day": 240,
+          "severity": 0.52
+        }
+      ],
+      "countermeasures": [
+        {
+          "id": "thigh_cuff",
+          "label": "Thigh cuffs during the day (keeps fluid in the legs)",
+          "minutes": 480,
+          "effect": -0.1,
+          "research": "Thigh Cuff"
+        },
+        {
+          "id": "b_complex",
+          "label": "Daily B vitamin supplement",
+          "minutes": 1,
+          "effect": -0.03,
+          "research": "B-Complex"
+        }
+      ],
+      "what_could_go_wrong": [
+        {
+          "title": "Blurry near vision from optic disc swelling (SANS)",
+          "likelihood": "medium",
+          "by_day": 240,
+          "signs": [
+            "near vision getting worse",
+            "optic nerve sheath over 5 mm"
+          ]
+        },
+        {
+          "title": "Lasting changes to eye shape after the mission",
+          "likelihood": "medium",
+          "by_day": null,
+          "signs": [
+            "folds in the back of the eye on imaging"
+          ]
+        }
+      ],
+      "source": "NASA HRP: Spaceflight Associated Neuro-ocular Syndrome, NASA's leading spaceflight health risk"
     }
   }
 }

@@ -112,6 +112,7 @@ Build against these and we can work in parallel without touching each other's fi
 | `bones`   | Bones         | DEEP   | density loss over mission days (NEW)    |
 | `sleep`   | Sleep & mind  | DEEP   | brain: sleep, mood, reaction test       |
 | `lungs`   | Lungs         | light  | existing, tooltip + simple state        |
+| `eyes`    | Eyes          | DEEP   | SANS: NASA's #1 spaceflight health risk (NEW, needs a 3D region) |
 | `muscles` | Muscles       | light  | existing, tooltip + simple state        |
 
 DEEP = live state + projection + fix animation. Light = status + info only.
@@ -139,6 +140,8 @@ OrganState:
 {
   "id": "bones",
   "rank": 1,
+  "hrp_risks": ["Spaceflight-Induced Bone Changes", "Injury from Dynamic Loads"],
+  "hazards": ["Gravity fields"],
   "mission_risk": 0.71,
   "severity": 0.48,
   "status": "Watch",
@@ -156,6 +159,8 @@ OrganState:
   ]
 }
 ```
+- `hrp_risks` = official NASA HRP risk names this organ covers; `hazards` = which of NASA's 5 hazards drive it.
+  Both come from `backend/app/hrp.py`. Countermeasures may carry `research` = the real HRP study behind them.
 - `severity` = how bad it is right now (drives the blue color).
 - `mission_risk` = severity combined with how much THIS mission's hazards threaten that organ over the
   remaining days (0 to 1). The Risk Board sorts by `mission_risk`, highest first. `rank` = 1-based position.
@@ -166,8 +171,8 @@ MissionState:
   "mission": "mars", "crew_id": "03", "day": 184, "arrival_day": 240,
   "comms_delay_min": 12.4,
   "radiation_msv": 339, "radiation_career_limit_msv": 600, "radiation_event_limit_msv": 250,
-  "risk_ranking": ["bones", "sleep", "heart", "muscles", "lungs"],
-  "organs": { "heart": {}, "bones": {}, "sleep": {}, "lungs": {}, "muscles": {} }
+  "risk_ranking": ["bones", "sleep", "eyes", "heart", "muscles", "lungs"],
+  "organs": { "heart": {}, "bones": {}, "sleep": {}, "eyes": {}, "lungs": {}, "muscles": {} }
 }
 ```
 `risk_ranking` = organ IDs sorted by `mission_risk`. The Risk Board shows the top 3 prominently.
@@ -211,6 +216,7 @@ The body is NOT a click target. Organs are opened from the Risk Board (calls `fo
 | GET    | `/api/space-weather`      | live NOAA proton flux (`now`) + recent NASA DONKI solar particle events and flares |
 | GET    | `/api/comms`              | one-way + round-trip Earth delay (JPL Horizons)       |
 | GET    | `/api/vitals`             | latest reading per metric + device list               |
+| GET    | `/api/hrp`                | NASA HRP framework: 5 hazards, 17 risks, organ + mission mapping, coverage, research studies |
 | GET    | `/api/sources`            | live / cache / fallback status of every data source (Engineer Mode) |
 | POST   | `/api/sources/refresh`    | re-fetch DONKI + Horizons                            |
 
@@ -247,6 +253,20 @@ Values marked ASSUMPTION in the code are our modeling choices, not published num
 ```
 `anchor` = [x from center line, height fraction from feet], same system as `REGIONS` in `src/three/body.js`.
 
+### 5.8 NASA challenge resources and how VITALIS uses them
+
+The challenge's Resources tab gives 5 links (no datasets). All are built into `backend/app/hrp.py`.
+
+| Resource | What we take from it | Where it shows up |
+|----------|----------------------|-------------------|
+| HRP 5 Hazards (nasa.gov/hrp/hazards) | radiation, isolation, distance, gravity, closed environment | every organ's `hazards`; pitch backbone |
+| HRP 17 Risks (nasa.gov/hrp/risks) | official risk names; SANS = NASA's leading risk | every organ's `hrp_risks`; new `eyes` system; 12/17 risks covered (incl. radiation + comms at mission level) |
+| Ongoing HRP research | Thigh Cuff, B-Complex, ARCHeR wrist actigraphy | eye countermeasures; ARCHeR = proof wearables fly (pitch) |
+| CSA radiation monitoring | neutrons ~30% of ISS radiation; CANS spectrometer | future dosimeter device adapter |
+| CSA why science in space | longer missions = more weightlessness, radiation, isolation, delay, less care | pitch problem statement |
+
+Pitch line: "NASA's Artemis II crew already wears a wrist device (ARCHeR). VITALIS turns that kind of data into decisions."
+
 ## 6. Milestones
 
 ### Phase 0: foundation (Zaid, ASAP, before partner edits code)
@@ -261,6 +281,7 @@ Values marked ASSUMPTION in the code are our modeling choices, not published num
 - [ ] Find + import organ models (heart, skeleton, brain, lungs, muscles), convert to .glb, fill manifest + CREDITS.md
 - [ ] Black silhouette body with halftone rim (`effects.js`)
 - [ ] `showRisks(ids)`: only ranked systems glow on the body; body itself not clickable
+- [ ] Eyes: add an `eyes` region/model (organ ID `eyes`) + Thigh Cuff fix animation
 - [ ] Organs glow from inside, `setOrganSeverity` maps to the blue scale
 - [ ] `focusOrgan` zoom with the inside glow
 
@@ -281,8 +302,9 @@ Routes never change between steps, only what is behind them, so the frontend kee
 |------|-------|------|------|
 | 1 [x] | Foundation | FastAPI, CORS, `/api/health`, `/api/state`, `/api/risks`, `/api/organs/{id}` from a fixed fixture | `curl :8001/api/risks`, open `:8001/docs` |
 | 2 [x] | Space environment | `constants.py`, `missions.py` (phase, gravity, dose, comms by day), JPL Horizons, NASA DONKI, NOAA SWPC, JSON cache; `/api/missions`, `/api/environment`, `/api/comms`, `/api/space-weather`, `/api/sources` | `python test_step2.py`, `/api/sources` says live or cache |
+| 2b [x] | NASA framework | `hrp.py` (5 hazards, 17 risks, organ + mission mapping, research), eyes added, `/api/hrp` | `python test_hrp.py` |
 | 3 [ ] | Devices | `DeviceAdapter` interface + simulated watch, CGM, med bay; `/api/vitals` | readings change on each call |
-| 4 [ ] | Engine | physiology + risk ranking replace the fixture, using the step 2 environment; `?day=`, `?mission=` | ranking + values match the fixture at day 184; day 240 differs |
+| 4 [ ] | Engine | physiology + risk ranking replace the fixture, using the step 2 environment and `hrp.py` tags; includes the eyes (SANS) model; `?day=`, `?mission=` | ranking + values match the fixture at day 184; day 240 differs |
 | 5 [ ] | Live | background sim loop + `/ws` (vitals every 1 s, state every 2 s) | frontend numbers move on their own |
 | 6 [ ] | Actions | `/api/countermeasure`, `/api/director/event` (storm replays a real DONKI event), `/api/mission` | event raises severity, countermeasure lowers it |
 | 7 [ ] | Triage | green/amber/red queue, Earth delay countdown, `/api/triage` | storm creates a red alert that gets a reply |
