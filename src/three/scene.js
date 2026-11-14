@@ -27,7 +27,11 @@ export const twin = {
   fly: null,
   hover: null,
   focus: null,
+  focusAt: 0,
   ghostTarget: 0,
+  bodyBox: null,
+  // Detail view camera: orbits the focused organ (drag to turn, scroll to zoom).
+  orbit: { on: false, focus: new THREE.Vector3(), yaw: 0, yawT: 0, pitch: 0, pitchT: 0, dist: 3, distT: 3, base: 3 },
 };
 
 export function flyTo(t, dur = 1500) {
