@@ -24,15 +24,23 @@ const PARTS = [
   { sys: 'sleep',   name: 'Brain',   layer: 'organs' },
   { sys: 'heart',   name: 'Heart',   layer: 'organs' },
   { sys: 'lungs',   name: 'Lungs',   layer: 'organs' },
+  { sys: 'digestion', name: 'Digestion', layer: 'organs', noData: true },   // TODO(backend): digestion data
   { sys: 'muscles', name: 'Muscles', layer: 'muscle' },
   { sys: 'bones',   name: 'Bones',   layer: 'skeleton' },
 ];
 
 // Models each layer shows in the 3D body.
-export const LAYER_MODELS = { muscle: ['muscles'], skeleton: ['bones'], organs: ['heart', 'lungs'] };
+export const LAYER_MODELS = { muscle: ['muscles'], skeleton: ['bones'], organs: ['sleep', 'heart', 'lungs', 'digestion'] };
 
 function tile(p) {
-  return `<button class="an-tile" data-sys="${p.sys}">
+  // Parts without data yet (digestion) can be found on the body but don't open a detail view.
+  if (p.noData) {
+    return `<div class="an-tile no-data" data-part="${p.sys}" tabindex="0">
+    <img src="assets/thumbs/${p.sys}.webp" alt="" loading="lazy" />
+    <span>${p.name}</span><small>No data yet</small>
+  </div>`;
+  }
+  return `<button class="an-tile" data-sys="${p.sys}" data-part="${p.sys}">
     <img src="assets/thumbs/${p.sys}.webp" alt="" loading="lazy" />
     <span>${p.name}</span>
   </button>`;
@@ -83,9 +91,9 @@ export function initAnatomyPanel(setHover) {
     });
   });
   $$('.an-tile').forEach(t => {
-    t.addEventListener('pointerenter', () => setHover(t.dataset.sys));
+    t.addEventListener('pointerenter', () => setHover(t.dataset.part));
     t.addEventListener('pointerleave', () => setHover(null));
-    t.addEventListener('focus', () => setHover(t.dataset.sys));
+    t.addEventListener('focus', () => setHover(t.dataset.part));
     t.addEventListener('blur', () => setHover(null));
   });
   setLayer('skin');
