@@ -203,7 +203,32 @@ The body is NOT a click target. Organs are opened from the Risk Board (calls `fo
 | POST   | `/api/countermeasure`     | body `{ organ, id }` -> updated OrganState           |
 | GET    | `/api/triage`             | list of alerts with level + Earth delay countdown    |
 | POST   | `/api/director/event`     | body `{ type }`: `radiation_storm`, `bad_sleep_week`, `bp_spike`, `skipped_exercise`, `reset` |
-| POST   | `/api/ask`                | body `{ question }` -> `{ answer, sources }`         |
+| POST   | `/api/ask`                | body `{ question }` -> `{ answer, sources, engine }` (Claude/OpenAI if key set, else rules) |
+| POST   | `/api/mission`            | body `{ mission }`: `mars`, `moon`, `iss` (switch the live mission) |
+| GET    | `/api/space-weather`      | real NASA DONKI solar particle events + flares, active storm |
+| GET    | `/api/comms`              | one-way + round-trip Earth delay (JPL Horizons)       |
+| GET    | `/api/vitals`             | latest reading per metric + device list               |
+| GET    | `/api/sources`            | live / cache / fallback status of every data source (Engineer Mode) |
+| POST   | `/api/sources/refresh`    | re-fetch DONKI + Horizons                            |
+
+WebSocket `/ws` messages: `{ "type": "vital", device, metric, value, unit, ts }` every second per metric,
+`{ "type": "state", "state": MissionState }` every 2 seconds and on connect.
+
+Frontend access: `src/data/client.js` exports `api` (one function per endpoint), `live` (latest state,
+risks, vitals, triage), `onData(fn)` and `missionInfo()`. If the backend is off it falls back to `mock.js`.
+In the browser console: `vitalis.api.director('radiation_storm')`.
+
+### 5.7 External data sources (backend/app/sources, numbers in backend/app/constants.py)
+
+| Source | Used for | Fallback |
+|--------|----------|----------|
+| NASA DONKI SEP + FLR (api.nasa.gov, CCMC mirror) | `radiation_storm` replays a real solar particle event | `backend/data/cache/`, then 4 seeded real events |
+| JPL Horizons API (quantity 21, light time) | Earth comms delay for triage | cache, then circular-orbit model |
+| NASA HRP bone risk (1-1.5%/month) | bone model | constant |
+| Curiosity RAD (1.84 / 0.64 mSv/day) | radiation dose | constant |
+| NASA-STD-3001 (600 mSv career, 250 mSv per event) | limits | constant |
+| Claude or OpenAI API | AI medical officer | rule-based answers from engine state |
+Values marked ASSUMPTION in the code are our modeling choices, not published numbers. Say so if judges ask.
 
 ### 5.6 Model manifest (`assets/models/manifest.json`)
 
@@ -236,14 +261,28 @@ The body is NOT a click target. Organs are opened from the Risk Board (calls `fo
 - [ ] `focusOrgan` zoom with the inside glow
 
 Backend owner:
-- [ ] FastAPI skeleton, `/api/health`, `/api/state`, CORS
-- [ ] Device adapters + simulator streaming vitals over `/ws`
-- [ ] Physiology engine for heart, bones, sleep (rates from NASA HRP, cite in code comments)
-- [ ] Mission risk scoring + ranking, `/api/risks` (mission presets in engine, Mars = hero)
+- [ ] Backend, built in layers: see 6.1
+- [x] `src/data/client.js` with mock fallback; Detail, spots, Crew radiation and Ask use live data
 - [ ] Risk Board UI (`src/ui/risk-board.js`): ranked cards, top 3 big, click -> detail
 - [ ] Detail view sections: Current state / What could go wrong / What to do
 - [ ] Remove click-to-open from body spots (spots become passive labels or go away)
 - [ ] `src/data/client.js` with fallback to mock
+
+### 6.1 Backend build steps (one layer at a time, test before moving on)
+
+The full first draft lives in `_old/backend_full/` (git-ignored) as a reference to copy from.
+Routes never change between steps, only what is behind them, so the frontend keeps working.
+
+| Step | Layer | Adds | Test |
+|------|-------|------|------|
+| 1 [x] | Foundation | FastAPI, CORS, `/api/health`, `/api/state`, `/api/risks`, `/api/organs/{id}` from a fixed fixture | `curl :8001/api/risks`, open `:8001/docs` |
+| 2 [ ] | Devices | `DeviceAdapter` interface + simulated watch, CGM, med bay; `/api/vitals` | readings change on each call |
+| 3 [ ] | Engine | `constants.py` (cited numbers), mission presets, physiology + risk ranking replace the fixture; `?day=`, `?mission=` | ranking + values match the fixture at day 184; day 240 differs |
+| 4 [ ] | Live | background sim loop + `/ws` (vitals every 1 s, state every 2 s) | frontend numbers move on their own |
+| 5 [ ] | Actions | `/api/countermeasure`, `/api/director/event`, `/api/mission` | event raises severity, countermeasure lowers it |
+| 6 [ ] | External data | JPL Horizons (comms delay), NASA DONKI (real storms), JSON cache, `/api/comms`, `/api/space-weather`, `/api/sources` | `/api/sources` says live or cache |
+| 7 [ ] | Triage | green/amber/red queue, Earth delay countdown, `/api/triage` | storm creates a red alert that gets a reply |
+| 8 [ ] | Officer | `/api/ask` with Claude/OpenAI, rule-based fallback | answer cites the crew's numbers |
 
 ### Phase 2: features (Sat night)
 - [ ] Timeline scrub (cruise to arrival) using `/api/state?day=`
