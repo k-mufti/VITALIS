@@ -108,6 +108,12 @@ export function rankedOrgans() {
   return ORGAN_IDS.map((id, i) => ({ rank: i + 1, ...organ(id) }));
 }
 
+// Real one-way delay to Earth for today, from JPL Horizons via the backend.
+// Falls back to the mock mission's value when the backend is off.
+export function commsDelayMin() {
+  return missionInfo().comms_delay_min;
+}
+
 // Mission numbers for the UI: live when online, mock otherwise.
 export function missionInfo() {
   if (live.state) return live.state;

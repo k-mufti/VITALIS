@@ -37,6 +37,7 @@
     <div class="who" id="who">
       <h1>Alex Reyes</h1>
       <p>Commander · Crew 03</p>
+      <p class="who-mission" id="whoMission">Mars transit · day 184</p>
     </div>
   </section>
 
@@ -44,7 +45,7 @@
   <div class="app" id="app">
     <header class="bar">
       <div class="logo">VITALIS</div>
-      <div class="bar-mid">Mission 001 <i>/</i> Crew 03</div>
+      <div class="bar-mid" id="barMission">Mars <i>/</i> Day 184 <i>/</i> Crew 03</div>
       <nav>
         <button class="tab on" data-view="body">Body</button>
         <button class="tab" data-view="crew">Crew</button>
@@ -66,30 +67,19 @@
       </div>
       <div class="body-foot">
         <div class="day"><span>Day</span><b id="bodyDay">184</b></div>
-        <div class="mission-pick">
-          <span>Mission</span>
-          <div class="mission-btns" id="missionBtns">
-            <button data-mission="mars" class="on">Mars</button>
-            <button data-mission="moon">Moon</button>
-            <button data-mission="iss">ISS</button>
-          </div>
-          <label class="day-slider">
-            <input type="range" id="dayRange" min="0" max="740" step="1" value="184" aria-label="Mission day" />
-            <em id="dayLabel">Day 184 · cruise</em>
-          </label>
-        </div>
-        <button class="status" id="riskOpen">Things to watch <span>→</span></button>
+        <p class="mission-line" id="missionLine">Mars transit · day 184</p>
       </div>
-      <aside class="today" id="today" aria-label="Today's health checks"></aside>
 
-      <aside class="risk-panel">
+      <aside class="risk-rail" aria-label="Things to watch">
         <header>
-          <button class="risk-close" id="riskClose" aria-label="Close">Close ✕</button>
           <h2>Things to watch</h2>
           <p id="riskSub">Mars · day 184</p>
         </header>
         <div class="risk-list" id="riskList"></div>
-        <button class="history-btn" id="historyBtn">Medical history <span>→</span></button>
+        <div class="rail-actions">
+          <button class="rail-btn" id="checkinOpen">Check in <span>→</span></button>
+          <button class="rail-btn" id="historyBtn">Medical history <span>→</span></button>
+        </div>
       </aside>
 
       <p class="hint">Drag to turn</p>
@@ -171,6 +161,16 @@
       <aside class="proof" id="proof"></aside>
     </section>
 
+    <!-- TODAY'S CHECKS -->
+    <div class="drawer" id="todayDrawer">
+      <div class="scrim" data-close></div>
+      <div class="sheet">
+        <button class="close" data-close>Close ✕</button>
+        <h2>Today's checks</h2>
+        <aside class="today" id="today" aria-label="Today's health checks"></aside>
+      </div>
+    </div>
+
     <div class="ci-shade" id="ciShade"></div>
     <aside class="checkin" id="checkin" aria-label="Check in"></aside>
     <div class="toast" id="toast" role="status"></div>
@@ -178,7 +178,7 @@
     <footer class="foot">Demo · all readings are made up</footer>
 
     <!-- MEDICAL HISTORY -->
-    <div class="history" id="history">
+    <div class="drawer" id="history">
       <div class="scrim" id="historyScrim"></div>
       <div class="sheet">
         <button class="close" id="historyClose">Close ✕</button>

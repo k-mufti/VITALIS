@@ -1,13 +1,16 @@
 import { $, $$ } from '../util.js';
-import { live, onData, rankedOrgans, missionInfo, setMission, setPreviewDay } from '../data/client.js';
+import { live, onData, rankedOrgans, missionInfo } from '../data/client.js';
 import { setHoverOrgan } from '../three/api.js';
 import { openSystem } from './detail.js';
 
-/* Risk panel on the right of the body: every system ranked worst first, with how bad it is
-   now and what it could lead to. Click a card to fly into that organ. The body stays
-   clickable too, so both routes open the same detail view. */
+/* The right rail of the Body view: only the systems that need attention, each as its own box,
+   worst first, with how bad it is now (Mild / Extreme) and what it could lead to.
+   The anatomy panel on the left lists every system head to toe; this rail answers
+   "what should I deal with today". Clicking a box flies into that organ, exactly like
+   clicking the system on the body (rules.md section 1.5). */
 
 const LEVEL_WORD = { low: 'Low', mild: 'Mild', extreme: 'Extreme' };
+const PHASE_WORD = { cruise: 'transit', surface: 'surface' };
 
 function card(o) {
   const level = o.level || 'low';
@@ -20,15 +23,22 @@ function card(o) {
     <div class="risk-main">
       <div class="risk-top"><b>${o.name}</b><span class="lvl ${level}">${LEVEL_WORD[level]}</span></div>
       <em>${o.value} ${o.unit}</em>
-      <div class="bar"><i style="width:${pct}%"></i></div>
+      <div class="sev"><i style="width:${pct}%"></i></div>
       ${effect}
     </div>
   </button>`;
 }
 
 function renderList() {
-  const organs = rankedOrgans();
-  $('#riskList').innerHTML = organs.map(card).join('');
+  const problems = rankedOrgans().filter(o => (o.level || 'low') !== 'low');
+  const sub = $('#riskSub');
+  if (!problems.length) {
+    $('#riskList').innerHTML = '<p class="risk-clear">Every system is in its usual range today.</p>';
+    sub.textContent = 'Nothing needs attention';
+    return;
+  }
+  sub.textContent = `${problems.length} system${problems.length > 1 ? 's' : ''} need${problems.length > 1 ? '' : 's'} attention`;
+  $('#riskList').innerHTML = problems.map(card).join('');
   $$('#riskList .risk').forEach(b => {
     const id = b.dataset.sys;
     b.addEventListener('click', () => openSystem(id));
@@ -37,61 +47,27 @@ function renderList() {
   });
 }
 
-function renderMission() {
+/* The mission is known from the moment the crew member signs in. It is shown in three
+   places and chosen in none of them: swapping missions is a demo control (director.js). */
+export function renderMission() {
   const m = missionInfo();
-  const day = m.day;
-  $('#riskSub').textContent = `${m.mission_name} · day ${day}`;
-  $('#bodyDay').textContent = day;
-  $$('#missionBtns button').forEach(b => b.classList.toggle('on', b.dataset.mission === m.mission));
-  const range = $('#dayRange');
-  range.max = m.end_day || 740;
-  if (live.previewDay === null) range.value = day;
-  const label = $('#dayLabel');
-  label.textContent = `Day ${day} · ${m.phase || 'cruise'}`;
-  label.classList.toggle('preview', live.previewDay !== null);
-  if (live.previewDay !== null) label.textContent += ' · preview';
+  const phase = PHASE_WORD[m.phase] || 'transit';
+  const where = `${m.mission_name} ${phase} · day ${m.day}`;
+  $('#bodyDay').textContent = m.day;
+  const line = $('#missionLine');
+  if (line) line.innerHTML = `<b>${m.mission_name}</b> ${phase} · day ${m.day}`;
+  const bar = $('#barMission');
+  if (bar) bar.innerHTML = `${m.mission_name} <i>/</i> Day ${m.day} <i>/</i> Crew ${m.crew_id || '03'}`;
+  const who = $('#whoMission');
+  if (who) who.textContent = where;
 }
 
 export function initRiskBoard() {
   renderMission();
   renderList();
-
-  $$('#missionBtns button').forEach(b => b.addEventListener('click', async () => {
-    if (!live.online) return;
-    await setMission(b.dataset.mission);
-  }));
-
-  // Drag the slider to see the body later in the mission. Release near today to go back live.
-  const range = $('#dayRange');
-  let timer = null;
-  range.addEventListener('input', () => {
-    if (!live.online) return;
-    const day = +range.value;
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      const liveDay = (live.state && live.state.day) || 0;
-      setPreviewDay(day === liveDay ? null : day);
-    }, 90);
-  });
-  range.addEventListener('dblclick', () => setPreviewDay(null));
-
   onData(type => {
     if (type !== 'state') return;
     renderMission();
     renderList();
-  });
-
-  // Drawer: the Today panel keeps the right side, so this panel slides in from
-  // "Things to watch →". Closes on ✕, Escape, a click outside, or after picking a system.
-  const panel = $('.risk-panel');
-  const setOpen = on => panel.classList.toggle('open', on);
-  $('#riskOpen').addEventListener('click', () => setOpen(!panel.classList.contains('open')));
-  $('#riskClose').addEventListener('click', () => setOpen(false));
-  $('#riskList').addEventListener('click', e => { if (e.target.closest('.risk')) setOpen(false); });
-  addEventListener('keydown', e => { if (e.key === 'Escape') setOpen(false); });
-  addEventListener('pointerdown', e => {
-    if (!panel.classList.contains('open')) return;
-    if (panel.contains(e.target) || e.target.closest('#riskOpen')) return;
-    setOpen(false);
   });
 }

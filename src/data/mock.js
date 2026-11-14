@@ -47,11 +47,10 @@ export const ROUTINE = [
 
 export const SHIP_TIME = '12:04';
 export const STREAK = 12;            // days in a row with every check done
-export const COMMS_DELAY_MIN = 12.4; // one-way message delay to Earth today
 
 // Mission numbers used when the backend is off. Matches the backend's default (Mars, day 184).
 // Radiation = 184 days x 1.84 mSv/day (Curiosity RAD cruise rate). Limit = NASA-STD-3001 career limit.
 export const MOCK_MISSION = {
-  mission: 'mars', mission_name: 'Mars', day: 184, arrival_day: 240,
+  mission: 'mars', mission_name: 'Mars', day: 184, arrival_day: 240, phase: 'cruise', end_day: 740, crew_id: '03',
   comms_delay_min: 5.44, radiation_msv: 338.6, radiation_career_limit_msv: 600, radiation_event_limit_msv: 250,
 };
