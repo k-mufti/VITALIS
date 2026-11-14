@@ -19,9 +19,15 @@ Agents: read `plan.md` and this file fully before making any change.
 
 ## 1.5 Product rules (do not break these)
 
-- Navigation is risk-first. The main screen shows the body with the risk panel beside it:
-  every system ranked by `mission_risk` for the current mission, worst first, each with how bad
-  it is now (Low / Mild / Extreme) and what it could lead to.
+- Navigation is risk-first. The Body view has two lists and they do NOT overlap:
+  - LEFT, anatomy panel (`src/three/anatomy-panel.js`): every system head to toe, by 3D layer.
+    This is "where is it".
+  - RIGHT, risk rail (`src/ui/risk-board.js`): ONLY the systems above Low, worst first, each in
+    its own box with its level (Mild / Extreme) and what it could lead to. This is "what do I
+    deal with today". When everything is Low it says so instead of listing anything.
+- The mission is shown, never chosen, in the app: sign-in reveals it, the top bar and the body
+  view display it. Swapping missions is a demo control in the director panel (key D), because a
+  crew member cannot change which mission they are on.
 - There are TWO ways into an organ and both must keep working: clicking its card in the risk
   panel, and clicking the system on the body itself. Both call `openSystem(id)` in `src/ui/detail.js`.
 - The risk panel is the answer to "where do I look"; the body is the answer to "where is it".
@@ -30,6 +36,19 @@ Agents: read `plan.md` and this file fully before making any change.
   Never hardcode the order in 3D or UI code.
 - Every detail view has three parts: Current state, What could go wrong (on this mission), What to do.
 - Severity words come from the backend's `level` field (low / mild / extreme). Never recompute them in the UI.
+- Numbers shown to the crew come from the backend, not from hardcoded constants. The Earth comms
+  delay is `commsDelayMin()` (real JPL Horizons), never a literal.
+- Two panels at the bottom of the rail, one job each: "Check in" opens today's checks,
+  "Medical history" opens the mission record. Never merge them.
+
+## 1.6 CSS class names
+
+`styles.css` owns short global class names, and a nested rule does NOT undo them. `.bar` is the
+top header: `position: absolute; top: 0; z-index: 20`. Writing `.risk .bar` inherited all of that
+and threw every card's severity bar to the top of the screen.
+
+- Before adding a class, grep `styles.css` for it. If it exists, pick another name.
+- Prefix new classes in your own area: `risk-`, `ci-`, `t-`, `hist-`, `d-`.
 
 ## 2. Git workflow
 

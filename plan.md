@@ -90,7 +90,10 @@ src/
     (add: organs.js, effects.js, fixes.js as you build them)
   ui/                   BACKEND OWNER (views that render data)
     body-view.js  detail.js  crew.js  ask.js
-    risk-board.js         risk panel + mission picker + mission-day slider
+    risk-board.js         right rail: problem systems as independent boxes + mission display
+    director.js           demo controls (key D): mission swap, day scrub, events
+    today.js              today's checks drawer
+    checkin.js            check-in form drawer
     history.js            medical history drawer
     (add: triage.js  engineer.js  director.js  voice.js)
   data/                 BACKEND OWNER
@@ -312,8 +315,10 @@ Pitch line: "NASA's Artemis II crew already wears a wrist device (ARCHeR). VITAL
 Backend owner:
 - [x] Backend, built in layers: see 6.1 (all routes the frontend uses are live; tests: test_engine.py, test_hrp.py, test_step2.py, verify_sources.py)
 - [x] `src/data/client.js` with mock fallback; Detail, spots, Crew radiation and Ask use live data
-- [x] Risk panel (`src/ui/risk-board.js`): ranked cards with Low/Mild/Extreme + what it could lead to, click -> detail
-- [x] Mission picker (Mars / Moon / ISS) + mission-day slider that previews the body later in the mission
+- [x] Risk rail (`src/ui/risk-board.js`): only systems above Low, each its own box, with level + what it could lead to, click -> detail
+- [x] Check in and Medical history as two separate buttons at the bottom of the rail
+- [x] Mission shown at sign-in, in the top bar and under the day; Mars/Moon/ISS swap + day scrub
+      moved to the director panel (key D), since the mission is not the crew member's to choose
 - [x] Medical history drawer (`src/ui/history.js`) from `/api/history`
 - [x] Detail view sections: Current state / What could go wrong / What to do
 - [x] Body spots stay clickable and cover all six systems
