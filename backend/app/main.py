@@ -3,6 +3,7 @@
 Step 1 (foundation): health, state, risks, organs. Organ data still comes from a fixed fixture.
 Step 2 (space environment): mission physics + JPL Horizons, NASA DONKI, NOAA SWPC with cache fallback.
   The environment numbers in /api/state (date, phase, comms delay, radiation) are now computed.
+  Every organ is tagged with its NASA HRP risks and hazards (app/hrp.py, from the challenge resources).
 
 Run from backend/:  uvicorn app.main:app --reload --port 8001
 """
@@ -18,6 +19,7 @@ load_dotenv()
 from fastapi import FastAPI, HTTPException  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
+from . import hrp  # noqa: E402
 from . import missions as M  # noqa: E402
 from .sources import donki, horizons, noaa  # noqa: E402
 
@@ -61,6 +63,8 @@ def load_state():
     state = json.loads(FIXTURE.read_text())
     state.update(M.environment())
     state["storm"] = None
+    for organ_id, organ in state["organs"].items():
+        organ.update(hrp.tags_for(organ_id))
     return state
 
 
@@ -119,6 +123,12 @@ def get_space_weather():
         "recent_flares": donki.flares()[:10],
         "status": {**donki.status, **noaa.status},
     }
+
+
+@app.get("/api/hrp")
+def get_hrp():
+    """NASA HRP framework from the challenge resources: 5 hazards, 17 risks, organ mapping, research."""
+    return hrp.framework()
 
 
 @app.get("/api/sources")
