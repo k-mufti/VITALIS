@@ -1,6 +1,7 @@
 import { uni, framing, applyFraming, setAuraVisible } from './body.js';
 import { renderer, backdrop, twin } from './scene.js';
 import { STYLES } from './effects.js';
+import { organFx } from './organs.js';
 
 /*
   FX dev panel for trying looks. Only loads with ?dev in the URL. Toggle with the ` (backtick) key.
@@ -21,6 +22,12 @@ const DEFAULTS = {
   bgGradient: 0, bgColA: '#c4c4be', bgColB: '#0aa5bd', bgPulse: 0, bgPulseSpeed: .25,
   // Adaptive
   adaptive: false, health: 0,
+  // Organs (3D models)
+  orgStyle: 0, orgEdge: .45, orgShade: .3, orgDot: '#7fe9ff',
+  tintHeart: '#0a1f6b', tintLungs: '#1f5fd1', tintBones: '#13308f', tintMuscles: '#1846c4',
+  // Skeleton arm fit (fractions of body height)
+  armOn: true, armMuscles: false, armAngle: 18, armElbow: 8,
+  armShoulderX: .105, armShoulderY: .81, armElbowY: .63, armStart: .095, armBlend: .015,
 };
 const STORE_KEY = 'vitalis-fx';
 const VERSION = 2;  // bump to push new defaults over saved settings
@@ -66,6 +73,28 @@ const CONTROLS = [
   { k: 'bgColB', label: 'Gradient color', type: 'color', when: f => f.bgGradient > 0 },
   { k: 'bgPulse', label: 'Pulse', min: 0, max: 1, step: .01 },
   { k: 'bgPulseSpeed', label: 'Pulse speed', min: .05, max: 2, step: .01, when: f => f.bgPulse > 0 || f.adaptive },
+
+  { section: 'Organs' },
+  { k: 'orgStyle', label: 'Organ style', type: 'choice', options: ['Halftone', 'Silhouette'] },
+  { k: 'orgEdge', label: 'Edge dots', min: 0, max: 1, step: .01, when: f => f.orgStyle === 0 },
+  { k: 'orgShade', label: 'Shading dots', min: 0, max: 1, step: .01, when: f => f.orgStyle === 0 },
+  { k: 'orgDot', label: 'Dot color', type: 'color', when: f => f.orgStyle === 0 },
+  { k: 'tintHeart', label: 'Heart', type: 'color' },
+  { k: 'tintLungs', label: 'Lungs', type: 'color' },
+  { k: 'tintBones', label: 'Skeleton', type: 'color' },
+  { k: 'tintMuscles', label: 'Muscles', type: 'color' },
+
+  { section: 'Skeleton fit' },
+  { k: 'armOn', label: 'Bend arms to match body', type: 'check' },
+  { k: 'armMuscles', label: 'Also bend muscle model', type: 'check', when: f => f.armOn },
+  { k: 'armAngle', label: 'Arm angle', min: -10, max: 45, step: .5, when: f => f.armOn },
+  { k: 'armElbow', label: 'Elbow angle', min: -20, max: 40, step: .5, when: f => f.armOn },
+  { k: 'armShoulderX', label: 'Shoulder width', min: .06, max: .16, step: .001, when: f => f.armOn },
+  { k: 'armShoulderY', label: 'Shoulder height', min: .7, max: .9, step: .001, when: f => f.armOn },
+  { k: 'armElbowY', label: 'Elbow height', min: .5, max: .75, step: .001, when: f => f.armOn },
+  { k: 'armStart', label: 'Arm starts at', min: .06, max: .14, step: .001, when: f => f.armOn },
+  { k: 'armBlend', label: 'Arm blend', min: .002, max: .05, step: .001, when: f => f.armOn },
+  { type: 'note', text: 'Open Body → Bones to see the skeleton. Line the arms up with the body behind it.', when: f => f.armOn },
 
   { section: 'Adaptive' },
   { k: 'adaptive', label: 'Follow crew health', type: 'check' },
@@ -123,6 +152,19 @@ function apply() {
   b.uPulseSpeed.value = fx.bgPulseSpeed;
   b.uAdaptive.value = fx.adaptive ? 1 : 0;
   twin.testSeverity = fx.adaptive ? fx.health : 0;
+  // Organs
+  organFx.style = fx.orgStyle;
+  organFx.edge = fx.orgEdge;
+  organFx.shade = fx.orgShade;
+  organFx.dotColor = fx.orgDot;
+  organFx.tints.heart = fx.tintHeart;
+  organFx.tints.lungs = fx.tintLungs;
+  organFx.tints.bones = fx.tintBones;
+  organFx.tints.muscles = fx.tintMuscles;
+  Object.assign(organFx.arm, {
+    on: fx.armOn, muscles: fx.armMuscles, angle: fx.armAngle, elbow: fx.armElbow,
+    shoulderX: fx.armShoulderX, shoulderY: fx.armShoulderY, elbowY: fx.armElbowY, start: fx.armStart, blend: fx.armBlend,
+  });
   // Framing
   framing.size = fx.size;
   framing.lift = fx.lift;
