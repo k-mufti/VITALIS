@@ -10,6 +10,7 @@ import { initCheckin } from './ui/checkin.js';
 import { initRiskBoard } from './ui/risk-board.js';
 import { initHistory } from './ui/history.js';
 import { initDirector } from './ui/director.js';
+import { initSources } from './ui/sources.js';
 import { initData } from './data/client.js';
 
 /* VITALIS demo. Every reading here is made up.
@@ -27,6 +28,7 @@ initCheckin();
 initRiskBoard();
 initHistory();
 initDirector();
+initSources();
 initData();
 
 (function loop(now) {

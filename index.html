@@ -175,7 +175,24 @@
     <aside class="checkin" id="checkin" aria-label="Check in"></aside>
     <div class="toast" id="toast" role="status"></div>
 
-    <footer class="foot">Demo · all readings are made up</footer>
+    <footer class="foot">Demo · crew readings are simulated · mission data is live
+      <button id="sourcesBtn">Where this data comes from →</button></footer>
+
+    <!-- WHERE THE DATA COMES FROM -->
+    <div class="drawer" id="sources">
+      <div class="scrim" data-close></div>
+      <div class="sheet">
+        <button class="close" data-close>Close ✕</button>
+        <h2>Where this data comes from</h2>
+        <div class="hist-sum" id="srcSum"></div>
+        <p class="hist-sec">Live APIs · re-runnable by anyone</p>
+        <div id="srcLive"></div>
+        <p class="hist-sec">Published measured values</p>
+        <div id="srcPub"></div>
+        <p class="hist-sec">Our assumptions · not NASA numbers</p>
+        <div id="srcAssume"></div>
+      </div>
+    </div>
 
     <!-- MEDICAL HISTORY -->
     <div class="drawer" id="history">
