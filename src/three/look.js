@@ -5,8 +5,8 @@ import { organFx } from './organs.js';
 /*
   The VITALIS look: every visual setting for the 3D twin (body style, organ colours and
   positions, skeleton / muscle limb poses, framing) and the code that applies it.
-  CHOSEN_LOOK below is the look picked in the FX dev panel; applyDefaultLook() uses it.
-  The FX panel itself (devpanel.js) is a developer tool and is not needed for this file.
+  CHOSEN_LOOK below is the look picked in the FX dev panel (kept on the 3d/organ-halftone branch);
+  applyDefaultLook() uses it. To change the look, edit CHOSEN_LOOK.
 */
 
 export const DEFAULTS = {

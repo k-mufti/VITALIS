@@ -5,7 +5,7 @@ import { REGIONS, uni, skin, loadBody, pt } from './body.js';
 import { organs, loadOrgan, prefetchOrgans, updateOrgans, has3dOrgan, organFrame } from './organs.js';
 import { DRAWINGS } from './organ-drawings.js';
 import { initAnatomyPanel } from './anatomy-panel.js';
-import { initDevPanel } from './devpanel.js';
+import { applyDefaultLook } from './look.js';
 
 /* The ONLY 3D functions the rest of the app should call (plan.md section 5.4).
    Anything inside src/three/ can change as long as these keep working. */
@@ -14,7 +14,7 @@ export function initTwin() {
   initScene();
   loadBody();
   initAnatomyPanel(setHoverOrgan);
-  initDevPanel();
+  applyDefaultLook();
 }
 
 // Layers that show the body as glass, so what's inside can be seen.
