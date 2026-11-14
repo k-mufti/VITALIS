@@ -1,0 +1,26 @@
+/* Demo data. Every reading here is made up.
+   Will be replaced by src/data/client.js (backend) with this file as the fallback. */
+
+export const SYS = {
+  lungs: { name: 'Lungs', value: 16, unit: 'breaths a minute', usual: '14–18', l2: 'Oxygen', v2: '98%', state: 'ok',
+    note: 'Breathing is steady. Right where it usually is.', week: [15, 16, 15, 17, 16, 16, 16], jitter: [15, 17] },
+  heart: { name: 'Heart', value: 64, unit: 'beats a minute at rest', usual: '54–62', l2: 'Rhythm', v2: 'Regular', state: 'watch',
+    note: 'Resting rate has been a little high for 3 days. Worth watching.', week: [57, 58, 57, 60, 62, 63, 64], jitter: [63, 65] },
+  sleep: { name: 'Sleep & mind', value: 6.2, unit: 'hours slept', usual: '7–8 h', l2: 'Reaction test', v2: 'Normal', state: 'watch',
+    note: 'Sleeping less than usual this week. Focus is still normal.', week: [7.3, 7.1, 7.0, 6.8, 6.5, 6.4, 6.2] },
+  muscles: { name: 'Muscles', value: 87, unit: 'recovery out of 100', usual: '80–95', l2: 'Workout today', v2: '45 min', state: 'ok',
+    note: 'Recovered well from yesterday’s workout.', week: [84, 88, 82, 90, 86, 85, 87] },
+};
+
+export const CREW = [
+  { n: 'Reyes', id: '03', role: 'Commander', watch: true, note: 'Alex Reyes: resting heart rate up, sleep down. Worth watching.' },
+  { n: 'Kim', id: '01', role: 'Engineer', note: 'Maya Kim: everything in her normal range.' },
+  { n: 'Laurent', id: '02', role: 'Scientist', note: 'Sofia Laurent: everything in her normal range.' },
+  { n: 'Okafor', id: '04', role: 'Doctor', note: 'Jonah Okafor: everything in his normal range.' },
+  { n: 'Nakamura', id: '05', role: 'Pilot', watch: true, note: 'Theo Nakamura: sore lower back after exercise. Resting today.' },
+  { n: 'Alvarez', id: '06', role: 'Geologist', note: 'Elena Alvarez: everything in her normal range.' },
+];
+
+// Last 12 readings for crew 03, used by the Ask charts.
+export const heartHistory = [58, 57, 59, 60, 59, 61, 62, 61, 63, 62, 64, 64];
+export const sleepHistory = [7.2, 7.0, 7.1, 6.9, 6.8, 6.6, 6.7, 6.5, 6.4, 6.4, 6.3, 6.2];

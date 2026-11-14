@@ -22,11 +22,12 @@ Submission deadline: Sunday Nov 15, 11:59 PM (submit early).
 Working prototype, vanilla JS, no build step, three.js from CDN via importmap.
 
 - `index.html`: all screens in one file (sign-in, Body, Detail, Crew, Ask).
-- `app.js` (~28 KB, one file): sign-in fingerprint, 3D body (FBX + custom shader with cyan
-  highlight and "glass" mode), organ SVG drawings, crew view, scripted Ask answers, main loop.
+- `src/`: the old single `app.js` was split into modules by owner (section 4) with no behavior change.
+  3D body = FBX + custom shader with cyan highlight and "glass" mode. Organ SVG drawings, crew view,
+  scripted Ask answers.
 - `styles.css`: all styles.
 - `malebody.fbx` (5.3 MB): the body model.
-- All data is hardcoded in `app.js` (`SYS`, `CREW`, `ANSWERS`, chart arrays). No backend yet.
+- All data is hardcoded in `src/data/mock.js`. No backend yet.
 - Run it: `python3 -m http.server 8000` then open http://localhost:8000
 
 Gaps vs. the plan: no backend, no live data, no bones system, no timeline projection,
@@ -47,23 +48,26 @@ no fix animations, no triage queue, no voice, no halftone style, no Engineer Mod
 index.html              SHARED  (screens, script tags)
 styles.css              SHARED  (existing styles, do not reorganize)
 styles/
-  three.css             3D owner
+  three.css             3D owner   (create when needed, link in index.html)
   data-ui.css           Backend owner
 src/
-  main.js               SHARED  (boot, navigation, main loop only)
-  signin.js             SHARED  (rarely touched)
+  main.js               SHARED  (boot + main loop only)
+  nav.js                SHARED  (switching views)
+  state.js              SHARED  (current view, open system)
+  util.js               SHARED  ($, $$, ease)
+  signin.js             SHARED  (fingerprint screen, rarely touched)
   three/                3D OWNER
-    scene.js            renderer, camera, lights, resize, drag
-    body.js             body loading, regions, raycast anchors
-    organs.js           organ meshes, glow, severity -> color
-    effects.js          halftone / silhouette post-processing
-    fixes.js            fix (countermeasure) animations
+    scene.js            renderer, camera, lights, resize, drag, camera flights
+    body.js             body model, skin shader, regions, raycast anchors
+    organ-drawings.js   organ drawings in the Detail view + their motion
     api.js              the ONLY functions other code calls (see contract 5.4)
+    (add: organs.js, effects.js, fixes.js as you build them)
   ui/                   BACKEND OWNER (views that render data)
-    detail.js  crew.js  ask.js  timeline.js  triage.js  engineer.js  director.js  voice.js
+    body-view.js  detail.js  crew.js  ask.js
+    (add: timeline.js  triage.js  engineer.js  director.js  voice.js)
   data/                 BACKEND OWNER
-    client.js           REST + WebSocket client, falls back to mock.js if backend is down
-    mock.js             current hardcoded SYS / CREW / chart data moved here
+    mock.js             demo data (SYS, CREW, histories)
+    (add: client.js     REST + WebSocket client, falls back to mock.js)
 assets/
   models/               3D OWNER  (.glb files + manifest.json + CREDITS.md)
 backend/                BACKEND OWNER
@@ -144,10 +148,12 @@ MissionState:
 ### 5.4 3D API (`src/three/api.js`) - the only 3D functions the rest of the app calls
 
 ```js
-initTwin(containerEl)                    // load scene + body + organs
+initTwin()                               // load scene + body (renders into #stage3d)
+renderTwin(now, pulse)                   // called every frame by main.js
+setHoverOrgan(organId)                   // highlight while hovering a spot (null clears)
 setOrganSeverity(organId, severity)      // 0..1, drives blue + halftone density
 focusOrgan(organId)                      // camera flies in, organ glows from inside
-resetView()                              // back to full body
+resetView(instant)                       // back to full body
 playFix(organId, fixId)                  // returns a Promise that resolves when the animation ends
 setHeartRate(bpm)                        // heart beats in sync with live data
 onOrganClick(callback)                   // callback(organId)
@@ -178,15 +184,16 @@ onOrganClick(callback)                   // callback(organId)
   }
 }
 ```
-`anchor` = [x from center line, height fraction from feet], same system as `REGIONS` in the current `app.js`.
+`anchor` = [x from center line, height fraction from feet], same system as `REGIONS` in `src/three/body.js`.
 
 ## 6. Milestones
 
 ### Phase 0: foundation (Zaid, ASAP, before partner edits code)
-- [ ] Split `app.js` into the `src/` modules above with NO behavior change. Push. Partner pulls.
-- [ ] Move hardcoded data into `src/data/mock.js`
-- [ ] Wrap current 3D code behind `src/three/api.js`
-- [ ] Add `.env`, `.venv/`, `__pycache__/`, `node_modules/` to `.gitignore`
+- [x] Split `app.js` into the `src/` modules above with NO behavior change
+- [x] Move hardcoded data into `src/data/mock.js`
+- [x] Wrap current 3D code behind `src/three/api.js` (contract functions stubbed with TODO(3d))
+- [x] Add `.env`, `.venv/`, `__pycache__/`, `node_modules/` to `.gitignore`
+- [ ] Push to `main`. Partner pulls before writing any code.
 
 ### Phase 1: parallel build (Sat afternoon)
 3D owner:
