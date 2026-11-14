@@ -13,7 +13,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.NoToneMapping;  // keep the black pure and the paper dots exact
 renderer.domElement.style.position = 'relative';  // sit above the halftone backdrop
 host.append(renderer.domElement);
-export const backdrop = createHalftoneBackdrop(host);
+export const backdrop = createHalftoneBackdrop(scene, renderer);
 scene.add(new THREE.HemisphereLight(0xffffff, 0x2a2f31, 1.1));
 const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(-3, 5, 6); scene.add(key);
 const rim = new THREE.DirectionalLight(0xffffff, 2.4); rim.position.set(3, 3, -5); scene.add(rim);
@@ -31,6 +31,8 @@ export const twin = {
   hover: null,
   focus: null,
   ghostTarget: 0,
+  severity: {},      // organId -> 0..1, from setOrganSeverity
+  testSeverity: 0,   // FX panel preview
 };
 
 export function flyTo(t, dur = 1500) {

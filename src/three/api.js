@@ -50,8 +50,11 @@ export function resetView(instant) {
   flyTo({ pos: HOME.pos.clone(), look: HOME.look.clone(), done: () => twin.body && $('#spots').classList.remove('hide') }, 1200);
 }
 
-// TODO(3d): severity 0..1 drives the blue scale + halftone density (plan.md 5.2).
-export function setOrganSeverity(organId, severity) {}
+// Severity 0..1 per organ (plan.md 5.2). The worst organ drives the background halftone.
+// TODO(3d): also tint the organ itself on the blue scale.
+export function setOrganSeverity(organId, severity) {
+  twin.severity[organId] = Math.min(1, Math.max(0, severity));
+}
 
 // TODO(3d): play a fix animation, resolve when it ends.
 export function playFix(organId, fixId) {
@@ -68,6 +71,7 @@ export function onOrganClick(callback) {}
 const v = new THREE.Vector3();
 export function renderTwin(now, pulse) {
   if (twin.autoTurn && !twin.focus) twin.rotTarget += .004;
+  backdrop.update(now, Math.max(twin.testSeverity, ...Object.values(twin.severity)));
   twin.rot += (twin.rotTarget - twin.rot) * .08;
   pivot.rotation.y = twin.rot;
   if (twin.fly) {

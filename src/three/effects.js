@@ -11,7 +11,7 @@ import * as THREE from 'three';
 
   Hover:      region fills with cyan dots + thin cyan ring.
   Zoomed in:  body turns into an x-ray of black dots; focused region pulses cyan.
-  Backdrop:   halftone floor shadow + halo behind the body.
+  Backdrop:   halftone glow + floor shadow behind the body (adaptive to health).
 */
 
 const PAPER = '#f5f5f2';
@@ -135,48 +135,88 @@ diffuseColor.a = pow(f, 1.6) * uAura * (1.0 - uGhost) * ${((1.15 - k) / shells *
   return mats;
 }
 
-// Halftone backdrop canvas, drawn behind the WebGL canvas inside `host`.
-export function createHalftoneBackdrop(host) {
-  const canvas = document.createElement('canvas');
-  canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;transition:opacity .9s;';
-  host.prepend(canvas);
-  let strength = .5;
+// Halftone backdrop: a full-screen quad drawn behind the body (GPU, so it can animate).
+// Adaptive mode follows plan.md 5.2: healthy = pale cyan, severe = deep navy,
+// dots get denser and pulse faster as severity rises.
+export function createHalftoneBackdrop(scene, renderer) {
+  const u = {
+    uRes: { value: new THREE.Vector2(1, 1) }, uDpr: { value: 1 }, uTime: { value: 0 }, uFade: { value: 1 },
+    uIntensity: { value: 1 }, uCell: { value: 7 }, uDotScale: { value: .48 }, uShape: { value: 0 }, uAngle: { value: 45 },
+    uGlowW: { value: 1 }, uGlowH: { value: 1 }, uGlowY: { value: .5 }, uFloor: { value: 1 },
+    uGradient: { value: 0 }, uColA: { value: new THREE.Color('#c4c4be') }, uColB: { value: new THREE.Color('#0aa5bd') },
+    uPulse: { value: 0 }, uPulseSpeed: { value: .25 },
+    uAdaptive: { value: 0 }, uSeverity: { value: 0 },
+    uHealthy: { value: new THREE.Color('#7FE9FF') }, uSevere: { value: new THREE.Color('#0A1F6B') },
+  };
+  const mat = new THREE.ShaderMaterial({
+    uniforms: u, transparent: true, depthTest: false, depthWrite: false,
+    vertexShader: `void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+    fragmentShader: `
+uniform vec2 uRes;
+uniform float uDpr, uTime, uFade, uIntensity, uCell, uDotScale, uShape, uAngle, uGlowW, uGlowH, uGlowY, uFloor;
+uniform float uGradient, uPulse, uPulseSpeed, uAdaptive, uSeverity;
+uniform vec3 uColA, uColB, uHealthy, uSevere;
+// Distance inside an ellipse: 0 at the centre, 1 on the edge.
+float ell(vec2 p, vec2 c, vec2 r) { return length((p - c) / r); }
+void main() {
+  vec2 res = uRes / uDpr;                       // CSS pixels
+  vec2 p = gl_FragCoord.xy / uDpr;
+  p.y = res.y - p.y;                            // y down, like the page
+  float h = res.y;
+  float a = radians(uAngle);
+  mat2 R = mat2(cos(a), sin(a), -sin(a), cos(a));
+  vec2 g = R * p / uCell;
+  vec2 pc = transpose(R) * ((floor(g) + .5) * uCell);   // centre of this dot's cell
+  vec2 f = fract(g) - .5;
+  float d = length(f);
+  if (uShape > .5) d = max(abs(f.x), abs(f.y));
+  if (uShape > 1.5) d = abs(f.y);
 
-  function draw() {
-    const { width: w, height: h } = host.getBoundingClientRect();
-    if (!w || !h) return;
-    const dpr = Math.min(devicePixelRatio || 1, 2);
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    const c = canvas.getContext('2d');
-    c.scale(dpr, dpr);
-    if (strength <= 0) return;
-    c.fillStyle = '#c4c4be';
-    const s = 7, cos = Math.SQRT1_2, sin = Math.SQRT1_2, R = Math.hypot(w, h) / s;
-    // Distance inside an ellipse: 0 at the centre, 1 on the edge.
-    const ell = (x, y, cx, cy, rx, ry) => Math.hypot((x - cx) / rx, (y - cy) / ry);
-    for (let i = -R; i < R; i++) {
-      for (let j = -R; j < R; j++) {
-        const x = w / 2 + (i * cos - j * sin) * s;
-        const y = h / 2 + (i * sin + j * cos) * s;
-        if (x < -s || y < -s || x > w + s || y > h + s) continue;
-        const floor = Math.max(0, 1 - ell(x, y, w / 2, h * 1.02, h * .3, h * .07)) ** .7;
-        const halo = Math.max(0, 1 - ell(x, y, w / 2, h * .5, h * .42, h * .62)) ** 1.6 * .55;
-        const k = Math.max(floor, halo) * strength * 1.6;
-        if (k < .04) continue;
-        c.beginPath();
-        c.arc(x, y, Math.min(k, 1) * s * .48, 0, Math.PI * 2);
-        c.fill();
-      }
-    }
-  }
+  vec2 glowC = vec2(res.x * .5, h * uGlowY);
+  vec2 glowR = vec2(h * .42 * uGlowW, h * .62 * uGlowH);
+  float gd = ell(pc, glowC, glowR);
+  float glow = pow(max(0.0, 1.0 - gd), 1.6) * .55;
+  float floorK = pow(max(0.0, 1.0 - ell(pc, vec2(res.x * .5, h * 1.02), vec2(h * .3, h * .07))), .7) * uFloor;
 
-  new ResizeObserver(draw).observe(host);
+  float sev = uSeverity * uAdaptive;
+  float speed = uPulseSpeed + 1.5 * sev;
+  float pulseAmt = max(uPulse, sev * .6);
+  float pulse = 1.0 + pulseAmt * .35 * sin(uTime * 6.2832 * speed - gd * 4.0);   // ripples outward
+  float k = max(floorK, glow) * uIntensity * 1.6 * pulse * (1.0 + sev * .6);
+  if (k < .04) discard;
+  float r = min(k, 1.0) * uDotScale;
+  float m = 1.0 - smoothstep(r - .04, r + .04, d);
+
+  float t = 0.0;
+  if (uGradient > .5) t = clamp(gd, 0.0, 1.0);
+  if (uGradient > 1.5) t = clamp(pc.y / h, 0.0, 1.0);
+  vec3 health = mix(uHealthy, uSevere, sev);
+  vec3 colA = mix(uColA, health, uAdaptive);
+  vec3 colB = mix(uColB, mix(health, uColB, .5), uAdaptive);
+  gl_FragColor = vec4(mix(colA, colB, t), m * uFade);
+  #include <colorspace_fragment>
+}`,
+  });
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
+  quad.frustumCulled = false;
+  quad.renderOrder = -10;   // always first, behind the body
+  scene.add(quad);
+
+  let fadeTarget = 1;
+  const size = new THREE.Vector2();
   return {
+    uni: u,
     // Hide while the camera is zoomed into an organ.
-    setVisible(on) { canvas.style.opacity = on ? '1' : '0'; },
-    // 0 = off, 1 = strong.
-    setStrength(v) { strength = v; draw(); },
+    setVisible(on) { fadeTarget = on ? 1 : 0; },
+    // Called every frame. severity 0..1 = how the astronaut is doing.
+    update(now, severity) {
+      renderer.getDrawingBufferSize(size);
+      u.uRes.value.copy(size);
+      u.uDpr.value = renderer.getPixelRatio();
+      u.uTime.value = now / 1000;
+      u.uFade.value += (fadeTarget - u.uFade.value) * .06;
+      u.uSeverity.value += (severity - u.uSeverity.value) * .04;
+    },
   };
 }
 
