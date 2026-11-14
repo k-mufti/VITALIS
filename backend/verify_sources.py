@@ -53,6 +53,8 @@ async def main():
     if flr:
         f = flr[0]
         print(f"         latest flare: class {f.get('classType')} peak {f.get('peakTime')}")
+    measured = donki.measured_sep_events()
+    check("measured SEP events (model forecasts removed)", len(measured) > 0, f"{len(measured)} of {len(sep)} records are real measurements")
     storm = donki.pick_storm(0)
     print(f"         director storm will replay: {storm.get('sepID')} ({storm.get('link')})")
 
