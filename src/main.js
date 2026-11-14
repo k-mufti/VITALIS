@@ -9,6 +9,7 @@ import { initToday } from './ui/today.js';
 import { initCheckin } from './ui/checkin.js';
 import { initRiskBoard } from './ui/risk-board.js';
 import { initHistory } from './ui/history.js';
+import { initDirector } from './ui/director.js';
 import { initData } from './data/client.js';
 
 /* VITALIS demo. Every reading here is made up.
@@ -25,6 +26,7 @@ initToday();
 initCheckin();
 initRiskBoard();
 initHistory();
+initDirector();
 initData();
 
 (function loop(now) {

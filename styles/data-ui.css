@@ -11,7 +11,7 @@
 .note.act { border-color: var(--red); }
 
 /* ---------- Today panel (body view, right side) ---------- */
-.today { position: absolute; top: 32px; right: 40px; width: 280px; max-height: calc(100% - 90px); overflow-y: auto; scrollbar-width: none; }
+.today { width: 100%; }
 .t-head { display: flex; justify-content: space-between; align-items: flex-end; }
 .t-head > span, .t-label { font: 600 13px var(--cond); letter-spacing: .2em; text-transform: uppercase; }
 .t-head > span small { display: block; color: var(--soft); letter-spacing: .14em; margin-top: 2px; }
@@ -133,25 +133,26 @@
    Owned by the backend/data side (rules.md section 1). Same look as styles.css. */
 
 /* ---------- risk panel (right of the body) ---------- */
-.risk-panel {
-  position: absolute; right: 0; top: 0; bottom: 0; width: 340px;
-  display: flex; flex-direction: column; gap: 14px; padding: 28px 28px 46px;
-  border-left: 1px solid var(--line);
-  background: color-mix(in srgb, var(--paper) 90%, transparent);
-  backdrop-filter: blur(8px); z-index: 6;
+.risk-rail {
+  position: absolute; right: 36px; top: 30px; bottom: 48px; width: 326px;
+  display: flex; flex-direction: column; gap: 12px; z-index: 6; pointer-events: none;
 }
-.risk-panel header h2 { font: 600 14px var(--cond); letter-spacing: .2em; text-transform: uppercase; }
-.risk-panel header p { margin-top: 4px; font: 400 12px var(--cond); letter-spacing: .14em; text-transform: uppercase; color: var(--soft); }
-.risk-list { flex: 1; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; margin: 0 -6px; padding: 2px 6px; }
-.risk-list::-webkit-scrollbar { width: 4px; }
-.risk-list::-webkit-scrollbar-thumb { background: var(--line); }
+.risk-rail > * { pointer-events: auto; }
+.risk-rail header h2 { font: 600 14px var(--cond); letter-spacing: .2em; text-transform: uppercase; }
+.risk-rail header p { margin-top: 4px; font: 400 12px var(--cond); letter-spacing: .14em; text-transform: uppercase; color: var(--soft); }
+.risk-list { flex: 1; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; scrollbar-width: none; margin: 0 -8px; padding: 2px 8px; }
+.risk-list::-webkit-scrollbar { width: 0; }
 
+/* Each system is its own box, standing on its own. */
 .risk {
   display: grid; grid-template-columns: 22px 1fr; gap: 10px; text-align: left;
-  padding: 11px 12px; border: 1px solid var(--line); background: var(--white);
-  transition: border-color .25s, transform .25s var(--ease);
+  padding: 13px 14px; border: 1px solid var(--line); background: var(--white);
+  box-shadow: 0 2px 10px rgba(14, 14, 14, .05);
+  transition: border-color .25s, box-shadow .25s, transform .25s var(--ease);
 }
-.risk:hover, .risk.hot { border-color: var(--ink); transform: translateX(-3px); }
+.risk:hover, .risk.hot { border-color: var(--ink); box-shadow: 0 6px 20px rgba(14, 14, 14, .11); transform: translateX(-4px); }
+.risk.extreme { border-left: 3px solid var(--red); padding-left: 12px; }
+.risk.mild { border-left: 3px solid var(--amber); padding-left: 12px; }
 .risk .rank { font: 600 13px var(--cond); font-style: normal; color: var(--soft); padding-top: 2px; }
 .risk-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .risk b { font: 600 14px var(--cond); letter-spacing: .14em; text-transform: uppercase; }
@@ -159,20 +160,29 @@
 .lvl.mild { background: var(--amber); }
 .lvl.extreme { background: var(--red); }
 .risk em { display: block; margin-top: 3px; font: 300 13px var(--cond); font-style: normal; color: var(--soft); }
-.risk .bar { height: 3px; background: var(--line); margin: 8px 0 7px; }
-.risk .bar i { display: block; height: 100%; background: var(--green); transition: width .6s var(--ease); }
-.risk.mild .bar i { background: var(--amber); }
-.risk.extreme .bar i { background: var(--red); }
+.risk .sev { height: 3px; background: var(--line); margin: 8px 0 7px; }
+.risk .sev i { display: block; height: 100%; background: var(--green); transition: width .6s var(--ease); }
+.risk.mild .sev i { background: var(--amber); }
+.risk.extreme .sev i { background: var(--red); }
 .risk p { font: 400 11.5px/1.35 var(--sans); color: var(--soft); }
 .risk p b { font: 600 10px var(--cond); letter-spacing: .14em; display: block; color: #b4b4ae; margin-bottom: 2px; }
 
-.history-btn {
+.risk-clear { padding: 14px 15px; border: 1px dashed var(--line); background: var(--white); font: 400 13px/1.4 var(--sans); color: var(--soft); }
+
+.rail-actions { display: flex; flex-direction: column; gap: 8px; }
+.rail-btn {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 11px 0 9px; border-top: 1px solid var(--ink);
-  font: 600 13px var(--cond); letter-spacing: .14em; text-transform: uppercase;
+  padding: 13px 15px; border: 1px solid var(--ink); background: var(--white);
+  font: 600 13px var(--cond); letter-spacing: .16em; text-transform: uppercase;
+  transition: background .25s, color .25s;
 }
-.history-btn span { transition: transform .3s var(--ease); }
-.history-btn:hover span { transform: translateX(5px); }
+.rail-btn span { transition: transform .3s var(--ease); }
+.rail-btn:hover { background: var(--ink); color: var(--white); }
+.rail-btn:hover span { transform: translateX(5px); }
+#checkinOpen { background: var(--ink); color: var(--white); }
+#checkinOpen:hover { background: var(--cyan); border-color: var(--cyan); }
+#checkinOpen.due { animation: dueGlow 2.4s ease-in-out infinite; }
+@keyframes dueGlow { 50% { background: var(--cyan); border-color: var(--cyan); } }
 
 /* ---------- mission picker (bottom left) ---------- */
 .mission-pick { margin-top: 20px; width: 260px; }
@@ -190,20 +200,7 @@
 .day-slider em.preview { color: var(--cyan); }
 
 /* ---------- medical history drawer ---------- */
-.history { position: fixed; inset: 0; z-index: 30; visibility: hidden; }
-.history.on { visibility: visible; }
-.history .scrim { position: absolute; inset: 0; background: rgba(14,14,14,.22); opacity: 0; transition: opacity .4s; }
-.history.on .scrim { opacity: 1; }
-.history .sheet {
-  position: absolute; right: 0; top: 0; bottom: 0; width: min(560px, 92vw);
-  background: var(--white); border-left: 1px solid var(--line); padding: 64px 36px 40px;
-  display: flex; flex-direction: column; gap: 22px; overflow-y: auto;
-  transform: translateX(100%); transition: transform .5s var(--ease);
-}
-.history.on .sheet { transform: none; }
-.history h2 { font: 600 15px var(--cond); letter-spacing: .2em; text-transform: uppercase; display: inline-block; background: var(--ink); color: var(--white); padding: 4px 10px; }
-.history .close { position: absolute; right: 28px; top: 26px; z-index: 2; font: 600 13px var(--cond); letter-spacing: .14em; text-transform: uppercase; color: var(--soft); }
-.history .close:hover { color: var(--ink); }
+/* Medical history uses the shared .drawer layout below. */
 .hist-sum { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 20px; }
 .hist-sum div span { display: block; font: 600 10px var(--cond); letter-spacing: .18em; text-transform: uppercase; color: var(--soft); }
 .hist-sum div b { font: 300 30px/1 var(--cond); font-variant-numeric: tabular-nums; }
@@ -242,15 +239,41 @@
 }
 .spot.watch span { box-shadow: 0 0 0 1px var(--amber); }
 
-/* ---------- layout: risk panel as a drawer ----------
-   The Today panel keeps the right side of the Body view, so "Things to watch" slides in
-   over it from the "Things to watch →" link under the mission picker. */
-.risk-panel {
-  left: auto; width: 360px; transform: translateX(100%); visibility: hidden;
-  box-shadow: -24px 0 60px rgba(0, 0, 0, .08);
-  transition: transform .5s var(--ease), visibility 0s .5s;
+/* ---------- shared drawer (today's checks, medical history) ---------- */
+.drawer { position: fixed; inset: 0; z-index: 30; visibility: hidden; }
+.drawer.on { visibility: visible; }
+.drawer .scrim { position: absolute; inset: 0; background: rgba(14, 14, 14, .22); opacity: 0; transition: opacity .4s; }
+.drawer.on .scrim { opacity: 1; }
+.drawer .sheet {
+  position: absolute; right: 0; top: 0; bottom: 0; width: min(460px, 94vw);
+  background: var(--white); border-left: 1px solid var(--line); padding: 64px 32px 40px;
+  display: flex; flex-direction: column; gap: 20px; overflow-y: auto;
+  transform: translateX(100%); transition: transform .5s var(--ease);
 }
-.risk-panel.open { transform: none; visibility: visible; transition: transform .5s var(--ease); }
-.risk-panel header { position: relative; }
-.risk-close { position: absolute; right: 0; top: 0; font: 600 12px var(--cond); letter-spacing: .16em; text-transform: uppercase; color: var(--soft); }
-.risk-close:hover { color: var(--ink); }
+.drawer.on .sheet { transform: none; }
+.drawer h2 { font: 600 15px var(--cond); letter-spacing: .2em; text-transform: uppercase; display: inline-block; align-self: flex-start; background: var(--ink); color: var(--white); padding: 4px 10px; }
+.drawer .close { position: absolute; right: 28px; top: 26px; z-index: 2; font: 600 13px var(--cond); letter-spacing: .14em; text-transform: uppercase; color: var(--soft); }
+.drawer .close:hover { color: var(--ink); }
+
+/* ---------- mission, shown not chosen ---------- */
+.mission-line { margin-top: 16px; font: 500 13px var(--cond); letter-spacing: .16em; text-transform: uppercase; color: var(--soft); }
+.mission-line b { font-weight: 600; color: var(--ink); font-style: normal; }
+.who-mission { margin-top: 6px; font: 500 13px var(--cond); letter-spacing: .18em; text-transform: uppercase; color: var(--cyan); }
+
+/* ---------- director panel (key D): demo controls, not a crew feature ---------- */
+.director { position: fixed; left: 24px; bottom: 24px; z-index: 40; width: 252px; background: var(--white); border: 1px solid var(--ink); padding: 16px; display: none; }
+.director.on { display: block; }
+.director h3 { font: 600 11px var(--cond); letter-spacing: .2em; text-transform: uppercase; }
+.director h3 small { float: right; font-weight: 400; color: var(--soft); letter-spacing: .1em; }
+.director .d-label { display: block; margin: 14px 0 6px; font: 600 10px var(--cond); letter-spacing: .18em; text-transform: uppercase; color: var(--soft); }
+.director .d-row { display: flex; gap: 5px; }
+.director .d-row button { flex: 1; padding: 6px 0; border: 1px solid var(--line); font: 600 11px var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--soft); }
+.director .d-row button:hover { border-color: var(--ink); color: var(--ink); }
+.director .d-row button.on { background: var(--ink); border-color: var(--ink); color: var(--white); }
+.director .d-events { display: grid; gap: 5px; }
+.director .d-events button { padding: 7px 9px; border: 1px solid var(--line); text-align: left; font: 500 12px var(--sans); }
+.director .d-events button:hover { border-color: var(--ink); background: var(--paper); }
+.director input[type=range] { width: 100%; accent-color: var(--cyan); }
+.director .d-day { display: block; margin-top: 4px; font: 400 11px var(--cond); letter-spacing: .14em; text-transform: uppercase; color: var(--soft); }
+.director .d-day.preview { color: var(--cyan); }
+.director .d-note { margin-top: 12px; font: 400 11px/1.4 var(--sans); color: var(--soft); }
