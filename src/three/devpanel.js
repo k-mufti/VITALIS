@@ -321,13 +321,14 @@ export function initDevPanel() {
 
   // Clicking a body part (spot, body-panel tile, risk card) jumps the panel to that organ's settings.
   document.addEventListener('click', e => {
-    const part = e.target.closest?.('[data-sys]');
+    const part = e.target.closest?.('[data-sys], [data-part]');
     if (!part || panel.contains(part)) return;
-    const i = ORGAN_LIST.findIndex(([id]) => id === part.dataset.sys);
+    const sys = part.dataset.sys || part.dataset.part;
+    const i = ORGAN_LIST.findIndex(([id]) => id === sys);
     if (i < 0) return;
     fx.posOrgan = i;
     collapsed.delete('Organ position');
-    const rigIndex = RIG_MODELS.findIndex(([m]) => m === part.dataset.sys);
+    const rigIndex = RIG_MODELS.findIndex(([m]) => m === sys);
     if (rigIndex >= 0) {
       fx.rigModel_arms = rigIndex;
       fx.rigModel_legs = rigIndex;

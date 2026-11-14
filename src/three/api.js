@@ -14,7 +14,7 @@ import { MAX_HOTSPOTS } from './effects.js';
 export function initTwin() {
   initScene();
   loadBody();
-  initAnatomyPanel(setHoverOrgan);
+  initAnatomyPanel(setHoverOrgan, focusOrgan, resetView);
   initDevPanel();   // with ?dev in the URL: the FX panel; otherwise just the default look
 }
 
