@@ -9,7 +9,7 @@ Agents: read `plan.md` and this file fully before making any change.
 |---------------------------------------------------|----------------|
 | `src/three/`, `assets/models/`, `styles/three.css` | 3D owner (partner) |
 | `backend/`, `src/data/`, `src/ui/`, `styles/data-ui.css` | Backend owner (Zaid) |
-| `index.html`, `styles.css`, `src/main.js`, `src/signin.js`, `plan.md`, `rules.md`, `.gitignore` | SHARED |
+| `index.html`, `styles.css`, `src/main.js`, `src/nav.js`, `src/state.js`, `src/util.js`, `src/signin.js`, `plan.md`, `rules.md`, `.gitignore` | SHARED |
 
 - Only edit files in your own area.
 - Need something from the other area? Ask, or add a `TODO(<owner>):` comment in your own code
