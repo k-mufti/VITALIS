@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VITALIS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css?v=2" />
+</head>
+<body>
+
+  <!-- SIGN IN -->
+  <section class="signin" id="signin">
+    <div class="corner tl">VITALIS</div>
+    <div class="corner tr">MISSION 001</div>
+    <div class="corner bl">DAY 184</div>
+    <div class="corner br">DEMO</div>
+
+    <div class="print-wrap" id="printWrap">
+      <svg class="print" id="print" viewBox="0 0 240 280" aria-hidden="true">
+        <defs><clipPath id="scanClip"><rect id="scanRect" x="0" y="280" width="240" height="0"/></clipPath></defs>
+        <g id="ridges"></g>
+        <g id="ridgesLit" clip-path="url(#scanClip)"></g>
+        <line id="scanLine" x1="10" x2="230" y1="280" y2="280"/>
+      </svg>
+      <div class="badge" id="badge"><span>03</span></div>
+    </div>
+
+    <div class="signin-text" id="signinText">
+      <h1>Hold to sign in</h1>
+      <p id="signinHint">Press and hold the fingerprint</p>
+    </div>
+    <div class="who" id="who">
+      <h1>Alex Reyes</h1>
+      <p>Commander · Crew 03</p>
+    </div>
+  </section>
+
+  <!-- APP -->
+  <div class="app" id="app">
+    <header class="bar">
+      <div class="logo">VITALIS</div>
+      <div class="bar-mid">Mission 001 <i>/</i> Crew 03</div>
+      <nav>
+        <button class="tab on" data-view="body">Body</button>
+        <button class="tab" data-view="crew">Crew</button>
+        <button class="tab" data-view="ask">Ask</button>
+      </nav>
+    </header>
+
+    <div class="stage3d" id="stage3d"><p class="load-note" id="loadNote">Loading body…</p></div>
+
+    <!-- BODY -->
+    <section class="view body on" id="view-body">
+      <div class="spots" id="spots">
+        <button class="spot" data-sys="sleep"><i></i><span><b>Sleep</b><em>6.2 h</em></span></button>
+        <button class="spot" data-sys="heart"><i></i><span><b>Heart</b><em>64</em></span></button>
+        <button class="spot" data-sys="lungs"><i></i><span><b>Lungs</b><em>16</em></span></button>
+        <button class="spot" data-sys="muscles"><i></i><span><b>Muscles</b><em>87</em></span></button>
+      </div>
+      <div class="body-foot">
+        <div class="day"><span>Day</span>184</div>
+        <button class="status" data-sys="heart"><i class="dot amber"></i>2 things to watch <span>→</span></button>
+      </div>
+      <p class="hint">Drag to turn</p>
+    </section>
+
+    <!-- DETAIL -->
+    <section class="view detail" id="view-detail">
+      <button class="back" id="back">← Body</button>
+
+      <div class="d-left">
+        <h2 id="dName">Lungs</h2>
+        <div class="big"><span id="dValue">16</span></div>
+        <p class="unit" id="dUnit">breaths a minute</p>
+        <p class="note" id="dNote"></p>
+      </div>
+
+      <div class="organ" id="organ"></div>
+
+      <div class="d-right">
+        <div class="pair"><span>Usual for you</span><b id="dUsual">14–18</b></div>
+        <div class="pair"><span id="d2Label">Oxygen</span><b id="d2Value">98%</b></div>
+        <svg class="wave" id="wave" viewBox="0 0 200 50" preserveAspectRatio="none"><path id="wavePath"/></svg>
+        <span class="tiny">Live</span>
+      </div>
+
+      <div class="week" id="week"></div>
+      <p class="hint">Drag to turn</p>
+    </section>
+
+    <!-- CREW -->
+    <section class="view crew" id="view-crew">
+      <div class="crew-top">
+        <div class="day huge"><span>Day</span>184</div>
+        <div class="trip">
+          <div class="trip-line" id="trip">
+            <span class="planet earth"></span>
+            <div class="track"><i class="done"></i><b class="ship"></b></div>
+            <span class="planet mars"></span>
+          </div>
+          <div class="trip-labels"><span>Earth</span><span id="tripNote">56 days to Mars</span><span>Mars</span></div>
+          <div class="stops" id="stops">
+            <button data-note="Left Earth · Day 0">Launch</button>
+            <button data-note="Halfway point · Day 120">Halfway</button>
+            <button class="on" data-note="56 days to Mars">Today</button>
+            <button data-note="Arrive at Mars · Day 240">Arrival</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="people" id="people"></div>
+      <p class="person-note" id="personNote">Tap a crew member</p>
+
+      <div class="facts">
+        <div class="fact"><span>Radiation</span><b>148 <small>of 200 mSv</small></b><div class="meter"><i style="width:74%"></i></div></div>
+        <div class="fact"><span>Cabin air</span><b>Good</b><small>O₂ 21% · 22 °C</small></div>
+        <div class="fact"><span>Ship</span><b>All OK</b><small>No alerts</small></div>
+      </div>
+    </section>
+
+    <!-- ASK -->
+    <section class="view ask" id="view-ask">
+      <div class="chat">
+        <div class="thread" id="thread"></div>
+        <div class="chips">
+          <button>Why was crew 03 flagged?</button>
+          <button>What happens next?</button>
+          <button>Write a crew report</button>
+        </div>
+        <form id="askForm"><input id="askInput" placeholder="Ask about the crew's health" autocomplete="off"/><button aria-label="Send">→</button></form>
+        <p class="fine">VITALIS suggests. The crew doctor decides.</p>
+      </div>
+      <aside class="proof" id="proof"></aside>
+    </section>
+
+    <footer class="foot">Demo · all readings are made up</footer>
+  </div>
+
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+  <script type="module" src="app.js?v=2"></script>
+</body>
+</html>
