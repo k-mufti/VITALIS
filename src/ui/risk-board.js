@@ -5,7 +5,7 @@ import { showRisks } from '../three/api.js';
 /* Mission line (day, phase) for the Body view, and organ severities for the 3D hotspots.
    The right rail's readings are drawn by health-panel.js. */
 
-const PHASE_WORD = { cruise: 'transit', surface: 'surface' };
+const PHASE_WORD = { cruise: 'transit', surface: 'surface', return: 'return trip' };
 
 // Organ severities drive the 3D twin's hotspots. The readings themselves are in the
 // "Your health" panel (health-panel.js), which replaced the list of risk cards.
