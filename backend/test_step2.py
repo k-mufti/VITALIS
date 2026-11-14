@@ -4,7 +4,8 @@ from app.sources import horizons, noaa
 
 # Horizons parser on a sample ephemeris block (quantity 21 = one-way light time, minutes)
 sample = "header\n$$SOE\n 2026-Nov-14 00:00     16.123456\n 2026-Nov-15 00:00     16.2\n$$EOE\nfooter"
-assert abs(horizons._parse(sample) - 16.123456) < 1e-6
+rows = horizons.parse(sample)
+assert rows == {"2026-11-14": 16.123456, "2026-11-15": 16.2}, rows
 
 # NOAA parser picks the latest >=10 MeV reading
 rows = [

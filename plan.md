@@ -205,7 +205,10 @@ The body is NOT a click target. Organs are opened from the Risk Board (calls `fo
 | POST   | `/api/director/event`     | body `{ type }`: `radiation_storm`, `bad_sleep_week`, `bp_spike`, `skipped_exercise`, `reset` |
 | POST   | `/api/ask`                | body `{ question }` -> `{ answer, sources, engine }` (Claude/OpenAI if key set, else rules) |
 | POST   | `/api/mission`            | body `{ mission }`: `mars`, `moon`, `iss` (switch the live mission) |
-| GET    | `/api/space-weather`      | real NASA DONKI solar particle events + flares, active storm |
+| GET    | `/api/organs/{id}`        | one OrganState                                        |
+| GET    | `/api/missions`           | mission presets (gravity, dose rate, arrival/end day) |
+| GET    | `/api/environment?mission=&day=` | phase, gravity, dose rate, total dose, % of limit, microgravity months, comms delay |
+| GET    | `/api/space-weather`      | live NOAA proton flux (`now`) + recent NASA DONKI solar particle events and flares |
 | GET    | `/api/comms`              | one-way + round-trip Earth delay (JPL Horizons)       |
 | GET    | `/api/vitals`             | latest reading per metric + device list               |
 | GET    | `/api/sources`            | live / cache / fallback status of every data source (Engineer Mode) |
@@ -222,8 +225,9 @@ In the browser console: `vitalis.api.director('radiation_storm')`.
 
 | Source | Used for | Fallback |
 |--------|----------|----------|
-| NASA DONKI SEP + FLR (api.nasa.gov, CCMC mirror) | `radiation_storm` replays a real solar particle event | `backend/data/cache/`, then 4 seeded real events |
-| JPL Horizons API (quantity 21, light time) | Earth comms delay for triage | cache, then circular-orbit model |
+| NASA DONKI SEP + FLR (CCMC DONKI-API, moved there 2026-09-30, no key) | `radiation_storm` replays a real solar particle event | `backend/data/cache/`, then 4 seeded real events |
+| JPL Horizons API (quantity 21, light time, 1 row per mission day) | Earth comms delay for triage | cache, then circular-orbit model |
+| NOAA SWPC GOES integral protons (no key) | is a solar proton event happening right now (>=10 pfu at >=10 MeV) | cache |
 | NASA HRP bone risk (1-1.5%/month) | bone model | constant |
 | Curiosity RAD (1.84 / 0.64 mSv/day) | radiation dose | constant |
 | NASA-STD-3001 (600 mSv career, 250 mSv per event) | limits | constant |
@@ -276,11 +280,11 @@ Routes never change between steps, only what is behind them, so the frontend kee
 | Step | Layer | Adds | Test |
 |------|-------|------|------|
 | 1 [x] | Foundation | FastAPI, CORS, `/api/health`, `/api/state`, `/api/risks`, `/api/organs/{id}` from a fixed fixture | `curl :8001/api/risks`, open `:8001/docs` |
-| 2 [ ] | Devices | `DeviceAdapter` interface + simulated watch, CGM, med bay; `/api/vitals` | readings change on each call |
-| 3 [ ] | Engine | `constants.py` (cited numbers), mission presets, physiology + risk ranking replace the fixture; `?day=`, `?mission=` | ranking + values match the fixture at day 184; day 240 differs |
-| 4 [ ] | Live | background sim loop + `/ws` (vitals every 1 s, state every 2 s) | frontend numbers move on their own |
-| 5 [ ] | Actions | `/api/countermeasure`, `/api/director/event`, `/api/mission` | event raises severity, countermeasure lowers it |
-| 6 [ ] | External data | JPL Horizons (comms delay), NASA DONKI (real storms), JSON cache, `/api/comms`, `/api/space-weather`, `/api/sources` | `/api/sources` says live or cache |
+| 2 [x] | Space environment | `constants.py`, `missions.py` (phase, gravity, dose, comms by day), JPL Horizons, NASA DONKI, NOAA SWPC, JSON cache; `/api/missions`, `/api/environment`, `/api/comms`, `/api/space-weather`, `/api/sources` | `python test_step2.py`, `/api/sources` says live or cache |
+| 3 [ ] | Devices | `DeviceAdapter` interface + simulated watch, CGM, med bay; `/api/vitals` | readings change on each call |
+| 4 [ ] | Engine | physiology + risk ranking replace the fixture, using the step 2 environment; `?day=`, `?mission=` | ranking + values match the fixture at day 184; day 240 differs |
+| 5 [ ] | Live | background sim loop + `/ws` (vitals every 1 s, state every 2 s) | frontend numbers move on their own |
+| 6 [ ] | Actions | `/api/countermeasure`, `/api/director/event` (storm replays a real DONKI event), `/api/mission` | event raises severity, countermeasure lowers it |
 | 7 [ ] | Triage | green/amber/red queue, Earth delay countdown, `/api/triage` | storm creates a red alert that gets a reply |
 | 8 [ ] | Officer | `/api/ask` with Claude/OpenAI, rule-based fallback | answer cites the crew's numbers |
 

@@ -26,13 +26,10 @@ REFRESH_EVERY_S = 600  # NOAA flux updates every few minutes; 10 min is plenty f
 
 
 async def refresh_sources():
-    m = M.get(M.current_mission())
-    today = M.date_for_day(M.current_day())
-    arrival = M.date_for_day(m["arrival_day"])
-    await asyncio.gather(
-        donki.refresh(), noaa.refresh(), horizons.refresh(today), horizons.refresh(arrival),
-        return_exceptions=True,
-    )
+    m = M.get("mars")
+    start = M.date_for_day(0)
+    stop = M.date_for_day(m["end_day"])
+    await asyncio.gather(donki.refresh(), noaa.refresh(), horizons.refresh_range(start, stop), return_exceptions=True)
 
 
 async def refresh_loop():
@@ -126,7 +123,7 @@ def get_space_weather():
 
 @app.get("/api/sources")
 def get_sources():
-    return {"donki": donki.status, "noaa": noaa.status, "horizons": horizons.status}
+    return {"donki": donki.status, "donki_errors": donki.errors, "noaa": noaa.status, "horizons": horizons.status, "horizons_errors": horizons.errors}
 
 
 @app.post("/api/sources/refresh")

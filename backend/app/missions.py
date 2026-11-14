@@ -76,11 +76,12 @@ def comms_delay_min(mission_id, day):
     if mission_id == "iss":
         return 0.0
     m = get(mission_id)
-    full = horizons.earth_mars_light_time_min(date_for_day(day))
     if day >= m["arrival_day"]:
-        return full
-    # In transit: approximate the ship's distance as the fraction of the trip completed.
-    return full * max(0.05, day / m["arrival_day"])
+        return horizons.earth_mars_light_time_min(date_for_day(day))
+    # In transit: the ship flies from Earth to where Mars will be on arrival day, so approximate
+    # its distance as (fraction of trip done) x (Earth-Mars distance on arrival day).
+    at_arrival = horizons.earth_mars_light_time_min(date_for_day(m["arrival_day"]))
+    return at_arrival * max(0.02, day / m["arrival_day"])
 
 
 def environment(mission_id=None, day=None):
@@ -101,4 +102,15 @@ def environment(mission_id=None, day=None):
         "radiation_pct_of_career_limit": round(100 * dose / C.CAREER_LIMIT_MSV, 1),
         "microgravity_months": round(microgravity_months(m, day), 2),
         "comms_delay_min": round(delay, 2), "comms_round_trip_min": round(2 * delay, 2),
+        "comms_source": comms_source(mission_id, day),
     }
+
+
+def comms_source(mission_id, day):
+    if mission_id != "mars":
+        return "light time constant"
+    m = get(mission_id)
+    check_day = max(day, m["arrival_day"])
+    if horizons.is_real(date_for_day(check_day)):
+        return "JPL Horizons"
+    return "orbit model (Horizons not loaded)"
