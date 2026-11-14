@@ -2,7 +2,7 @@
 <!-- Dev tool: renders the body panel thumbnails (assets/thumbs/*.webp) from the 3D models,
      in the app's graphite + cyan look. Open http://localhost:8000/tools/organ-thumbs.html,
      then save each image from the page (right click) or run window.__thumbs in the console
-     (data URLs). Brain and eyes have no models yet, so they are head close-ups of the body. -->
+     (data URLs). Eyes have no model yet, so that one is a head close-up of the body. -->
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
 <script type="module">
 import * as THREE from 'three';
@@ -94,10 +94,12 @@ async function organ(id, file, opts = {}) {
 }
 await organ('heart', 'heart.glb', { yaw: -.35, fill: 1.05 });
 await organ('lungs', 'lungs.glb', { yaw: -.25, fill: 1.02 });
+await organ('sleep', 'brain.glb', { yaw: -.6, fill: 1.0 });
+await organ('digestion', 'digestive.glb', { yaw: -.2, fill: 1.0 });
 await organ('muscles', 'ecorche.glb', { v0: .5, v1: .84, yaw: -.35, fill: .95 });
 await organ('bones', 'skeleton.glb', { v0: .62, v1: 1, yaw: -.35, fill: .95 });
 
-// Brain (sleep) and eyes: no models yet, so a close-up of the body's head with that area lit.
+// Eyes: no model yet, so a close-up of the body's head with the eyes lit.
 async function head(id, regionAt, yaw = -.35) {
   const body = await gltf('../assets/models/' + manifest.body.file);
   const H = normalize(body);
@@ -110,7 +112,6 @@ function frontZ(obj, x, y) {
   const r = new THREE.Raycaster(new THREE.Vector3(x, y, 50), new THREE.Vector3(0, 0, -1));
   const hit = r.intersectObject(obj, true)[0]; return hit ? hit.point.z : .3;
 }
-await head('sleep', (H, b) => ({ c: new THREE.Vector3(0, H * .985, frontZ(b, 0, H * .96) - .3), r: .3 }));
 await head('eyes', (H, b) => ({ c: new THREE.Vector3(0, H * .944, frontZ(b, 0.06, H * .944) - .01), r: .085 }), 0);
 
 window.__thumbs = out; document.title = 'DONE';
