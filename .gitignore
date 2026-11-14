@@ -4,3 +4,8 @@ _old/
 .venv/
 __pycache__/
 node_modules/
+# Model and artwork source files stay outside git (rules.md 4). The repo keeps the converted .glb / .svg.
+assets/models/realistic-human-heart/
+assets/models/realistic-human-lungs/
+assets/models/source/
+fingerprints-icons-set/
