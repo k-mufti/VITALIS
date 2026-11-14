@@ -1,6 +1,7 @@
 import { $, $$ } from '../util.js';
 import { state } from '../state.js';
 import { SYS } from '../data/mock.js';
+import { GUIDE } from '../data/health-rules.js';
 import { focusOrgan, resetView } from '../three/api.js';
 import { ORGANS, animateOrgan, initOrganDrag } from '../three/organ-drawings.js';
 import { show } from '../nav.js';
@@ -21,7 +22,8 @@ export function openSystem(k) {
   $('#dUsual').textContent = d.usual;
   $('#d2Label').textContent = d.l2;
   $('#d2Value').textContent = d.v2;
-  const note = $('#dNote'); note.textContent = d.note; note.classList.toggle('watch', d.state === 'watch');
+  const note = $('#dNote'); note.textContent = d.note; note.classList.toggle('watch', d.state === 'watch'); note.classList.toggle('act', d.state === 'act');
+  renderGuide(k);
   $('.big').classList.remove('past');
   $('#organ').innerHTML = ORGANS[k];
   $('#organ svg').classList.add('organ-in');
@@ -87,4 +89,12 @@ export function initDetail() {
     const [a, b] = SYS[state.current].jitter;
     $('#dValue').textContent = a + Math.floor(Math.random() * (b - a + 1));
   }, 3500);
+}
+
+// "How to check · why it matters in space" under the note (src/data/health-rules.js).
+function renderGuide(k) {
+  const g = GUIDE[k], box = $('#dGuide');
+  if (!box) return;
+  box.open = false;
+  box.innerHTML = g ? `<summary>How to check · why it matters</summary><p>${g.how.join(' ')}</p><p class="why"><b>In space</b>${g.why}</p><p class="src">Source: ${g.src}</p>` : '';
 }

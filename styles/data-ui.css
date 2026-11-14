@@ -1,0 +1,130 @@
+/* Data UI (backend owner): Today panel, check-in drawer, reminders, status colors, hazards.
+   Same signage look as styles.css: Barlow Condensed labels, black slabs, thin lines. */
+
+/* ---------- Status colors: OK green · Watch amber · Act red (plan.md 5.2) ---------- */
+.dot.ok { background: var(--green); }
+.dot.watch { background: var(--amber); }
+.dot.act { background: var(--red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 22%, transparent); }
+.dot.none { background: transparent; border: 1px solid var(--soft); }
+.spot.act i { border-color: var(--red); }
+.spot.act i::after { background: var(--red); }
+.note.act { border-color: var(--red); }
+
+/* ---------- Today panel (body view, right side) ---------- */
+.today { position: absolute; top: 32px; right: 40px; width: 280px; max-height: calc(100% - 90px); overflow-y: auto; scrollbar-width: none; }
+.t-head { display: flex; justify-content: space-between; align-items: flex-end; }
+.t-head > span, .t-label { font: 600 13px var(--cond); letter-spacing: .2em; text-transform: uppercase; }
+.t-head > span small { display: block; color: var(--soft); letter-spacing: .14em; margin-top: 2px; }
+.streak { font: 300 44px/0.9 var(--cond); text-align: right; transition: color .4s; }
+.streak small { display: block; font: 600 11px var(--cond); letter-spacing: .18em; text-transform: uppercase; color: var(--soft); margin-top: 4px; }
+.streak.up { color: var(--cyan); }
+.t-bar { height: 2px; background: var(--line); margin-top: 14px; }
+.t-bar i { display: block; height: 100%; background: var(--ink); transition: width .8s var(--ease); }
+.t-count { font: 500 12px var(--cond); letter-spacing: .14em; text-transform: uppercase; color: var(--soft); margin-top: 8px; }
+
+.routine, .vitals { list-style: none; margin-top: 10px; }
+.routine button, .vitals button { width: 100%; display: grid; align-items: center; text-align: left; border-bottom: 1px solid var(--line); transition: background .25s, color .25s; }
+.routine button { grid-template-columns: 52px 1fr auto; padding: 8px 6px; }
+.routine time { font: 500 14px var(--cond); letter-spacing: .08em; color: var(--soft); font-variant-numeric: tabular-nums; }
+.routine span { font: 500 15px var(--cond); letter-spacing: .06em; text-transform: uppercase; }
+.routine i { font: 600 12px var(--cond); font-style: normal; letter-spacing: .14em; text-transform: uppercase; }
+.routine .done span, .routine .done time { color: #b4b4ae; }
+.routine .done i { color: var(--green); }
+.routine .due button { background: var(--ink); color: var(--white); }
+.routine .due time { color: #9fe3ee; }
+.routine .due i { color: var(--amber); animation: idle 1.6s infinite; }
+.routine button:hover { background: var(--white); }
+.routine .due button:hover { background: #222; }
+
+.t-label { display: block; margin-top: 30px; }
+.t-label small { color: var(--soft); letter-spacing: .14em; margin-left: 10px; }
+.vitals button { grid-template-columns: 18px 1fr auto; gap: 4px; padding: 10px 6px; }
+.v-name { font: 500 15px var(--cond); letter-spacing: .06em; text-transform: uppercase; }
+.v-name small { display: block; font: 400 12px var(--sans); letter-spacing: 0; text-transform: none; color: var(--soft); }
+.vitals b { font: 300 28px/1 var(--cond); font-variant-numeric: tabular-nums; }
+.vitals b small { font: 500 12px var(--cond); letter-spacing: .08em; color: var(--soft); margin-left: 4px; }
+.vitals button:hover { background: var(--white); }
+
+.checkin-btn { margin-top: 22px; width: 100%; display: flex; justify-content: space-between; align-items: center; background: var(--ink); color: var(--white); font: 600 16px var(--cond); letter-spacing: .16em; text-transform: uppercase; padding: 14px 18px; transition: background .3s; }
+.checkin-btn span { transition: transform .3s var(--ease); }
+.checkin-btn:hover { background: var(--cyan); }
+.checkin-btn:hover span { transform: translateX(5px); }
+.checkin-btn:disabled { background: var(--line); color: var(--soft); cursor: default; }
+.checkin-btn:disabled span { transform: none; }
+
+/* ---------- Check-in drawer ---------- */
+.ci-shade { position: fixed; inset: 0; z-index: 30; background: rgba(14, 14, 14, .18); opacity: 0; pointer-events: none; transition: opacity .5s var(--ease); }
+.ci-open .ci-shade { opacity: 1; pointer-events: auto; }
+.checkin { position: fixed; top: 0; right: 0; bottom: 0; z-index: 31; width: min(480px, 100vw); background: var(--white); border-left: 1px solid var(--ink); display: flex; flex-direction: column; transform: translateX(102%); transition: transform .7s var(--ease); }
+.checkin.open { transform: none; }
+.ci-top { display: flex; justify-content: space-between; align-items: flex-start; padding: 28px 32px 20px; border-bottom: 1px solid var(--line); }
+.ci-top h2 { font: 600 15px var(--cond); letter-spacing: .2em; text-transform: uppercase; display: inline-block; background: var(--ink); color: var(--white); padding: 4px 10px; }
+.ci-top p { color: var(--soft); margin-top: 10px; }
+.ci-close { font: 600 13px var(--cond); letter-spacing: .14em; text-transform: uppercase; padding: 6px 10px; border: 1px solid var(--line); transition: border-color .25s; }
+.ci-close:hover { border-color: var(--ink); }
+.ci-body { flex: 1; overflow-y: auto; padding: 0 32px; scrollbar-width: thin; }
+
+.ci-sec { padding: 24px 0 20px; border-bottom: 1px solid var(--line); border-left: 2px solid transparent; transition: border-color .4s, padding .4s var(--ease); }
+.ci-sec.focus { border-left-color: var(--cyan); padding-left: 14px; }
+.ci-sec[data-status="ok"] { border-left-color: var(--green); padding-left: 14px; }
+.ci-sec[data-status="watch"] { border-left-color: var(--amber); padding-left: 14px; }
+.ci-sec[data-status="act"] { border-left-color: var(--red); padding-left: 14px; }
+.ci-sec header { display: flex; justify-content: space-between; align-items: baseline; }
+.ci-sec h3 { font: 600 16px var(--cond); letter-spacing: .14em; text-transform: uppercase; }
+.how-btn { font: 600 12px var(--cond); letter-spacing: .16em; text-transform: uppercase; color: var(--cyan); padding: 2px 0; border-bottom: 1px solid currentColor; }
+.how { margin-top: 12px; padding: 14px 16px; background: var(--paper); font-size: 14px; }
+.how ol { padding-left: 18px; display: grid; gap: 4px; }
+.how .why { margin-top: 10px; }
+.how .why b, .guide .why b { display: block; font: 600 11px var(--cond); letter-spacing: .18em; text-transform: uppercase; color: var(--soft); margin-bottom: 2px; }
+.how .src, .guide .src { margin-top: 8px; font-size: 12px; color: var(--soft); }
+
+.ci-row { display: flex; align-items: baseline; gap: 10px; margin-top: 14px; }
+.ci-row input { width: 110px; border: 0; border-bottom: 2px solid var(--ink); background: none; font: 300 40px/1.1 var(--cond); padding: 2px 0; outline: none; font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
+.ci-row input::-webkit-outer-spin-button, .ci-row input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.ci-row input:focus { border-color: var(--cyan); }
+.ci-row input::placeholder { color: #d4d4cf; }
+.ci-row em { font: 300 36px var(--cond); font-style: normal; color: var(--soft); }
+.ci-row small { font: 500 13px var(--cond); letter-spacing: .12em; text-transform: uppercase; color: var(--soft); }
+.ci-pick { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-top: 14px; }
+.ci-pick button { display: grid; justify-items: center; gap: 2px; padding: 10px 0 8px; border: 1px solid var(--line); font: 500 12px var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--soft); transition: all .25s; }
+.ci-pick button b { font: 300 26px/1 var(--cond); color: var(--ink); }
+.ci-pick button:hover { border-color: var(--ink); }
+.ci-pick button.on { background: var(--ink); color: var(--white); border-color: var(--ink); }
+.ci-pick button.on b { color: var(--white); }
+.ci-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.ci-chips button { font: 500 13px var(--cond); letter-spacing: .08em; text-transform: uppercase; padding: 6px 12px; border: 1px solid var(--line); transition: all .25s; }
+.ci-chips button:hover { border-color: var(--ink); }
+.ci-chips button.on { background: var(--ink); color: var(--white); border-color: var(--ink); }
+.ci-res { min-height: 0; margin-top: 12px; font-size: 15px; display: flex; align-items: baseline; gap: 8px; }
+.ci-res:empty { margin-top: 0; }
+.ci-res .dot { flex: none; transform: translateY(-1px); }
+.ci-res b { font: 600 13px var(--cond); letter-spacing: .16em; text-transform: uppercase; flex: none; }
+.ci-foot { padding: 0 32px 24px; border-top: 1px solid var(--line); }
+.ci-foot .fine { margin-top: 10px; }
+
+/* ---------- Reminder / result toast ---------- */
+.toast { position: fixed; left: 50%; bottom: 56px; z-index: 35; display: flex; align-items: center; gap: 16px; max-width: min(640px, calc(100vw - 32px)); background: var(--ink); color: var(--white); padding: 14px 18px; border-left: 3px solid var(--cyan); transform: translate(-50%, 20px); opacity: 0; pointer-events: none; transition: opacity .5s var(--ease), transform .6s var(--ease); }
+.toast.on { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.toast.ok { border-left-color: var(--green); }
+.toast.watch { border-left-color: var(--amber); }
+.toast.act { border-left-color: var(--red); }
+.toast .t-time { font: 600 13px var(--cond); letter-spacing: .18em; text-transform: uppercase; color: #9fe3ee; flex: none; }
+.toast.act .t-time { color: #ff9a8a; }
+.toast button { flex: none; font: 600 13px var(--cond); letter-spacing: .14em; text-transform: uppercase; padding: 6px 12px; background: var(--white); color: var(--ink); transition: background .25s; }
+.toast button:hover { background: #9fe3ee; }
+
+/* ---------- Detail view guide ---------- */
+.guide { margin-top: 20px; max-width: 280px; font-size: 14px; }
+.guide summary { cursor: pointer; list-style: none; font: 600 12px var(--cond); letter-spacing: .16em; text-transform: uppercase; color: var(--cyan); }
+.guide summary::-webkit-details-marker { display: none; }
+.guide summary::after { content: ' +'; }
+.guide[open] summary::after { content: ' −'; }
+.guide p { margin-top: 8px; }
+.guide:empty { display: none; }
+
+/* ---------- Crew: five hazards ---------- */
+.hazards .t-label { margin: 0 0 14px; }
+.facts.five { grid-template-columns: repeat(5, 1fr); gap: 28px; }
+.facts.five .fact span { display: flex; align-items: center; gap: 8px; }
+.facts.five .fact b { font-size: 34px; }
+.facts.five .fact > small { display: block; margin-top: 6px; font-size: 13px; }

@@ -24,3 +24,27 @@ export const CREW = [
 // Last 12 readings for crew 03, used by the Ask charts.
 export const heartHistory = [58, 57, 59, 60, 59, 61, 62, 61, 63, 62, 64, 64];
 export const sleepHistory = [7.2, 7.0, 7.1, 6.9, 6.8, 6.6, 6.7, 6.5, 6.4, 6.4, 6.3, 6.2];
+
+/* ---------- Self check-ins (added for the challenge: astronaut-entered readings) ---------- */
+
+// Latest check-in readings for crew 03. `when` is plain text for the UI. null value = not taken yet.
+export const VITALS = {
+  bp:      { name: 'Blood pressure', value: [118, 76], unit: 'mmHg', when: 'This morning' },
+  glucose: { name: 'Blood sugar', value: null, unit: 'mg/dL', when: 'Due now' },
+  temp:    { name: 'Temperature', value: 37.1, unit: '°C', when: 'Yesterday' },
+  mood:    { name: 'Mood', value: 4, unit: 'of 5', when: 'Yesterday' },
+};
+
+// Today's health routine. `check` = which check-in field completes it.
+// Exercise: ISS crews train about 2 hours a day (NASA HRP, muscle and bone loss countermeasures).
+export const ROUTINE = [
+  { id: 'bp', time: '07:00', label: 'Blood pressure', check: 'bp', done: true },
+  { id: 'exercise', time: '09:00', label: 'Exercise · 2 h', done: true },
+  { id: 'glucose', time: '12:00', label: 'Blood sugar', check: 'glucose', done: false },
+  { id: 'temp', time: '20:00', label: 'Temperature', check: 'temp', done: false },
+  { id: 'mood', time: '20:00', label: 'How do you feel?', check: 'mood', done: false },
+];
+
+export const SHIP_TIME = '12:04';
+export const STREAK = 12;            // days in a row with every check done
+export const COMMS_DELAY_MIN = 12.4; // one-way message delay to Earth today
