@@ -1,6 +1,7 @@
 import { uni, framing, applyFraming, setAuraVisible } from './body.js';
 import { renderer, backdrop, twin } from './scene.js';
 import { STYLES } from './effects.js';
+import { loadOrgan, manifestLoaded, getManifest, setOrganPlacement } from './organs.js';
 
 /*
   FX dev panel for trying looks. Only loads with ?dev in the URL. Toggle with the ` (backtick) key.
@@ -155,6 +156,56 @@ function controlHTML(c) {
     <input type="range" data-key="${c.k}" min="${c.min}" max="${c.max}" step="${c.step}" value="${fx[c.k]}"></label>`;
 }
 
+// Organ placement: move the organ models inside the body. Saved in this browser; "Copy manifest"
+// puts the whole manifest on the clipboard to paste over assets/models/manifest.json.
+const PLACE_KEY = 'vitalis-organ-placement';
+const PLACE_ORGANS = [['heart', 'Heart'], ['lungs', 'Lungs'], ['sleep', 'Brain'], ['digestion', 'Digestion']];
+const PLACE_CONTROLS = [
+  { k: 'x', label: 'Left / right', min: -.4, max: .4, step: .002 },
+  { k: 'y', label: 'Height', min: .4, max: 1, step: .001 },
+  { k: 'scale', label: 'Size', min: .3, max: 2, step: .01 },
+  { k: 'depth', label: 'Depth (front view: no change)', min: 0, max: .15, step: .001 },
+];
+const place = { sel: 'heart', show: true, ready: false };
+
+function placeValues(k) {
+  const c = getManifest()?.organs?.[k];
+  return c ? { x: c.anchor[0], y: c.anchor[1], scale: c.scale ?? 1, depth: c.depth } : null;
+}
+function placePatch(v) {
+  return { anchor: [+v.x.toFixed(3), +v.y.toFixed(3)], scale: +v.scale.toFixed(3), depth: +v.depth.toFixed(3) };
+}
+function savePlacement() {
+  const all = {};
+  for (const [k] of PLACE_ORGANS) { const v = placeValues(k); if (v) all[k] = placePatch(v); }
+  try { localStorage.setItem(PLACE_KEY, JSON.stringify(all)); } catch {}
+}
+function loadPlacement() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PLACE_KEY) || '{}');
+    for (const [k, patch] of Object.entries(saved)) setOrganPlacement(k, patch);
+  } catch {}
+}
+function showPlacementOrgans() {
+  const keys = PLACE_ORGANS.map(([k]) => k);
+  twin.devShow = place.show ? new Set(keys) : null;
+  if (place.show) keys.forEach(k => loadOrgan(k));
+}
+
+function placeHTML() {
+  if (!place.ready) return `<p class="note">Loading organ list…</p>`;
+  const v = placeValues(place.sel);
+  let html = `<div class="grid">${PLACE_ORGANS.map(([k, n]) => `<button data-organ="${k}" class="${place.sel === k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
+  html += `<label class="check"><input type="checkbox" data-placeshow ${place.show ? 'checked' : ''}> Show all organs</label>`;
+  for (const c of PLACE_CONTROLS) {
+    html += `<label><span>${c.label}<b data-placeout="${c.k}">${v[c.k]}</b></span>
+      <input type="range" data-place="${c.k}" min="${c.min}" max="${c.max}" step="${c.step}" value="${v[c.k]}"></label>`;
+  }
+  html += `<p class="note">Saved in this browser. Copy manifest, then paste it over assets/models/manifest.json to keep it.</p>`;
+  html += `<div class="row"><button data-act="place-reset">Reset organ</button><button data-act="place-copy">Copy manifest</button></div>`;
+  return html;
+}
+
 function render(panel) {
   let html = `<header><h4>FX <small>\` to hide</small></h4><button class="x" data-act="close" aria-label="Close">×</button></header>`;
   let section = '';
@@ -170,6 +221,8 @@ function render(panel) {
     html += controlHTML(c);
   }
   html += `<div class="row"><button data-act="reset">Reset</button><button data-act="copy">Copy settings</button></div>`;
+  html += `<button class="sec ${collapsed.has('Organs') ? 'shut' : ''}" data-sec="Organs">Organ placement</button>`;
+  if (!collapsed.has('Organs')) html += placeHTML();
   panel.innerHTML = html;
 }
 
@@ -234,6 +287,17 @@ export function initDevPanel() {
   render(panel);
   apply();
 
+  // Original manifest values, so "Reset organ" can undo saved changes.
+  let original = {};
+  manifestLoaded.then(() => {
+    original = JSON.parse(JSON.stringify(getManifest()?.organs || {}));
+    loadPlacement();
+    place.ready = true;
+    render(panel);
+    // Organs load once the body is in; wait for it, then show the picked organ.
+    const wait = setInterval(() => { if (twin.body) { clearInterval(wait); showPlacementOrgans(); } }, 300);
+  });
+
   const show = on => {
     panel.classList.toggle('off', !on);
     toggle.classList.toggle('off', on);
@@ -246,6 +310,20 @@ export function initDevPanel() {
 
   // Sliders, colours, checkboxes
   panel.addEventListener('input', e => {
+    const pk = e.target.dataset.place;
+    if (pk) {
+      const v = placeValues(place.sel);
+      v[pk] = +e.target.value;
+      setOrganPlacement(place.sel, placePatch(v));
+      panel.querySelector(`[data-placeout="${pk}"]`).textContent = v[pk];
+      savePlacement();
+      return;
+    }
+    if (e.target.dataset.placeshow !== undefined) {
+      place.show = e.target.checked;
+      showPlacementOrgans();
+      return;
+    }
     const k = e.target.dataset.key;
     if (!k) return;
     const before = JSON.stringify(visibleKeys());
@@ -270,6 +348,22 @@ export function initDevPanel() {
       navigator.clipboard?.writeText(JSON.stringify(fx));
       b.textContent = 'Copied';
       setTimeout(() => (b.textContent = 'Copy settings'), 1200);
+      return;
+    }
+    if (d.organ) {
+      place.sel = d.organ;
+      return render(panel);
+    }
+    if (d.act === 'place-reset') {
+      const o = original[place.sel];
+      if (o) setOrganPlacement(place.sel, { anchor: [...o.anchor], scale: o.scale ?? 1, depth: o.depth });
+      savePlacement();
+      return render(panel);
+    }
+    if (d.act === 'place-copy') {
+      navigator.clipboard?.writeText(JSON.stringify(getManifest(), null, 2) + '\n');
+      b.textContent = 'Copied';
+      setTimeout(() => (b.textContent = 'Copy manifest'), 1200);
       return;
     }
     if (d.sec) {

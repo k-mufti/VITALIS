@@ -101,11 +101,21 @@ export function loadOrgan(k) {
 
 // Positions are worked out in the pivot's own space, so they hold whichever way the body is turned.
 function placeOrgan(k, cfg, model, o) {
-  const B = twin.bodyBox, H = B.max.y - B.min.y;
   const raw = new THREE.Box3().setFromObject(model);
-  const size = raw.getSize(new THREE.Vector3());
+  o.size = raw.getSize(new THREE.Vector3());
   model.position.copy(raw.getCenter(new THREE.Vector3())).multiplyScalar(-1);
+  const holder = new THREE.Group();
+  holder.add(model);
+  holder.visible = false;
+  o.group = holder;
+  o.cfg = cfg;
+  layoutOrgan(k, o);
+}
 
+// Size and position the organ from its manifest entry. Runs again when the dev panel moves it.
+function layoutOrgan(k, o) {
+  const cfg = o.cfg, size = o.size;
+  const B = twin.bodyBox, H = B.max.y - B.min.y;
   let s;
   const center = new THREE.Vector3();
   if (cfg.fullBody) {
@@ -119,12 +129,8 @@ function placeOrgan(k, cfg, model, o) {
   }
   s *= cfg.scale ?? 1;
 
-  const holder = new THREE.Group();
-  holder.add(model);
-  holder.scale.setScalar(s);
-  holder.position.copy(center);
-  holder.visible = false;
-  o.group = holder;
+  o.group.scale.setScalar(s);
+  o.group.position.copy(center);
   o.base = s;
 
   // Top of the visible part. A small margin keeps a beating or breathing organ from being trimmed.
@@ -143,6 +149,16 @@ function placeOrgan(k, cfg, model, o) {
   }
 }
 
+// Dev panel (?dev): read and change an organ's placement live. Changes stay in memory only.
+export const manifestLoaded = manifestReady;
+export const getManifest = () => manifest;
+export function setOrganPlacement(k, patch) {
+  const cfg = manifest?.organs?.[k];
+  if (!cfg) return;
+  Object.assign(cfg, patch);
+  if (organs[k]?.group) layoutOrgan(k, organs[k]);
+}
+
 // Load the heart and lungs in the background. The écorché is big, so it only loads when opened.
 export function prefetchOrgans() {
   loadOrgan('lungs').then(() => loadOrgan('heart'));
@@ -150,6 +166,7 @@ export function prefetchOrgans() {
 
 // Should this model be showing? The open system's model, or (on the Body view) the models of the picked layer.
 function wanted(k, now) {
+  if (twin.devShow?.has(k)) return true;  // dev panel: keep organs on screen while placing them
   if (twin.focus) return twin.focus === k && now - twin.focusAt > 650;
   return (LAYER_MODELS[twin.layer] || []).includes(k);
 }
