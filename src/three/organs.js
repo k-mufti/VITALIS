@@ -41,7 +41,7 @@ export const organFx = {
   edge: .45,                // edge dots 0..1
   shade: .3,                // dots on the lit side 0..1
   dotColor: '#7fe9ff',
-  tints: { heart: '#0a1f6b', lungs: '#1f5fd1', bones: '#13308f', muscles: '#1846c4' },
+  tints: { heart: '#0a1f6b', lungs: '#1f5fd1', bones: '#13308f', muscles: '#1846c4', sleep: '#3d6ff0', digestion: '#22409e' },
   // Swing the skeleton's straight-down arms out to the body's A-pose. Each bone moves as one rigid piece.
   // Positions are fractions of body height: x from the centre line, y from the feet.
   // A bone counts as arm if its centre is further out than `start` and below the shoulder;

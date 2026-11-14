@@ -24,7 +24,7 @@ const DEFAULTS = {
   adaptive: false, health: 0,
   // Organs (3D models)
   orgStyle: 0, orgEdge: .45, orgShade: .3, orgDot: '#7fe9ff',
-  tintHeart: '#0a1f6b', tintLungs: '#1f5fd1', tintBones: '#13308f', tintMuscles: '#1846c4',
+  tintHeart: '#0a1f6b', tintLungs: '#1f5fd1', tintBones: '#13308f', tintMuscles: '#1846c4', tintBrain: '#3d6ff0', tintDigestion: '#22409e',
   // Skeleton arm fit (fractions of body height)
   armOn: true, armAngle: 18, armElbow: 8,
   armShoulderX: .105, armShoulderY: .81, armElbowY: .63, armStart: .095,
@@ -83,6 +83,8 @@ const CONTROLS = [
   { k: 'tintLungs', label: 'Lungs', type: 'color' },
   { k: 'tintBones', label: 'Skeleton', type: 'color' },
   { k: 'tintMuscles', label: 'Muscles', type: 'color' },
+  { k: 'tintBrain', label: 'Brain', type: 'color' },
+  { k: 'tintDigestion', label: 'Digestion', type: 'color' },
 
   { section: 'Skeleton fit' },
   { k: 'armOn', label: 'Bend arms to match body', type: 'check' },
@@ -159,6 +161,8 @@ function apply() {
   organFx.tints.lungs = fx.tintLungs;
   organFx.tints.bones = fx.tintBones;
   organFx.tints.muscles = fx.tintMuscles;
+  organFx.tints.sleep = fx.tintBrain;
+  organFx.tints.digestion = fx.tintDigestion;
   Object.assign(organFx.arm, {
     on: fx.armOn, angle: fx.armAngle, elbow: fx.armElbow,
     shoulderX: fx.armShoulderX, shoulderY: fx.armShoulderY, elbowY: fx.armElbowY, start: fx.armStart,
