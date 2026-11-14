@@ -21,19 +21,21 @@ export const LAYERS = [
 // What lives in each layer, head to toe.
 const PARTS = [
   { sys: 'eyes',    name: 'Eyes',    layer: 'organs' },
+  { sys: 'ears',    name: 'Inner ear', layer: 'organs', noData: true },   // TODO(backend): balance data
   { sys: 'sleep',   name: 'Brain',   layer: 'organs' },
   { sys: 'heart',   name: 'Heart',   layer: 'organs' },
   { sys: 'lungs',   name: 'Lungs',   layer: 'organs' },
   { sys: 'digestion', name: 'Digestion', layer: 'organs', noData: true },   // TODO(backend): digestion data
+  { sys: 'kidneys', name: 'Kidneys', layer: 'organs', noData: true },     // TODO(backend): kidney data
   { sys: 'muscles', name: 'Muscles', layer: 'muscle' },
   { sys: 'bones',   name: 'Bones',   layer: 'skeleton' },
 ];
 
 // Models each layer shows in the 3D body.
-export const LAYER_MODELS = { muscle: ['muscles'], skeleton: ['bones'], organs: ['sleep', 'heart', 'lungs', 'digestion'] };
+export const LAYER_MODELS = { muscle: ['muscles'], skeleton: ['bones'], organs: ['eyes', 'ears', 'sleep', 'heart', 'lungs', 'digestion', 'kidneys'] };
 
 function tile(p) {
-  // Parts without data yet (digestion) can be found on the body but don't open a detail view.
+  // Parts without data yet (inner ear, digestion, kidneys) can be found on the body but don't open a detail view.
   if (p.noData) {
     return `<div class="an-tile no-data" data-part="${p.sys}" tabindex="0">
     <img src="assets/thumbs/${p.sys}.webp" alt="" loading="lazy" />

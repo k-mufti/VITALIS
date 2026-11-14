@@ -16,6 +16,8 @@ export const REGIONS = {
   heart:   { x: .09,   v: .735, radius: .24, dist: 2.3 },
   muscles: { x: -.27,  v: .45,  radius: .5,  dist: 3.9 },
   digestion: { x: 0,   v: .6,   radius: .42, dist: 3.4 },
+  kidneys: { x: 0,     v: .61,  radius: .36, dist: 3.2 },
+  ears:    { x: 0,     v: .93,  radius: .2,  dist: 1.6 },
 };
 
 export const uni = {
