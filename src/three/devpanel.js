@@ -243,7 +243,7 @@ function render(panel) {
   for (const c of CONTROLS) {
     if (c.section) {
       section = c.section;
-      html += `<button class="sec ${collapsed.has(section) ? 'shut' : ''}" data-sec="${section}">${section}</button>`;
+      html += `<button class="sec ${collapsed.has(section) ? 'shut' : ''}" data-sec="${section}" data-sec-name="${section}">${section}</button>`;
       continue;
     }
     if (collapsed.has(section)) continue;
@@ -267,6 +267,7 @@ const CSS = `
 #fxPanel .sec { display: flex; justify-content: space-between; width: 100%; margin: 14px 0 10px; padding: 0 0 6px;
   border-bottom: 1px solid #0e0e0e; font: 700 12px 'Barlow Condensed', sans-serif; letter-spacing: .2em; text-transform: uppercase; }
 #fxPanel .sec::after { content: '−'; }
+#fxPanel .sec.flash { color: #0aa5bd; border-color: #0aa5bd; transition: color .2s, border-color .2s; }
 #fxPanel .sec.shut::after { content: '+'; }
 #fxPanel .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 12px; }
 #fxPanel .grid.three { grid-template-columns: 1fr 1fr 1fr; }
@@ -349,6 +350,26 @@ export function initDevPanel() {
     // Re-render only if this change shows or hides other controls (keeps slider drags smooth).
     if (JSON.stringify(visibleKeys()) !== before) render(panel);
   });
+
+  // Clicking a body part (spot, body-panel tile, risk card) jumps the panel to that organ's settings.
+  document.addEventListener('click', e => {
+    const part = e.target.closest?.('[data-sys]');
+    if (!part || panel.contains(part)) return;
+    const i = ORGAN_LIST.findIndex(([id]) => id === part.dataset.sys);
+    if (i < 0) return;
+    fx.posOrgan = i;
+    collapsed.delete('Organ position');
+    if (part.dataset.sys === 'bones') collapsed.delete('Skeleton fit');
+    save();
+    render(panel);
+    show(true);
+    const head = panel.querySelector('[data-sec-name="Organ position"]');
+    if (head) {
+      panel.scrollTo({ top: head.offsetTop - 8, behavior: 'smooth' });
+      head.classList.add('flash');
+      setTimeout(() => head.classList.remove('flash'), 900);
+    }
+  }, true);
 
   // Double-click a slider to put it back to its default.
   panel.addEventListener('dblclick', e => {
