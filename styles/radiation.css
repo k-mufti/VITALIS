@@ -1,0 +1,108 @@
+/* Radiation: space-weather chip (top bar) and dose gauge (body view). */
+
+.bar-right { justify-self: end; display: flex; align-items: center; gap: 18px; }
+
+/* ---------- chip ---------- */
+.sw-wrap { position: relative; }
+.sw { display: flex; align-items: center; gap: 10px; padding: 7px 14px; border: 1px solid var(--line); background: var(--white); font: 500 13px var(--cond); letter-spacing: .12em; text-transform: uppercase; color: var(--soft); cursor: pointer; transition: border-color .3s, background .3s, color .3s; }
+.sw:hover, .sw[aria-expanded="true"] { border-color: var(--ink); color: var(--ink); }
+.sw b { font: 600 15px var(--cond); letter-spacing: .04em; color: var(--ink); text-transform: none; font-variant-numeric: tabular-nums; }
+.sw em { font-style: normal; font-weight: 600; }
+.sw-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--soft); flex: none; }
+
+.sw[data-level="quiet"] .sw-dot { background: var(--green); }
+.sw[data-level="quiet"] em { color: var(--green); }
+.sw[data-level="raised"] { border-color: var(--amber); }
+.sw[data-level="raised"] .sw-dot { background: var(--amber); }
+.sw[data-level="raised"] em { color: var(--amber); }
+.sw[data-level="storm"] { border-color: var(--red); background: var(--red); color: rgba(255,255,255,.8); }
+.sw[data-level="storm"] b, .sw[data-level="storm"] em { color: var(--white); }
+.sw[data-level="storm"] .sw-dot { background: var(--white); animation: sw-pulse 1s ease-in-out infinite; }
+@keyframes sw-pulse { 50% { opacity: .25; transform: scale(1.5); } }
+
+.sw-pop { position: absolute; top: calc(100% + 10px); right: 0; width: 340px; padding: 18px 20px; background: var(--white); border: 1px solid var(--ink); box-shadow: 0 18px 40px rgba(0,0,0,.12); z-index: 40; font: 400 14px/1.45 var(--sans); color: var(--ink); text-align: left; }
+.sw-pop h3 { font: 600 14px var(--cond); letter-spacing: .18em; text-transform: uppercase; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+.sw-tag { font: 600 10px var(--cond); letter-spacing: .14em; padding: 2px 6px; background: var(--green); color: var(--white); }
+.sw-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-top: 14px; font: 500 13px var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--soft); }
+.sw-row b { font: 500 20px var(--cond); letter-spacing: 0; color: var(--ink); text-transform: none; }
+.sw-row small { font-size: 13px; color: var(--soft); }
+.sw-muted { color: var(--soft); font-size: 13px; margin-top: 4px; }
+.sw-pop a { color: var(--cyan); text-decoration: none; }
+.sw-pop a:hover { text-decoration: underline; }
+.sw-src { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 11px; color: var(--soft); }
+.sw-alert { padding: 12px 14px; background: color-mix(in srgb, var(--red) 10%, var(--white)); border-left: 3px solid var(--red); font-size: 13px; }
+.sw-alert b { display: block; color: var(--red); margin-bottom: 4px; }
+.sw-alert p { margin-bottom: 6px; }
+
+.sw-meter { position: relative; height: 6px; margin-top: 8px; background: var(--line); }
+.sw-meter i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--ink); transition: width .6s var(--ease); }
+.sw-meter em { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--red); }
+.sw-meter-scale { display: flex; justify-content: space-between; margin-top: 4px; font: 500 10px var(--cond); letter-spacing: .08em; color: var(--soft); text-transform: uppercase; }
+
+/* ---------- dose gauge ---------- */
+.dose { position: relative; margin: 18px 0 0 -14px; width: 348px; padding: 12px 14px; background: color-mix(in srgb, var(--paper) 86%, transparent); backdrop-filter: blur(6px); }
+.dose-head { display: flex; justify-content: space-between; align-items: baseline; }
+.dose-head span { font: 600 13px var(--cond); letter-spacing: .2em; text-transform: uppercase; color: var(--soft); }
+.dose-head b { font: 300 34px/1 var(--cond); font-variant-numeric: tabular-nums; }
+.dose-head small { font: 500 14px var(--cond); letter-spacing: .08em; color: var(--soft); }
+.dose-bar { position: relative; height: 10px; margin-top: 10px; background: var(--line); overflow: hidden; }
+.dose-bar i { position: absolute; top: 0; bottom: 0; transition: width .8s var(--ease), left .8s var(--ease); }
+.dose-base { left: 0; background: var(--cyan); }
+.dose-storm { background: var(--red); background-image: repeating-linear-gradient(-45deg, transparent 0 3px, rgba(255,255,255,.35) 3px 6px); }
+.dose[data-level="mid"] .dose-base { background: var(--amber); }
+.dose[data-level="high"] .dose-base { background: var(--red); }
+.dose-scale { display: flex; justify-content: space-between; margin-top: 5px; font: 500 11px var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--soft); }
+.dose-sub { margin-top: 8px; font: 400 13px/1.4 var(--sans); color: var(--soft); max-width: 320px; }
+.dose-sub b { color: var(--ink); font-weight: 600; }
+.dose-storm-note { color: var(--red); font-weight: 500; }
+
+@media (max-width: 900px) {
+  .sw-label { display: none; }
+  .sw-pop { width: min(340px, calc(100vw - 32px)); }
+  .dose { width: min(320px, calc(100vw - 80px)); }
+}
+
+/* ---------- storm alert ---------- */
+.storm-alert { position: absolute; z-index: 30; top: 82px; left: 50%; width: min(980px, calc(100vw - 32px)); transform: translate(-50%, -16px); opacity: 0; display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 22px; padding: 18px 22px; background: var(--red); color: var(--white); box-shadow: 0 24px 60px rgba(224,68,46,.35); transition: opacity .45s var(--ease), transform .45s var(--ease); }
+.storm-alert.in { opacity: 1; transform: translate(-50%, 0); }
+.storm-alert.out { opacity: 0; transform: translate(-50%, -16px); }
+.storm-alert a { color: var(--white); text-decoration: underline; text-underline-offset: 2px; }
+
+.sa-icon { position: relative; width: 46px; height: 46px; }
+.sa-icon i { position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--white); animation: sa-ring 1.8s ease-out infinite; }
+.sa-icon i:nth-child(2) { animation-delay: .6s; }
+.sa-icon i:nth-child(3) { animation-delay: 1.2s; }
+.sa-icon::after { content: ''; position: absolute; inset: 15px; border-radius: 50%; background: var(--white); }
+@keyframes sa-ring { from { transform: scale(.35); opacity: 1; } to { transform: scale(1.15); opacity: 0; } }
+
+.sa-kicker { font: 600 12px var(--cond); letter-spacing: .2em; text-transform: uppercase; opacity: .8; }
+.sa-main h2 { font: 600 30px/1.05 var(--cond); letter-spacing: .04em; text-transform: uppercase; margin: 4px 0 6px; }
+.sa-meta { font: 400 13px/1.4 var(--sans); opacity: .92; }
+.sa-meta b { font-weight: 600; }
+
+.sa-dose { padding: 0 22px; border-left: 1px solid rgba(255,255,255,.35); border-right: 1px solid rgba(255,255,255,.35); text-align: center; }
+.sa-dose span { display: block; font: 600 11px var(--cond); letter-spacing: .18em; text-transform: uppercase; opacity: .8; }
+.sa-dose b { display: block; font: 300 42px/1 var(--cond); margin: 4px 0; font-variant-numeric: tabular-nums; }
+.sa-dose em { font-style: normal; }
+.sa-dose small { font-size: 16px; font-weight: 500; }
+.sa-dose .sa-limit { font-size: 10px; letter-spacing: .1em; opacity: .7; }
+
+.sa-side { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.sa-earth { font: 500 12px var(--cond); letter-spacing: .1em; text-transform: uppercase; opacity: .9; white-space: nowrap; }
+.sa-earth b { font-weight: 700; }
+.sa-ack { font: 600 13px var(--cond); letter-spacing: .16em; text-transform: uppercase; padding: 9px 16px; background: var(--white); color: var(--red); border: 0; cursor: pointer; transition: background .2s, color .2s; }
+.sa-ack:hover { background: var(--ink); color: var(--white); }
+
+/* Proton streaks + red edge glow over the 3D body. --storm runs 0..1. */
+.storm-fx { position: absolute; inset: 0; pointer-events: none; z-index: 2; --storm: 0; box-shadow: inset 0 0 calc(220px * var(--storm)) calc(40px * var(--storm)) rgba(224,68,46,calc(.28 * var(--storm))); }
+.storm-fx canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+@media (max-width: 900px) {
+  .storm-alert { grid-template-columns: auto 1fr; gap: 14px; }
+  .sa-dose { border: 0; padding: 0; text-align: left; }
+  .sa-side { align-items: flex-start; }
+  .sa-main h2 { font-size: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sa-icon i { animation: none; opacity: .6; }
+}
