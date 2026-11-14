@@ -42,33 +42,36 @@ export const organFx = {
   shade: 1,                 // dots on the lit side 0..1
   dotColor: '#7fe9ff',
   tints: { heart: '#0a1f6b', lungs: '#1f5fd1', bones: '#13308f', muscles: '#1846c4', sleep: '#3d6ff0', digestion: '#22409e' },
-  // Arm rigs that pose the straight-down arms of the skeleton and muscle models to match the body.
+  // Limb rigs that pose the skeleton's and muscle model's arms and legs to match the body.
   // Skeleton: each bone moves as one rigid piece. Muscles: one skin, blended softly at the joints.
-  // start = arms are further out than this from the centre line; armpit = below this the arm skin is
-  // separate from the torso (muscles only); soft = blend width at elbow / wrist (muscles only).
-  // Per side (L = left on screen, R = right on screen), per joint (sh, el, wr):
+  // Per limb: on, start (the limb is further out than this from the centre line), and for the muscle
+  // skin `cut` (below this height the limb's skin is separate from the torso: armpit / crotch) and
+  // `soft` (blend width at the joints). L / R = left / right on screen, each 3 joints
+  // (arms: shoulder, elbow, wrist; legs: hip, knee, ankle) with
   //   rz swing out (+) / in (-), rx swing forward (+) / back (-), ry twist   (degrees)
   //   px pivot distance from the centre line, py height from the feet, pz depth (+ = front)
   // Distances are fractions of body height.
-  arm: {
+  rigs: {
     showJoints: false,
-    bones: { on: true, start: .09, L: armPose(), R: armPose() },
-    muscles: { on: true, start: .09, armpit: .76, soft: .02, L: armPose(), R: armPose() },
+    bones: { arms: limbRig('arms'), legs: limbRig('legs') },
+    muscles: { arms: { ...limbRig('arms'), cut: .76, soft: .02 }, legs: { ...limbRig('legs'), cut: .47, soft: .02 } },
   },
   // Per-organ nudge from the FX panel: { x, y, z } as fractions of body height, s = size multiplier.
   place: {},
 };
 const DEFAULT_TINT = '#1846c4';
 
-// Default arm pose (the skeleton fit tuned on Nov 14).
-function armPose() {
-  return {
-    sh: { rx: 0, ry: 0, rz: 25.5, px: .06, py: .822, pz: 0 },
-    el: { rx: 0, ry: 0, rz: -.5, px: .06, py: .682, pz: 0 },
-    wr: { rx: 0, ry: 0, rz: 0, px: .06, py: .485, pz: 0 },
-  };
+// Starting pose: joints where a straight-down limb bends, no turns.
+const LIMB_JOINTS = {
+  arms: [[.06, .822], [.06, .682], [.06, .485]],   // shoulder, elbow, wrist [from centre, height]
+  legs: [[.05, .52], [.05, .285], [.045, .04]],    // hip, knee, ankle
+};
+function limbPose(limb) {
+  return LIMB_JOINTS[limb].map(([px, py]) => ({ rx: 0, ry: 0, rz: 0, px, py, pz: 0 }));
 }
-const NAVY = new THREE.Color('#0A1F6B');   // plan.md 5.2 severe end of the blue scale
+function limbRig(limb) {
+  return { on: true, start: limb === 'arms' ? .09 : .015, L: limbPose(limb), R: limbPose(limb) };
+}
 
 // Uniforms shared by every organ material.
 const shared = {
@@ -78,36 +81,43 @@ const shared = {
 
 };
 
-// Arm rig, in the body's own (pivot) space, mirrored so x = distance from the centre line.
-// aArm is set per vertex on the CPU: x = how much it follows the arm (0..1), y = side (-1 left on
-// screen, 1 right), z = how much it follows the forearm, w = how much it follows the hand.
-// Skeleton weights are 0 or 1 (rigid bones), muscle weights blend. The shoulder turn carries
-// the elbow and wrist, like a real arm.
-const ARM_GLSL = `
-attribute vec4 aArm;
+// Limb rigs, in the body's own (pivot) space, mirrored so x = distance from the centre line.
+// aArm / aLeg are set per vertex on the CPU: x = how much it follows the limb (0..1), y = side
+// (-1 left on screen, 1 right), z = how much it follows the middle joint (elbow / knee),
+// w = how much it follows the end joint (wrist / ankle). Skeleton weights are 0 or 1 (rigid bones),
+// muscle weights blend. The first joint's turn carries the next two, like a real limb.
+const LIMB_GLSL = `
+attribute vec4 aArm, aLeg;
 uniform mat4 uPivot, uPivotInv;
-uniform float uArmOn, uBodyCX, uBodyCZ, uBodyMinY, uBodyH;
-uniform mat3 uRotL[3], uRotR[3];
-uniform vec3 uJointL[3], uJointR[3];
-vec4 armBend(vec4 pv, out mat3 R, out float side) {
-  side = aArm.y;
+uniform float uArmOn, uLegOn, uBodyCX, uBodyCZ, uBodyMinY, uBodyH;
+uniform mat3 uArmRotL[3], uArmRotR[3], uLegRotL[3], uLegRotR[3];
+uniform vec3 uArmJointL[3], uArmJointR[3], uLegJointL[3], uLegJointR[3];
+vec3 limbChain(vec3 p, vec4 a, mat3 R0, mat3 R1, mat3 R2, vec3 J0, vec3 J1, vec3 J2, out mat3 R) {
+  vec3 top = J0 + R0 * (p - J0);
+  vec3 mid = J0 + R0 * (J1 - J0 + R1 * (p - J1));
+  vec3 end = J0 + R0 * (J1 - J0 + R1 * (J2 - J1 + R2 * (p - J2)));
+  vec3 q = mix(mix(top, mid, a.z), end, a.w);
+  mat3 Rb = R0 + (R0 * R1 - R0) * a.z;
+  Rb = Rb + (R0 * R1 * R2 - Rb) * a.w;
+  R = mat3(1.0) + (Rb - mat3(1.0)) * a.x;
+  return mix(p, q, a.x);
+}
+vec4 limbBend(vec4 pv, out mat3 R, out float side) {
   R = mat3(1.0);
+  bool leg = aLeg.x > aArm.x;
+  vec4 a = leg ? aLeg : aArm;
+  side = a.y;
+  if (a.x <= 0.0 || (leg ? uLegOn : uArmOn) < .5) return pv;
   bool left = side < 0.0;
-  mat3 Rs = left ? uRotL[0] : uRotR[0];
-  mat3 Re = left ? uRotL[1] : uRotR[1];
-  mat3 Rw = left ? uRotL[2] : uRotR[2];
-  vec3 S = left ? uJointL[0] : uJointR[0];
-  vec3 E = left ? uJointL[1] : uJointR[1];
-  vec3 W = left ? uJointL[2] : uJointR[2];
   vec3 p = vec3(side * (pv.x - uBodyCX), pv.y - uBodyMinY, pv.z - uBodyCZ) / uBodyH;
-  vec3 upper = S + Rs * (p - S);
-  vec3 fore = S + Rs * (E - S + Re * (p - E));
-  vec3 hand = S + Rs * (E - S + Re * (W - E + Rw * (p - W)));
-  vec3 q = mix(mix(upper, fore, aArm.z), hand, aArm.w);
-  q = mix(p, q, aArm.x);
-  mat3 Rb = Rs + (Rs * Re - Rs) * aArm.z;
-  Rb = Rb + (Rs * Re * Rw - Rb) * aArm.w;
-  R = mat3(1.0) + (Rb - mat3(1.0)) * aArm.x;
+  vec3 q;
+  if (leg) {
+    q = left ? limbChain(p, a, uLegRotL[0], uLegRotL[1], uLegRotL[2], uLegJointL[0], uLegJointL[1], uLegJointL[2], R)
+             : limbChain(p, a, uLegRotR[0], uLegRotR[1], uLegRotR[2], uLegJointR[0], uLegJointR[1], uLegJointR[2], R);
+  } else {
+    q = left ? limbChain(p, a, uArmRotL[0], uArmRotL[1], uArmRotL[2], uArmJointL[0], uArmJointL[1], uArmJointL[2], R)
+             : limbChain(p, a, uArmRotR[0], uArmRotR[1], uArmRotR[2], uArmJointR[0], uArmJointR[1], uArmJointR[2], R);
+  }
   return vec4(uBodyCX + side * q.x * uBodyH, uBodyMinY + q.y * uBodyH, uBodyCZ + q.z * uBodyH, 1.0);
 }`;
 
@@ -121,14 +131,12 @@ function jointRot(j, out) {
 }
 
 // Where each joint ends up after the chain (mirrored body-fraction space). For the joint markers.
-function posedJoints(sd) {
-  const Rs = jointRot(sd.sh, new THREE.Matrix3()), Re = jointRot(sd.el, new THREE.Matrix3());
-  const S = new THREE.Vector3(sd.sh.px, sd.sh.py, sd.sh.pz);
-  const E = new THREE.Vector3(sd.el.px, sd.el.py, sd.el.pz);
-  const W = new THREE.Vector3(sd.wr.px, sd.wr.py, sd.wr.pz);
-  const E2 = E.clone().sub(S).applyMatrix3(Rs).add(S);
-  const W2 = W.clone().sub(E).applyMatrix3(Re).applyMatrix3(Rs).add(E2);
-  return [S, E2, W2];
+function posedJoints(js) {
+  const R0 = jointRot(js[0], new THREE.Matrix3()), R1 = jointRot(js[1], new THREE.Matrix3());
+  const [J0, J1, J2] = js.map(j => new THREE.Vector3(j.px, j.py, j.pz));
+  const J1b = J1.clone().sub(J0).applyMatrix3(R0).add(J0);
+  const J2b = J2.clone().sub(J1).applyMatrix3(R1).applyMatrix3(R0).add(J1b);
+  return [J0, J1b, J2b];
 }
 
 // Mesh graph of a model in pivot space: vertex positions, a welded id per vertex (vertices at the
@@ -192,22 +200,26 @@ function components(g, keep) {
   return root;
 }
 
-// Write per-vertex weights into each mesh's aArm attribute. fill(i, out4) sets the 4 values.
+// Write per-vertex weights into each mesh's aArm and aLeg attributes. fill(i, arm4, leg4) sets them.
 function writeWeights(g, fill) {
-  const w = [0, 0, 0, 0];
+  const wa = [0, 0, 0, 0], wl = [0, 0, 0, 0];
   for (const m of g.meshes) {
     const n = m.geometry.attributes.position.count, base = m.userData.armBase;
-    let attr = m.geometry.getAttribute('aArm');
-    if (!attr) {
-      attr = new THREE.BufferAttribute(new Float32Array(n * 4), 4);
-      m.geometry.setAttribute('aArm', attr);
-    }
-    const arr = attr.array;
+    const attrs = ['aArm', 'aLeg'].map(name => {
+      let attr = m.geometry.getAttribute(name);
+      if (!attr) {
+        attr = new THREE.BufferAttribute(new Float32Array(n * 4), 4);
+        m.geometry.setAttribute(name, attr);
+      }
+      return attr;
+    });
     for (let i = 0; i < n; i++) {
-      fill(base + i, w);
-      arr.set(w, i * 4);
+      wa.fill(0); wl.fill(0);
+      fill(base + i, wa, wl);
+      attrs[0].array.set(wa, i * 4);
+      attrs[1].array.set(wl, i * 4);
     }
-    attr.needsUpdate = true;
+    attrs.forEach(a => (a.needsUpdate = true));
   }
 }
 
@@ -215,34 +227,36 @@ const body = () => {
   const B = twin.bodyBox;
   return { B, H: B.max.y - B.min.y, cx: (B.min.x + B.max.x) / 2 };
 };
+const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
-// Skeleton: sort each bone (by its centre) into upper arm / forearm / hand. Rigid 0-or-1 weights.
-function classifyBones(o, rig) {
+// Skeleton: sort each bone (by its centre) into a limb part. Arms first, then legs. Rigid 0-or-1 weights.
+function classifyBones(o, rigs) {
   const g = o.graph, { B, H, cx } = body();
-  if (!o.boneRoot) o.boneRoot = components(g);
-  const root = o.boneRoot;
-  const sx = new Float64Array(g.total), sy = new Float64Array(g.total), cnt = new Int32Array(g.total);
-  for (let i = 0; i < g.total; i++) { const r = root[i]; sx[r] += g.px[i]; sy[r] += g.py[i]; cnt[r]++; }
-  writeWeights(g, (i, w) => {
+  if (!o.boneStats) {
+    const root = components(g);
+    const sx = new Float64Array(g.total), sy = new Float64Array(g.total), cnt = new Int32Array(g.total);
+    for (let i = 0; i < g.total; i++) { const r = root[i]; sx[r] += g.px[i]; sy[r] += g.py[i]; cnt[r]++; }
+    o.boneStats = { root, sx, sy, cnt };
+  }
+  const { root, sx, sy, cnt } = o.boneStats;
+  const { arms, legs } = rigs;
+  writeWeights(g, (i, wa, wl) => {
     const r = root[i];
     const dx = (sx[r] / cnt[r] - cx) / H, y = (sy[r] / cnt[r] - B.min.y) / H;
-    const sd = dx < 0 ? rig.L : rig.R;
-    const arm = Math.abs(dx) > rig.start && y < sd.sh.py;
-    w[0] = arm ? 1 : 0;
-    w[1] = dx < 0 ? -1 : 1;
-    w[2] = arm && y < sd.el.py ? 1 : 0;
-    w[3] = arm && y < sd.wr.py ? 1 : 0;
+    const side = dx < 0 ? -1 : 1, sd = dx < 0 ? 'L' : 'R';
+    const ja = arms[sd], jl = legs[sd];
+    if (Math.abs(dx) > arms.start && y < ja[0].py) {
+      wa[0] = 1; wa[1] = side; wa[2] = y < ja[1].py ? 1 : 0; wa[3] = y < ja[2].py ? 1 : 0;
+    } else if (Math.abs(dx) > legs.start && y < jl[0].py) {
+      wl[0] = 1; wl[1] = side; wl[2] = y < jl[1].py ? 1 : 0; wl[3] = y < jl[2].py ? 1 : 0;
+    }
   });
 }
 
-// Muscles: one skin. Below the armpit the arm is not joined to the torso, so the arm is the
-// outermost connected piece on each side. Joints blend over `soft`; the shoulder fades into the torso.
-function classifySkin(o, rig) {
-  const g = o.graph, { B, H, cx } = body();
-  const fx = i => (g.px[i] - cx) / H, fy = i => (g.py[i] - B.min.y) / H;
-  const below = i => fy(i) < rig.armpit && Math.abs(fx(i)) > rig.start;
+// One limb on a skin: below `cut` the limb's skin is a separate piece. pick(stats) chooses it per side.
+function skinLimb(g, fx, fy, rig, skip, pick) {
+  const below = i => !skip(i) && fy(i) < rig.cut && Math.abs(fx(i)) > rig.start;
   const root = components(g, below);
-  // Per piece: size, mean distance from the centre, height range, side.
   const stats = new Map();
   for (let i = 0; i < g.total; i++) {
     if (!below(i)) continue;
@@ -254,27 +268,41 @@ function classifySkin(o, rig) {
     if (y > st.top) st.top = y;
     if (y < st.bottom) st.bottom = y;
   }
-  // The arm on each side: reaches up to the armpit, down past the elbow, and sits furthest out.
   const best = { L: null, R: null };
   for (const [r, st] of stats) {
+    if (st.n < 200) continue;
     const sd = st.sx < 0 ? 'L' : 'R';
-    if (st.n < 200 || st.top < rig.armpit - .03 || st.bottom > rig[sd].el.py) continue;
-    if (!best[sd] || st.ax / st.n > best[sd].mean) best[sd] = { r, mean: st.ax / st.n };
+    const score = pick(st, rig[sd]);
+    if (score !== null && (!best[sd] || score > best[sd].score)) best[sd] = { r, score };
   }
-  const armRoots = new Set([best.L?.r, best.R?.r]);
-  const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-  writeWeights(g, (i, w) => {
-    const x = fx(i), y = fy(i), sd = x < 0 ? rig.L : rig.R;
+  const roots = new Set([best.L?.r, best.R?.r]);
+  return i => roots.has(root[i]) && below(i);
+}
+
+// Muscles: one skin. Arms: outermost piece below the armpit. Legs: the piece reaching lowest
+// below the crotch. Joints blend over `soft`; the top joint fades into the torso.
+function classifySkin(o, rigs) {
+  const g = o.graph, { B, H, cx } = body();
+  const fx = i => (g.px[i] - cx) / H, fy = i => (g.py[i] - B.min.y) / H;
+  const { arms, legs } = rigs;
+  const inArm = skinLimb(g, fx, fy, arms, () => false,
+    (st, js) => (st.top < arms.cut - .03 || st.bottom > js[1].py ? null : st.ax / st.n));
+  const inLeg = skinLimb(g, fx, fy, legs, inArm,
+    st => (st.top < legs.cut - .03 ? null : -st.bottom));
+  const fill = (rig, inside, i, w) => {
+    const x = fx(i), y = fy(i), js = x < 0 ? rig.L : rig.R;
     let a = 0;
-    if (armRoots.has(root[i]) && below(i)) a = 1;
-    else if (y >= rig.armpit && Math.abs(x) > rig.start) {
-      // Shoulder cap above the armpit: fade from full arm to torso.
-      a = (1 - ss(rig.armpit, sd.sh.py + .02, y)) * ss(rig.start, rig.start + .02, Math.abs(x));
-    }
+    if (inside(i)) a = 1;
+    else if (y >= rig.cut && Math.abs(x) > rig.start) a = (1 - ss(rig.cut, js[0].py + .02, y)) * ss(rig.start, rig.start + .02, Math.abs(x));
     w[0] = a;
     w[1] = x < 0 ? -1 : 1;
-    w[2] = 1 - ss(sd.el.py - rig.soft, sd.el.py + rig.soft, y);
-    w[3] = 1 - ss(sd.wr.py - rig.soft, sd.wr.py + rig.soft, y);
+    w[2] = 1 - ss(js[1].py - rig.soft, js[1].py + rig.soft, y);
+    w[3] = 1 - ss(js[2].py - rig.soft, js[2].py + rig.soft, y);
+  };
+  writeWeights(g, (i, wa, wl) => {
+    if (arms.on) fill(arms, inArm, i, wa);
+    if (legs.on && !inArm(i) && fy(i) < legs.L[0].py + .05) fill(legs, inLeg, i, wl);
+    if (wa[0] > 0 && wl[0] > 0) wl[0] = 0;   // a vertex follows one limb only
   });
 }
 
@@ -289,19 +317,19 @@ function organMaterial(u, source, doubleSided) {
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, u, shared, { uCyan: uni.uCyan, uRegionCenter: uni.uRegionCenter, uRegionRadius: uni.uRegionRadius, uPulse: uni.uPulse, uCell: uni.uCell });
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vW;' + ARM_GLSL)
+      .replace('#include <common>', '#include <common>\nvarying vec3 vW;' + LIMB_GLSL)
       .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
-if (uArmOn > .5 && aArm.x > 0.0) {
+if (aArm.x > 0.0 || aLeg.x > 0.0) {
   mat3 R; float side;
-  armBend(uPivotInv * modelMatrix * vec4(position, 1.0), R, side);
+  limbBend(uPivotInv * modelMatrix * vec4(position, 1.0), R, side);
   vec3 n = mat3(uPivotInv * modelMatrix) * objectNormal;
   n.x *= side; n = R * n; n.x *= side;
   objectNormal = normalize(inverse(mat3(uPivotInv * modelMatrix)) * n);
 }`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-if (uArmOn > .5 && aArm.x > 0.0) {
+if (aArm.x > 0.0 || aLeg.x > 0.0) {
   mat3 R; float side;
-  vec4 bent = armBend(uPivotInv * modelMatrix * vec4(transformed, 1.0), R, side);
+  vec4 bent = limbBend(uPivotInv * modelMatrix * vec4(transformed, 1.0), R, side);
   transformed = (inverse(modelMatrix) * uPivot * bent).xyz;
 }`)
       .replace('#include <project_vertex>', '#include <project_vertex>\nvW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -345,11 +373,12 @@ export function loadOrgan(k) {
     u: {
       uReveal: { value: 0 }, uMinY: { value: 0 }, uMaxY: { value: 1 }, uTime: { value: 0 }, uRegionOn: { value: 0 }, uHover: { value: 0 },
       uTint: { value: new THREE.Color(DEFAULT_TINT) }, uSeverity: { value: 0 }, uArmOn: { value: 0 },
-      // Arm rig: [shoulder, elbow, wrist] rotation and pivot per side (skeleton and muscles only)
-      uRotL: { value: [new THREE.Matrix3(), new THREE.Matrix3(), new THREE.Matrix3()] },
-      uRotR: { value: [new THREE.Matrix3(), new THREE.Matrix3(), new THREE.Matrix3()] },
-      uJointL: { value: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] },
-      uJointR: { value: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] },
+      uLegOn: { value: 0 },
+      // Limb rigs: 3 joint rotations and pivots per side (skeleton and muscles only)
+      ...Object.fromEntries(['Arm', 'Leg'].flatMap(l => ['L', 'R'].flatMap(sd => [
+        [`u${l}Rot${sd}`, { value: [new THREE.Matrix3(), new THREE.Matrix3(), new THREE.Matrix3()] }],
+        [`u${l}Joint${sd}`, { value: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] }],
+      ]))),
     },
   };
   o.promise = manifestReady.then(() => {
@@ -367,7 +396,7 @@ export function loadOrgan(k) {
       placeOrgan(k, cfg, model, o);
       pivot.add(o.group);
       // Arm rigs need the mesh graph. Built just after the first frame so the model shows first.
-      if (organFx.arm[k]) setTimeout(() => buildGraph(o), 60);
+      if (organFx.rigs[k]) setTimeout(() => buildGraph(o), 60);
       return o;
     });
   }).catch(err => {
@@ -455,16 +484,16 @@ function wanted(k, now) {
   return (LAYER_MODELS[twin.layer] || []).includes(k);
 }
 
-// Small cyan dots on each arm joint (FX panel "Show joint markers"), drawn on top of everything.
-function updateJointMarkers(o, rig) {
+// Small cyan dots on each limb joint (FX panel "Show joint markers"), drawn on top of everything.
+function updateJointMarkers(o, rigs) {
   const B = twin.bodyBox;
-  const on = rig.on && organFx.arm.showJoints && o.group.visible;
+  const on = organFx.rigs.showJoints && o.group.visible;
   if (!o.markers && !on) return;
   if (!o.markers) {
     o.markers = new THREE.Group();
     const mat = new THREE.MeshBasicMaterial({ color: '#0aa5bd', depthTest: false, transparent: true });
     const geo = new THREE.SphereGeometry(1, 12, 8);
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 12; i++) {
       const dot = new THREE.Mesh(geo, mat);
       dot.renderOrder = 20;
       o.markers.add(dot);
@@ -474,35 +503,46 @@ function updateJointMarkers(o, rig) {
   o.markers.visible = on;
   if (!on) return;
   const H = B.max.y - B.min.y, cx = (B.min.x + B.max.x) / 2, cz = (B.min.z + B.max.z) / 2;
-  [[rig.L, -1], [rig.R, 1]].forEach(([sd, side], s) => {
-    posedJoints(sd).forEach((j, i) => {
-      const dot = o.markers.children[s * 3 + i];
-      dot.position.set(cx + side * j.x * H, B.min.y + j.y * H, cz + j.z * H);
-      dot.scale.setScalar(H * (i === 0 ? .009 : .007));
-    });
-  });
+  let n = 0;
+  for (const limb of ['arms', 'legs']) {
+    const rig = rigs[limb];
+    for (const [sd, side] of [['L', -1], ['R', 1]]) {
+      posedJoints(rig[sd]).forEach((j, i) => {
+        const dot = o.markers.children[n++];
+        dot.visible = rig.on;
+        dot.position.set(cx + side * j.x * H, B.min.y + j.y * H, cz + j.z * H);
+        dot.scale.setScalar(H * (i === 0 ? .009 : .007));
+      });
+    }
+  }
 }
 
-// Push one rig's joints into an organ's uniforms, and re-weight the mesh when its split points move.
+// Push the rigs' joints into an organ's uniforms, and re-weight the mesh when its split points move.
 // The muscle skin is big, so it waits until the sliders have been still for a moment.
-function updateRig(k, o, rig, now) {
-  o.u.uArmOn.value = rig.on && o.graph ? 1 : 0;
-  ['sh', 'el', 'wr'].forEach((j, i) => {
-    jointRot(rig.L[j], o.u.uRotL.value[i]);
-    jointRot(rig.R[j], o.u.uRotR.value[i]);
-    o.u.uJointL.value[i].set(rig.L[j].px, rig.L[j].py, rig.L[j].pz);
-    o.u.uJointR.value[i].set(rig.R[j].px, rig.R[j].py, rig.R[j].pz);
-  });
-  if (!o.graph || !rig.on) return;
-  const key = [rig.start, rig.armpit, rig.soft, ...['L', 'R'].flatMap(sd => ['sh', 'el', 'wr'].map(j => rig[sd][j].py))].join('|');
+function updateRig(k, o, rigs, now) {
+  o.u.uArmOn.value = rigs.arms.on && o.graph ? 1 : 0;
+  o.u.uLegOn.value = rigs.legs.on && o.graph ? 1 : 0;
+  for (const [limb, l] of [['arms', 'Arm'], ['legs', 'Leg']]) {
+    for (const sd of ['L', 'R']) {
+      rigs[limb][sd].forEach((j, i) => {
+        jointRot(j, o.u[`u${l}Rot${sd}`].value[i]);
+        o.u[`u${l}Joint${sd}`].value[i].set(j.px, j.py, j.pz);
+      });
+    }
+  }
+  if (!o.graph) return;
+  const key = ['arms', 'legs'].flatMap(limb => {
+    const r = rigs[limb];
+    return [r.on, r.start, r.cut, r.soft, ...['L', 'R'].flatMap(sd => r[sd].map(j => j.py))];
+  }).join('|');
   if (key !== o.rigKey) { o.rigKey = key; o.rigAt = now; }
   const wait = k === 'muscles' ? 300 : 0;
   if (o.rigDone !== key && now - o.rigAt >= wait) {
-    if (k === 'muscles') classifySkin(o, rig);
-    else classifyBones(o, rig);
+    if (k === 'muscles') classifySkin(o, rigs);
+    else classifyBones(o, rigs);
     o.rigDone = key;
   }
-  updateJointMarkers(o, rig);
+  updateJointMarkers(o, rigs);
 }
 
 // Push the FX settings into the shared uniforms (cheap, runs every frame).
@@ -543,7 +583,7 @@ export function updateOrgans(now, dt) {
     const sev = twin.severity?.[k] || 0;
     o.u.uSeverity.value = sev;
     o.u.uTint.value.set(organFx.tints[k] || DEFAULT_TINT).lerp(tmpColor.copy(NAVY), sev * .8);
-    if (organFx.arm[k]) updateRig(k, o, organFx.arm[k], now);
+    if (organFx.rigs[k]) updateRig(k, o, organFx.rigs[k], now);
     // FX panel nudge: move / resize the organ (and its scan-in range) from its fitted spot.
     const p = organFx.place[k];
     if (p && o.basePos) {
