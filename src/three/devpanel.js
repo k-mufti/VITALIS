@@ -26,8 +26,8 @@ const DEFAULTS = {
   orgStyle: 0, orgEdge: .45, orgShade: .3, orgDot: '#7fe9ff',
   tintHeart: '#0a1f6b', tintLungs: '#1f5fd1', tintBones: '#13308f', tintMuscles: '#1846c4',
   // Skeleton arm fit (fractions of body height)
-  armOn: true, armMuscles: false, armAngle: 18, armElbow: 8,
-  armShoulderX: .105, armShoulderY: .81, armElbowY: .63, armStart: .095, armBlend: .015,
+  armOn: true, armAngle: 18, armElbow: 8,
+  armShoulderX: .105, armShoulderY: .81, armElbowY: .63, armStart: .095,
 };
 const STORE_KEY = 'vitalis-fx';
 const VERSION = 2;  // bump to push new defaults over saved settings
@@ -86,15 +86,13 @@ const CONTROLS = [
 
   { section: 'Skeleton fit' },
   { k: 'armOn', label: 'Bend arms to match body', type: 'check' },
-  { k: 'armMuscles', label: 'Also bend muscle model', type: 'check', when: f => f.armOn },
   { k: 'armAngle', label: 'Arm angle', min: -10, max: 45, step: .5, when: f => f.armOn },
   { k: 'armElbow', label: 'Elbow angle', min: -20, max: 40, step: .5, when: f => f.armOn },
   { k: 'armShoulderX', label: 'Shoulder width', min: .06, max: .16, step: .001, when: f => f.armOn },
   { k: 'armShoulderY', label: 'Shoulder height', min: .7, max: .9, step: .001, when: f => f.armOn },
   { k: 'armElbowY', label: 'Elbow height', min: .5, max: .75, step: .001, when: f => f.armOn },
-  { k: 'armStart', label: 'Arm starts at', min: .06, max: .14, step: .001, when: f => f.armOn },
-  { k: 'armBlend', label: 'Arm blend', min: .002, max: .05, step: .001, when: f => f.armOn },
-  { type: 'note', text: 'Open Body → Bones to see the skeleton. Line the arms up with the body behind it.', when: f => f.armOn },
+  { k: 'armStart', label: 'Arm bones start at', min: .05, max: .15, step: .001, when: f => f.armOn },
+  { type: 'note', text: 'Open Body → Bones. Elbow height splits upper arm from forearm. If a rib or hip bone swings out, raise "Arm bones start at"; if a finger stays behind, lower it.', when: f => f.armOn },
 
   { section: 'Adaptive' },
   { k: 'adaptive', label: 'Follow crew health', type: 'check' },
@@ -162,8 +160,8 @@ function apply() {
   organFx.tints.bones = fx.tintBones;
   organFx.tints.muscles = fx.tintMuscles;
   Object.assign(organFx.arm, {
-    on: fx.armOn, muscles: fx.armMuscles, angle: fx.armAngle, elbow: fx.armElbow,
-    shoulderX: fx.armShoulderX, shoulderY: fx.armShoulderY, elbowY: fx.armElbowY, start: fx.armStart, blend: fx.armBlend,
+    on: fx.armOn, angle: fx.armAngle, elbow: fx.armElbow,
+    shoulderX: fx.armShoulderX, shoulderY: fx.armShoulderY, elbowY: fx.armElbowY, start: fx.armStart,
   });
   // Framing
   framing.size = fx.size;
