@@ -92,13 +92,17 @@ const READINGS = {
     const r = organReading('eyes');
     return { value: r.value, unit: 'mm wide', usual: r.usual, look: r.level === 'low' ? 'ok' : 'high' };
   } },
-  bone: { name: 'Bone density', sys: 'bones', get() {
+  bone: { name: 'Bone density', sys: 'bones', hint: 'Estimate, scanned after landing', get() {
     const r = organReading('bones'), [lo, hi] = parseUsual(r.usual);
     return { value: r.value, unit: '% of preflight', usual: r.usual, look: organLook(r.level, r.value, lo, hi) };
   } },
-  muscle: { name: 'Muscle recovery', sys: 'muscles', get() {
+  muscle: { name: 'Muscle strength', sys: 'muscles', hint: 'Estimate', get() {
     const r = organReading('muscles'), [lo, hi] = parseUsual(r.usual);
     return { value: r.value, unit: 'of 100', usual: r.usual, look: organLook(r.level, r.value, lo, hi) };
+  } },
+  load: { name: 'Lifting load', sys: 'muscles', hint: 'Weight on the exercise machine', get() {
+    const v = vital('resistive_load_pct');
+    return { value: v === null ? '—' : Math.round(v), unit: '% of preflight', usual: 'Usual 95–100', look: v === null ? null : v < 85 ? 'low' : 'ok' };
   } },
   exercise: { name: 'Exercise today', sys: 'muscles', get() {
     const v = vital('exercise_min');
@@ -116,7 +120,7 @@ const TABS = [
   { id: 'heart', label: 'Heart', title: 'Heart and blood', organs: ['heart'], rows: ['hr', 'bp', 'hrv', 'glucose'] },
   { id: 'lungs', label: 'Lungs', title: 'Breathing', organs: ['lungs'], rows: ['resp', 'spo2'] },
   { id: 'brain', label: 'Brain', title: 'Brain, sleep and eyes', organs: ['sleep', 'eyes'], rows: ['sleep', 'reaction', 'mood', 'onsd'] },
-  { id: 'bones', label: 'Bones', title: 'Bones and muscles', organs: ['bones', 'muscles'], rows: ['bone', 'muscle', 'exercise'] },
+  { id: 'bones', label: 'Bones', title: 'Bones and muscles', organs: ['bones', 'muscles'], rows: ['bone', 'muscle', 'load', 'exercise'] },
 ];
 
 const WORD = { ok: 'Normal', high: 'High', low: 'Low' };
