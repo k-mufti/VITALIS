@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { $, $$ } from '../util.js';
 import { pivot, HOME, cam, twin, renderer } from './scene.js';
-import { createHalftoneSkin, halftoneUniforms } from './effects.js';
+import { createHalftoneSkin, createAuraMaterials, halftoneUniforms } from './effects.js';
 
 /* Body model, skin shader, and the body regions each system lives at. */
 
@@ -22,6 +22,52 @@ export const uni = {
 
 // Pitch-black halftone body (see effects.js).
 export const skin = createHalftoneSkin(uni);
+const auraMats = createAuraMaterials(uni);
+const auraMeshes = [];
+
+// Camera framing. size = how big the body looks (1 = whole body, bigger = closer).
+// lift = how far up the camera aims, as a fraction of body height.
+export const framing = { H: 4.65, size: 1.4, lift: .08 };
+export function applyFraming() {
+  const { H, size, lift } = framing;
+  HOME.pos.set(0, H * lift, H * 2.4 / size);
+  HOME.look.set(0, H * lift, 0);
+  if (!twin.focus && !twin.fly) {
+    cam.pos.copy(HOME.pos);
+    cam.look.copy(HOME.look);
+  }
+}
+
+// Turn aura shells on/off (skip drawing them when strength is 0).
+export function setAuraVisible(on) {
+  auraMeshes.forEach(m => m.visible = on);
+}
+
+// Glow shells share the body's geometry (and skeleton, if skinned).
+function addAura(obj) {
+  const bodyMeshes = [];
+  obj.traverse(m => { if (m.isMesh) bodyMeshes.push(m); });
+  bodyMeshes.forEach(m => {
+    m.renderOrder = 1;  // body draws after the glow
+    auraMats.forEach(mat => {
+      let a;
+      if (m.isSkinnedMesh) {
+        a = new THREE.SkinnedMesh(m.geometry, mat);
+        a.bind(m.skeleton, m.bindMatrix);
+      } else {
+        a = new THREE.Mesh(m.geometry, mat);
+      }
+      a.position.copy(m.position);
+      a.quaternion.copy(m.quaternion);
+      a.scale.copy(m.scale);
+      a.frustumCulled = false;
+      a.renderOrder = 0;
+      a.visible = uni.uAura.value > 0;
+      m.parent.add(a);
+      auraMeshes.push(a);
+    });
+  });
+}
 
 export function loadBody() {
   new FBXLoader().load('./malebody.fbx', obj => {
@@ -42,11 +88,9 @@ export function loadBody() {
       const core = surf.clone(); core.z -= r.radius * .45; if (r.coreX !== undefined) core.x = r.coreX;
       r.surface = obj.worldToLocal(surf); r.core = obj.worldToLocal(core);
     });
-    // Close framing: body fills the screen, feet cropped just below the shins.
-    HOME.pos.set(0, H * .08, H * 1.7);
-    HOME.look.set(0, H * .08, 0);
-    cam.pos.copy(HOME.pos);
-    cam.look.copy(HOME.look);
+    addAura(obj);  // after the raycasts, so rays only hit the body
+    framing.H = H;
+    applyFraming();
     twin.body = obj;
     $('#loadNote').remove();
     $('#spots').classList.remove('hide');
