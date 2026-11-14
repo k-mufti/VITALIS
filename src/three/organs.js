@@ -42,9 +42,11 @@ export const organFx = {
   shade: .3,                // dots on the lit side 0..1
   dotColor: '#7fe9ff',
   tints: { heart: '#0a1f6b', lungs: '#1f5fd1', bones: '#13308f', muscles: '#1846c4' },
-  // Swing the skeleton's straight-down arms out to the body's A-pose.
+  // Swing the skeleton's straight-down arms out to the body's A-pose. Each bone moves as one rigid piece.
   // Positions are fractions of body height: x from the centre line, y from the feet.
-  arm: { on: true, muscles: false, angle: 18, elbow: 8, shoulderX: .105, shoulderY: .81, elbowY: .63, start: .095, blend: .015 },
+  // A bone counts as arm if its centre is further out than `start` and below the shoulder;
+  // below `elbowY` it is forearm/hand and also turns at the elbow.
+  arm: { on: true, angle: 18, elbow: 8, shoulderX: .105, shoulderY: .81, elbowY: .63, start: .095 },
 };
 const DEFAULT_TINT = '#1846c4';
 const NAVY = new THREE.Color('#0A1F6B');   // plan.md 5.2 severe end of the blue scale
@@ -55,28 +57,113 @@ const shared = {
   uPivot: { value: new THREE.Matrix4() }, uPivotInv: { value: new THREE.Matrix4() },
   uBodyCX: { value: 0 }, uBodyMinY: { value: 0 }, uBodyH: { value: 1 },
   uArmAngle: { value: 0 }, uElbowAngle: { value: 0 }, uShoulderX: { value: .1 }, uShoulderY: { value: .8 },
-  uElbowY: { value: .6 }, uArmStart: { value: .1 }, uArmBlend: { value: .02 },
+  uElbowY: { value: .6 },
 };
 
-// Arm bend, in the body's own (pivot) space. Returns the bent position; `ang` = total turn for the normal.
+// Arm bend, in the body's own (pivot) space. aArm is set per bone on the CPU (classifyArms):
+// x = 0 not arm, 1 upper arm, 2 forearm/hand; y = side (-1 left, 1 right). Whole bones turn together.
 const ARM_GLSL = `
+attribute vec2 aArm;
 uniform mat4 uPivot, uPivotInv;
-uniform float uArmOn, uBodyCX, uBodyMinY, uBodyH, uArmAngle, uElbowAngle, uShoulderX, uShoulderY, uElbowY, uArmStart, uArmBlend;
+uniform float uArmOn, uBodyCX, uBodyMinY, uBodyH, uArmAngle, uElbowAngle, uShoulderX, uShoulderY, uElbowY;
 vec2 rot2(vec2 v, float a) { float c = cos(a), s = sin(a); return vec2(c * v.x - s * v.y, s * v.x + c * v.y); }
 vec4 armBend(vec4 pv, out float ang, out float side) {
-  side = pv.x < uBodyCX ? -1.0 : 1.0;
-  vec2 q = vec2(abs(pv.x - uBodyCX), pv.y - uBodyMinY) / uBodyH;
-  // Only the arms: outside the ribcage and below the shoulder.
-  float w = smoothstep(uArmStart, uArmStart + uArmBlend, q.x) * (1.0 - smoothstep(uShoulderY - .03, uShoulderY + .01, q.y));
+  side = aArm.y;
+  vec2 q = vec2(side * (pv.x - uBodyCX), pv.y - uBodyMinY) / uBodyH;
   vec2 sp = vec2(uShoulderX, uShoulderY);
-  float a1 = radians(uArmAngle) * w;
+  float a1 = radians(uArmAngle) * step(.5, aArm.x);
+  float a2 = radians(uElbowAngle) * step(1.5, aArm.x);
   vec2 v = sp + rot2(q - sp, a1);
   vec2 elbow = sp + rot2(vec2(uShoulderX, uElbowY) - sp, a1);
-  float a2 = radians(uElbowAngle) * w * (1.0 - smoothstep(uElbowY - .015, uElbowY + .015, q.y));
   v = elbow + rot2(v - elbow, a2);
   ang = a1 + a2;
   return vec4(uBodyCX + side * v.x * uBodyH, uBodyMinY + v.y * uBodyH, pv.z, 1.0);
 }`;
+
+// Split a model into its separate bones (pieces of connected triangles, welded at seams),
+// so arm bones can be moved whole. Runs once when the skeleton loads.
+function findBones(o) {
+  pivot.updateMatrixWorld(true);
+  const toPivotBase = pivot.matrixWorld.clone().invert();
+  const meshes = [];
+  let total = 0;
+  o.group.traverse(m => {
+    if (!m.isMesh) return;
+    meshes.push(m);
+    total += m.geometry.attributes.position.count;
+  });
+  const parent = new Int32Array(total);
+  for (let i = 0; i < total; i++) parent[i] = i;
+  const find = i => {
+    while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; }
+    return i;
+  };
+  const join = (a, b) => {
+    a = find(a); b = find(b);
+    if (a !== b) parent[a] = b;
+  };
+  const px = new Float32Array(total), py = new Float32Array(total);
+  const weld = new Map();
+  const toPivot = new THREE.Matrix4(), v = new THREE.Vector3();
+  let base = 0;
+  for (const m of meshes) {
+    toPivot.multiplyMatrices(toPivotBase, m.matrixWorld);
+    const pos = m.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(toPivot);
+      px[base + i] = v.x;
+      py[base + i] = v.y;
+      const key = Math.round(v.x * 1e4) + ',' + Math.round(v.y * 1e4) + ',' + Math.round(v.z * 1e4);
+      const same = weld.get(key);
+      if (same === undefined) weld.set(key, base + i);
+      else join(base + i, same);
+    }
+    const idx = m.geometry.index;
+    const tris = idx ? idx.count : pos.count;
+    for (let t = 0; t < tris; t += 3) {
+      const a = base + (idx ? idx.getX(t) : t);
+      join(a, base + (idx ? idx.getX(t + 1) : t + 1));
+      join(a, base + (idx ? idx.getX(t + 2) : t + 2));
+    }
+    m.userData.armBase = base;
+    base += pos.count;
+  }
+  // Centre of each bone.
+  const root = new Int32Array(total), sx = new Float64Array(total), sy = new Float64Array(total), cnt = new Int32Array(total);
+  for (let i = 0; i < total; i++) {
+    const r = find(i);
+    root[i] = r;
+    sx[r] += px[i];
+    sy[r] += py[i];
+    cnt[r]++;
+  }
+  o.bones = { meshes, root, sx, sy, cnt, key: '' };
+}
+
+// Mark each vertex with its bone's role (upper arm / forearm / none) and side.
+function classifyArms(o) {
+  const { meshes, root, sx, sy, cnt } = o.bones;
+  const B = twin.bodyBox, H = B.max.y - B.min.y, cx = (B.min.x + B.max.x) / 2;
+  const a = organFx.arm;
+  for (const m of meshes) {
+    const n = m.geometry.attributes.position.count, base = m.userData.armBase;
+    let attr = m.geometry.getAttribute('aArm');
+    if (!attr) {
+      attr = new THREE.BufferAttribute(new Float32Array(n * 2), 2);
+      m.geometry.setAttribute('aArm', attr);
+    }
+    const arr = attr.array;
+    for (let i = 0; i < n; i++) {
+      const r = root[base + i];
+      const dx = (sx[r] / cnt[r] - cx) / H, y = (sy[r] / cnt[r] - B.min.y) / H;
+      let role = 0;
+      if (Math.abs(dx) > a.start && y < a.shoulderY) role = y < a.elbowY ? 2 : 1;
+      arr[i * 2] = role;
+      arr[i * 2 + 1] = dx < 0 ? -1 : 1;
+    }
+    attr.needsUpdate = true;
+  }
+}
 
 // Organ material: tinted silhouette with halftone dots, plus the scan-in line, hover edge and region glow.
 function organMaterial(u, source, doubleSided) {
@@ -161,6 +248,7 @@ export function loadOrgan(k) {
       });
       placeOrgan(k, cfg, model, o);
       pivot.add(o.group);
+      if (k === 'bones') findBones(o);
       return o;
     });
   }).catch(err => {
@@ -239,8 +327,6 @@ function applyOrganFx() {
   shared.uShoulderX.value = a.shoulderX;
   shared.uShoulderY.value = a.shoulderY;
   shared.uElbowY.value = a.elbowY;
-  shared.uArmStart.value = a.start;
-  shared.uArmBlend.value = a.blend;
   pivot.updateMatrixWorld();
   shared.uPivot.value.copy(pivot.matrixWorld);
   shared.uPivotInv.value.copy(pivot.matrixWorld).invert();
@@ -272,7 +358,12 @@ export function updateOrgans(now, dt) {
     o.u.uSeverity.value = sev;
     o.u.uTint.value.set(organFx.tints[k] || DEFAULT_TINT).lerp(tmpColor.copy(NAVY), sev * .8);
     const arm = organFx.arm;
-    o.u.uArmOn.value = arm.on && (k === 'bones' || (k === 'muscles' && arm.muscles)) ? 1 : 0;
+    o.u.uArmOn.value = arm.on && o.bones ? 1 : 0;
+    // Re-sort bones into arm / not arm when the related sliders change.
+    if (o.bones && arm.on) {
+      const key = arm.start + '|' + arm.shoulderY + '|' + arm.elbowY;
+      if (key !== o.bones.key) { classifyArms(o); o.bones.key = key; }
+    }
     o.group.visible = o.reveal > 0;
   }
 }
