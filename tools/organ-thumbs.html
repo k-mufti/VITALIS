@@ -7,7 +7,6 @@
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
 const SIZE = 360;
@@ -100,7 +99,7 @@ await organ('bones', 'skeleton.glb', { v0: .62, v1: 1, yaw: -.35, fill: .95 });
 
 // Brain (sleep) and eyes: no models yet, so a close-up of the body's head with that area lit.
 async function head(id, regionAt, yaw = -.35) {
-  const body = await new FBXLoader().loadAsync('../malebody.fbx');
+  const body = await gltf('../assets/models/' + manifest.body.file);
   const H = normalize(body);
   const c = regionAt(H, body);
   body.traverse(m => { if (m.isMesh) m.material = graphite('#1b2022', null, undefined, c); });
