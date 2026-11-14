@@ -11,16 +11,24 @@ import { STYLES } from './effects.js';
 const DEFAULTS = {
   style: 0, dot: 6, edge: .55, shade: .2, backdrop: .5,
   aura: 0, auraSize: .06, size: 1.4, lift: .08, autoTurn: false,
+  outWidth: .45, outSoft: .2, outColor: 0, outFill: 0, outShade: 0, outDots: 0,
 };
+const LINE_COLORS = [['Ink', '#0e0e0e'], ['Cyan', '#0aa5bd'], ['Gray', '#8a8a85'], ['White', '#f5f5f2']];
+const OUTLINE = 3;  // index of Outline in STYLES
 const STORE_KEY = 'vitalis-fx';
 
-// Sliders: [key, label, min, max, step, only for style index (optional)]
+// Sliders: [key, label, min, max, step, only for these style indexes (optional)]
 const SLIDERS = [
   ['size', 'Model size', .7, 2.2, .01],
   ['lift', 'Model height', -.2, .3, .01],
-  ['dot', 'Dot size', 3, 16, 1, 0],
+  ['dot', 'Dot size', 3, 16, 1, [0, OUTLINE]],
   ['edge', 'Edge dots', 0, 1, .01, 0],
   ['shade', 'Shading dots', 0, 1, .01, 0],
+  ['outWidth', 'Line width', .05, 1, .01, OUTLINE],
+  ['outSoft', 'Line softness', 0, 1, .01, OUTLINE],
+  ['outFill', 'Body tone', 0, 1, .01, OUTLINE],
+  ['outShade', 'Body shading', 0, 1, .01, OUTLINE],
+  ['outDots', 'Shadow dots', 0, 1, .01, OUTLINE],
   ['backdrop', 'Background dots', 0, 1, .01],
   ['aura', 'Aura', 0, 1, .01],
   ['auraSize', 'Aura size', .01, .25, .005],
@@ -47,6 +55,12 @@ function apply() {
   uni.uShade.value = fx.shade;
   uni.uAura.value = fx.aura;
   uni.uAuraSize.value = fx.auraSize;
+  uni.uOutWidth.value = fx.outWidth;
+  uni.uOutSoft.value = fx.outSoft;
+  uni.uOutColor.value.set(LINE_COLORS[fx.outColor][1]);
+  uni.uOutFill.value = fx.outFill;
+  uni.uOutShade.value = fx.outShade;
+  uni.uOutDots.value = fx.outDots;
   setAuraVisible(fx.aura > 0);
   backdrop.setStrength(fx.backdrop);
   framing.size = fx.size;
@@ -79,6 +93,10 @@ const CSS = `
 #fxPanel .row button { flex: 1; font: 600 12px 'Barlow Condensed', sans-serif; letter-spacing: .14em; text-transform: uppercase;
   padding: 7px 0; border: 1px solid #0e0e0e; }
 #fxPanel .row button:hover { background: #0e0e0e; color: #fff; }
+#fxPanel .sub { display: block; font: 600 11px 'Barlow Condensed', sans-serif; letter-spacing: .16em; text-transform: uppercase;
+  color: #8a8a85; margin: 4px 0 4px; }
+#fxPanel .colors button { display: flex; align-items: center; justify-content: center; gap: 6px; }
+#fxPanel .colors i { width: 10px; height: 10px; border: 1px solid #c4c4be; }
 #fxToggle { position: fixed; z-index: 40; top: 80px; right: 16px; font: 700 12px 'Barlow Condensed', sans-serif;
   letter-spacing: .2em; padding: 6px 10px; border: 1px solid #0e0e0e; background: #fff; }
 #fxToggle.off { display: none; }
@@ -89,10 +107,12 @@ function render(panel) {
     <header><h4>FX <small>\` to hide</small></h4><button class="x" data-act="close" aria-label="Close">×</button></header>
     <div class="styles">${STYLES.map((n, i) => `<button data-style="${i}" class="${fx.style === i ? 'on' : ''}">${n}</button>`).join('')}</div>
     ${SLIDERS.map(([k, label, min, max, step, only]) => `
-      <label class="${only !== undefined && only !== fx.style ? 'hide' : ''}">
+      <label class="${only !== undefined && ![].concat(only).includes(fx.style) ? 'hide' : ''}">
         <span>${label}<b data-out="${k}">${fx[k]}</b></span>
         <input type="range" data-key="${k}" min="${min}" max="${max}" step="${step}" value="${fx[k]}">
       </label>`).join('')}
+    ${fx.style === OUTLINE ? `<span class="sub">Line color</span><div class="styles colors">${LINE_COLORS.map(([n, c], i) =>
+      `<button data-outcolor="${i}" class="${fx.outColor === i ? 'on' : ''}"><i style="background:${c}"></i>${n}</button>`).join('')}</div>` : ''}
     <label class="check"><input type="checkbox" data-key="autoTurn" ${fx.autoTurn ? 'checked' : ''}> Auto turn</label>
     <div class="row"><button data-act="reset">Reset</button><button data-act="copy">Copy settings</button></div>`;
 }
@@ -138,7 +158,10 @@ export function initDevPanel() {
   panel.addEventListener('click', e => {
     const b = e.target.closest('button');
     if (!b) return;
-    if (b.dataset.style !== undefined) {
+    if (b.dataset.outcolor !== undefined) {
+      fx.outColor = +b.dataset.outcolor;
+      render(panel);
+    } else if (b.dataset.style !== undefined) {
       fx.style = +b.dataset.style;
       render(panel);
     } else if (b.dataset.act === 'reset') {
