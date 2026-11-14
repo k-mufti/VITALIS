@@ -15,25 +15,33 @@ const DEFAULTS = {
   // Body
   style: 0, dot: 6, edge: .34, shade: .23, aura: 0, auraSize: .245,
   outWidth: .63, outSoft: .98, outColor: 0, outFill: .1, outShade: .31, outDots: .23,
-  // Background
-  bgIntensity: 0,  // background dots off by default
-  bgCell: 7, bgDot: .48, bgShape: 0, bgAngle: 45,
-  bgGlowW: 1, bgGlowH: 1, bgGlowY: .5, bgFloor: 1,
-  bgGradient: 0, bgColA: '#c4c4be', bgColB: '#0aa5bd', bgPulse: 0, bgPulseSpeed: .25,
+  // Background (off; the other values are kept for when it is turned back on)
+  bgIntensity: 0,
+  bgCell: 13, bgDot: .42, bgShape: 0, bgAngle: 53,
+  bgGlowW: .92, bgGlowH: 1.02, bgGlowY: .5, bgFloor: .43,
+  bgGradient: 0, bgColA: '#009dd1', bgColB: '#ff0000', bgPulse: .38, bgPulseSpeed: .73,
   // Adaptive
-  adaptive: false, health: 0,
+  adaptive: false, health: 1,
   // Organs (3D models)
-  orgStyle: 0, orgEdge: .45, orgShade: .3, orgDot: '#7fe9ff',
+  orgStyle: 0, orgEdge: 1, orgShade: 1, orgDot: '#7fe9ff',
   tintHeart: '#0a1f6b', tintLungs: '#1f5fd1', tintBones: '#13308f', tintMuscles: '#1846c4', tintBrain: '#3d6ff0', tintDigestion: '#22409e',
   // Skeleton arm fit (fractions of body height)
-  armOn: true, armAngle: 18, armElbow: -12, armWrist: 0,
-  armShoulderX: .105, armShoulderY: .81, armElbowY: .63, armWristY: .485, armStart: .095,
+  armOn: true, armAngle: 25.5, armElbow: -.5, armWrist: 0,
+  armShoulderX: .06, armShoulderY: .822, armElbowY: .682, armWristY: .485, armStart: .09,
   // Organ position: which organ the sliders move
   posOrgan: 0,
 };
 // Organs you can nudge: [id in manifest, label]
 const ORGAN_LIST = [['heart', 'Heart'], ['lungs', 'Lungs'], ['sleep', 'Brain'], ['digestion', 'Digestion'], ['bones', 'Skeleton'], ['muscles', 'Muscles']];
 for (const [id] of ORGAN_LIST) Object.assign(DEFAULTS, { [`pos_${id}_x`]: 0, [`pos_${id}_y`]: 0, [`pos_${id}_z`]: 0, [`pos_${id}_s`]: 1 });
+// Organ positions tuned by eye on Nov 14 ([x, y, z, size]).
+const TUNED_POS = {
+  heart: [0, .048, -.044, 1.07], lungs: [0, .017, .007, 1.05], sleep: [0, .004, .005, 1.14],
+  digestion: [0, .048, -.038, 1], bones: [0, 0, 0, 1], muscles: [-.024, 0, 0, 1],
+};
+for (const [id, [x, y, z, sz]] of Object.entries(TUNED_POS)) {
+  Object.assign(DEFAULTS, { [`pos_${id}_x`]: x, [`pos_${id}_y`]: y, [`pos_${id}_z`]: z, [`pos_${id}_s`]: sz });
+}
 const BODY_CM = 180;  // body height used to show positions in cm
 const STORE_KEY = 'vitalis-fx';
 const VERSION = 3;  // bump to push new defaults over saved settings
