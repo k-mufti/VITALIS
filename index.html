@@ -48,8 +48,6 @@
       <div class="bar-mid" id="barMission">Mars <i>/</i> Day 184 <i>/</i> Crew 03</div>
       <nav>
         <button class="tab on" data-view="body">Body</button>
-        <button class="tab" data-view="crew">Crew</button>
-        <button class="tab" data-view="ask">Ask</button>
       </nav>
     </header>
 
@@ -111,56 +109,6 @@
       <p class="hint">Drag to turn</p>
     </section>
 
-    <!-- CREW -->
-    <section class="view crew" id="view-crew">
-      <div class="crew-top">
-        <div class="day huge"><span>Day</span>184</div>
-        <div class="trip">
-          <div class="trip-line" id="trip">
-            <span class="planet earth"></span>
-            <div class="track"><i class="done"></i><b class="ship"></b></div>
-            <span class="planet mars"></span>
-          </div>
-          <div class="trip-labels"><span>Earth</span><span id="tripNote">56 days to Mars</span><span>Mars</span></div>
-          <div class="stops" id="stops">
-            <button data-note="Left Earth · Day 0">Launch</button>
-            <button data-note="Halfway point · Day 120">Halfway</button>
-            <button class="on" data-note="56 days to Mars">Today</button>
-            <button data-note="Arrive at Mars · Day 240">Arrival</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="people" id="people"></div>
-      <p class="person-note" id="personNote">Tap a crew member</p>
-
-      <div class="hazards">
-        <h3 class="t-label">The five space hazards <small>NASA Human Research Program</small></h3>
-        <div class="facts five">
-          <div class="fact"><span><i class="dot watch"></i>Radiation</span><b>148 <small>of 200 mSv</small></b><div class="meter"><i style="width:74%"></i></div><small>Storm shelter ready</small></div>
-          <div class="fact"><span><i class="dot ok"></i>Isolation</span><b>3.8 <small>of 5 mood</small></b><small>Crew average this week · 1 low day</small></div>
-          <div class="fact"><span><i class="dot ok"></i>Distance</span><b>12.4 <small>min</small></b><small>Message delay to Earth, one way</small></div>
-          <div class="fact"><span><i class="dot ok"></i>Gravity</span><b>0 <small>g</small></b><small>Bone and muscle loss · 2 h exercise a day</small></div>
-          <div class="fact"><span><i class="dot watch"></i>Cabin air</span><b>2.6 <small>mmHg CO₂</small></b><div class="meter"><i style="width:87%"></i></div><small>Limit 3.0 · O₂ 21% · 22 °C</small></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ASK -->
-    <section class="view ask" id="view-ask">
-      <div class="chat">
-        <div class="thread" id="thread"></div>
-        <div class="chips">
-          <button>Why was crew 03 flagged?</button>
-          <button>What happens next?</button>
-          <button>Write a crew report</button>
-        </div>
-        <form id="askForm"><input id="askInput" placeholder="Ask about the crew's health" autocomplete="off"/><button aria-label="Send">→</button></form>
-        <p class="fine">VITALIS suggests. The crew doctor decides.</p>
-      </div>
-      <aside class="proof" id="proof"></aside>
-    </section>
-
     <!-- TODAY'S CHECKS -->
     <div class="drawer" id="todayDrawer">
       <div class="scrim" data-close></div>
@@ -175,7 +123,24 @@
     <aside class="checkin" id="checkin" aria-label="Check in"></aside>
     <div class="toast" id="toast" role="status"></div>
 
-    <footer class="foot">Demo · all readings are made up</footer>
+    <footer class="foot">Demo · crew readings are simulated · mission data is live
+      <button id="sourcesBtn">Where this data comes from →</button></footer>
+
+    <!-- WHERE THE DATA COMES FROM -->
+    <div class="drawer" id="sources">
+      <div class="scrim" data-close></div>
+      <div class="sheet">
+        <button class="close" data-close>Close ✕</button>
+        <h2>Where this data comes from</h2>
+        <div class="hist-sum" id="srcSum"></div>
+        <p class="hist-sec">Live APIs · re-runnable by anyone</p>
+        <div id="srcLive"></div>
+        <p class="hist-sec">Published measured values</p>
+        <div id="srcPub"></div>
+        <p class="hist-sec">Our assumptions · not NASA numbers</p>
+        <div id="srcAssume"></div>
+      </div>
+    </div>
 
     <!-- MEDICAL HISTORY -->
     <div class="drawer" id="history">

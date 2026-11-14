@@ -36,6 +36,9 @@ Agents: read `plan.md` and this file fully before making any change.
   Never hardcode the order in 3D or UI code.
 - Every detail view has three parts: Current state, What could go wrong (on this mission), What to do.
 - Severity words come from the backend's `level` field (low / mild / extreme). Never recompute them in the UI.
+- Every number is live, published or an assumption (plan.md 5.9). A new published value needs a
+  citation in `constants.py`; a new modelling choice must say ASSUMPTION in the code AND appear in
+  `backend/app/provenance.py`. Never present an assumption as a NASA number.
 - Numbers shown to the crew come from the backend, not from hardcoded constants. The Earth comms
   delay is `commsDelayMin()` (real JPL Horizons), never a literal.
 - Two panels at the bottom of the rail, one job each: "Check in" opens today's checks,

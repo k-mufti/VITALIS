@@ -95,6 +95,7 @@ src/
     today.js              today's checks drawer
     checkin.js            check-in form drawer
     history.js            medical history drawer
+    sources.js            "where this data comes from" drawer (footer link or S key)
     (add: triage.js  engineer.js  director.js  voice.js)
   data/                 BACKEND OWNER
     mock.js             demo data (SYS, CREW, histories)
@@ -243,6 +244,7 @@ Organs open from BOTH the risk panel and the body spots; both call `openSystem(i
 | GET    | `/api/space-weather`      | live NOAA proton flux (`now`) + recent NASA DONKI solar particle events and flares |
 | GET    | `/api/comms`              | one-way + round-trip Earth delay (JPL Horizons)       |
 | GET    | `/api/vitals`             | latest reading per metric + device list               |
+| GET    | `/api/provenance`         | where every number comes from: live APIs (with a re-runnable URL each), published values with citations, and our assumptions |
 | GET    | `/api/hrp`                | NASA HRP framework: 5 hazards, 17 risks, organ + mission mapping, coverage, research studies |
 | GET    | `/api/sources`            | live / cache / fallback status of every data source (Engineer Mode) |
 | POST   | `/api/sources/refresh`    | re-fetch DONKI + Horizons                            |
@@ -293,6 +295,25 @@ The challenge's Resources tab gives 5 links (no datasets). All are built into `b
 | CSA why science in space | longer missions = more weightlessness, radiation, isolation, delay, less care | pitch problem statement |
 
 Pitch line: "NASA's Artemis II crew already wears a wrist device (ARCHeR). VITALIS turns that kind of data into decisions."
+
+### 5.9 Proving the data is real
+
+Judging target is **Best Use of Science**, so every number must be traceable. Three kinds,
+never mixed (`backend/app/provenance.py`):
+
+| kind | meaning | where |
+|------|---------|-------|
+| live | fetched from a public API while the app runs | JPL Horizons, NASA DONKI, NOAA SWPC |
+| published | measured value from a NASA document or peer-reviewed paper | `constants.py`, `hrp.py`, `health-rules.js` |
+| assumption | our own modelling choice, marked ASSUMPTION in the code | exercise protection, SANS growth rate, storm dose, Moon/ISS dose rates |
+
+How to check it, in order of how convincing it is to a judge:
+1. `cd backend && python verify_sources.py` - calls every API live and prints pass/fail per source
+2. Open the app footer link "Where this data comes from" (or press `S`) - shows live/cache status,
+   the value each API returned, how long ago it was fetched, and a "Check this yourself" link
+   that opens the exact API URL we called
+3. `curl localhost:8001/api/sources` - raw status including the error text when a source is down
+4. Paste a "Check this yourself" URL into a browser and compare the number to what the app shows
 
 ## 6. Milestones
 

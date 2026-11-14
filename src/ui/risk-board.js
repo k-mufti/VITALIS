@@ -1,6 +1,6 @@
 import { $, $$ } from '../util.js';
 import { live, onData, rankedOrgans, missionInfo } from '../data/client.js';
-import { setHoverOrgan } from '../three/api.js';
+import { setHoverOrgan, showRisks } from '../three/api.js';
 import { openSystem } from './detail.js';
 
 /* The right rail of the Body view: only the systems that need attention, each as its own box,
@@ -30,7 +30,10 @@ function card(o) {
 }
 
 function renderList() {
-  const problems = rankedOrgans().filter(o => (o.level || 'low') !== 'low');
+  const all = rankedOrgans();
+  const problems = all.filter(o => (o.level || 'low') !== 'low');
+  // Push all organ severities into the 3D twin hotspot system.
+  showRisks(all.map(o => ({ id: o.id, severity: o.severity || 0 })));
   const sub = $('#riskSub');
   if (!problems.length) {
     $('#riskList').innerHTML = '<p class="risk-clear">Every system is in its usual range today.</p>';
