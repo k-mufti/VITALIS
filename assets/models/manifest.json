@@ -72,6 +72,41 @@
       "height": 0.28,
       "depth": 0.043,
       "fill": 0.72
+    },
+    "eyes": {
+      "file": "eyes.glb",
+      "anchor": [
+        0,
+        0.935
+      ],
+      "scale": 1.0,
+      "height": 0.012,
+      "depth": 0.017,
+      "fill": 0.2,
+      "pair": 0.027
+    },
+    "ears": {
+      "file": "ears.glb",
+      "anchor": [
+        0,
+        0.928
+      ],
+      "scale": 1.0,
+      "height": 0.011,
+      "depth": 0.065,
+      "fill": 0.1,
+      "pair": -0.058
+    },
+    "kidneys": {
+      "file": "kidneys.glb",
+      "anchor": [
+        0,
+        0.6
+      ],
+      "scale": 1.0,
+      "height": 0.3,
+      "depth": 0.075,
+      "fill": 0.8
     }
   }
 }

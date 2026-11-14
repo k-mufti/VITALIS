@@ -15,6 +15,8 @@ import { LAYER_MODELS } from './anatomy-panel.js';
    fill    share of the view the organ fills when focused
    clipTop cut the model off above this share of its height (trims the lungs' long trachea)
    fullBody  model replaces the skin (the écorché), framed by `frame`
+   pair    show the model twice, mirrored (eyes, ears): gap between the two centres as a fraction
+           of body height; + puts the file's own copy on the screen-right side
    region  light up the body region on this model (used for the thigh on the écorché)
    color   (no longer used: organ colours now come from organFx.tints below) */
 
@@ -47,13 +49,14 @@ function limbRig(limb) {
   return { on: true, start: limb === 'arms' ? .09 : .015, L: limbPose(limb), R: limbPose(limb) };
 }
 
-// Organ look + limb rigs. look.js sets these; updateOrgans() applies them.
+// Organ look + limb rigs. look.js (and the ?dev FX panel) set these; updateOrgans() applies them.
 export const organFx = {
   style: 0,                 // 0 = halftone, 1 = flat silhouette
   edge: 1,                  // edge dots 0..1
   shade: 1,                 // dots on the lit side 0..1
   dotColor: '#7fe9ff',
-  tints: { heart: '#0a1f6b', lungs: '#1f5fd1', bones: '#13308f', muscles: '#1846c4', sleep: '#3d6ff0', digestion: '#22409e' },
+  tints: { heart: '#0a1f6b', lungs: '#1f5fd1', bones: '#13308f', muscles: '#1846c4', sleep: '#3d6ff0', digestion: '#22409e',
+    eyes: '#0f2a80', ears: '#1f5fd1', kidneys: '#1a3aa8' },
   // Limb rigs that pose the skeleton's and muscle model's arms and legs to match the body.
   // Skeleton: each bone moves as one rigid piece. Muscles: one skin, blended softly at the joints.
   // Per limb: on, start (the limb is further out than this from the centre line), and for the muscle
@@ -429,7 +432,19 @@ function placeOrgan(k, cfg, model, o) {
   s *= cfg.scale ?? 1;
 
   const holder = new THREE.Group();
-  holder.add(model);
+  if (cfg.pair) {
+    const half = cfg.pair * H / 2 / s;
+    const one = new THREE.Group();
+    one.add(model);
+    one.position.x = half;
+    const other = one.clone();   // shares geometry and material; a negative scale mirrors it
+    other.scale.x = -1;
+    other.position.x = -half;
+    holder.add(one, other);
+    o.pairHalf = half;
+  } else {
+    holder.add(model);
+  }
   holder.scale.setScalar(s);
   holder.position.copy(center);
   holder.visible = false;
@@ -597,6 +612,11 @@ export function updateOrgans(now, dt) {
       }
       o.u.uMinY.value = cy + (o.minY0 - o.basePos.y) * p.s;
       o.u.uMaxY.value = cy + (o.maxY0 - o.basePos.y) * p.s;
+      // Paired organs (eyes, ears): FX panel gap between the two copies.
+      if (o.pairHalf) {
+        o.group.children[0].position.x = o.pairHalf * (p.g ?? 1);
+        o.group.children[1].position.x = -o.pairHalf * (p.g ?? 1);
+      }
     }
     o.group.visible = o.reveal > 0;
   }

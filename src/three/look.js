@@ -5,8 +5,8 @@ import { organFx } from './organs.js';
 /*
   The VITALIS look: every visual setting for the 3D twin (body style, organ colours and
   positions, skeleton / muscle limb poses, framing) and the code that applies it.
-  CHOSEN_LOOK below is the look picked in the FX dev panel (kept on the 3d/organ-halftone branch);
-  applyDefaultLook() uses it. To change the look, edit CHOSEN_LOOK.
+  CHOSEN_LOOK below is the look picked in the FX dev panel (devpanel.js, open the app with ?dev);
+  applyDefaultLook() uses it. To change the look, paste "Copy settings" into CHOSEN_LOOK.
 */
 
 export const DEFAULTS = {
@@ -25,14 +25,18 @@ export const DEFAULTS = {
   // Organs (3D models)
   orgStyle: 0, orgEdge: 1, orgShade: 1, orgDot: '#7fe9ff',
   tintHeart: '#0a1f6b', tintLungs: '#1f5fd1', tintBones: '#13308f', tintMuscles: '#1846c4', tintBrain: '#3d6ff0', tintDigestion: '#22409e',
+  tintEyes: '#0f2a80', tintEars: '#1f5fd1', tintKidneys: '#1a3aa8',
   // Limb rigs (per-model / per-limb values are filled in below)
   rigModel_arms: 0, rigModel_legs: 0, armJoints: false,
   // Organ position: which organ the sliders move
   posOrgan: 0,
 };
 // Organs you can nudge: [id in manifest, label]
-export const ORGAN_LIST = [['heart', 'Heart'], ['lungs', 'Lungs'], ['sleep', 'Brain'], ['digestion', 'Digestion'], ['bones', 'Skeleton'], ['muscles', 'Muscles']];
-for (const [id] of ORGAN_LIST) Object.assign(DEFAULTS, { [`pos_${id}_x`]: 0, [`pos_${id}_y`]: 0, [`pos_${id}_z`]: 0, [`pos_${id}_s`]: 1 });
+export const ORGAN_LIST = [['heart', 'Heart'], ['lungs', 'Lungs'], ['sleep', 'Brain'], ['digestion', 'Digestion'], ['bones', 'Skeleton'], ['muscles', 'Muscles'],
+  ['eyes', 'Eyes'], ['ears', 'Inner ear'], ['kidneys', 'Kidneys']];
+// Organs shown as a mirrored pair (manifest "pair"); they also get a gap slider.
+export const PAIRED = ['eyes', 'ears'];
+for (const [id] of ORGAN_LIST) Object.assign(DEFAULTS, { [`pos_${id}_x`]: 0, [`pos_${id}_y`]: 0, [`pos_${id}_z`]: 0, [`pos_${id}_s`]: 1, [`pos_${id}_g`]: 1 });
 export const BODY_CM = 180;  // body height used to show positions in cm
 
 // Limb rigs: per model (bones / muscles), limb (arms / legs), side (L / R on screen) and joint.
@@ -78,7 +82,7 @@ export const CHOSEN_LOOK = {
   health: 1, orgStyle: 0, orgEdge: 1, orgShade: 1, orgDot: '#7fe9ff', tintHeart: '#0a1f6b',
   tintLungs: '#1f5fd1', tintBones: '#13308f', tintMuscles: '#1846c4', tintBrain: '#3d6ff0',
   tintDigestion: '#22409e', rigModel_arms: 0, rigModel_legs: 0, armJoints: false,
-  posOrgan: 4, pos_heart_x: 0, pos_heart_y: 0.048, pos_heart_z: -0.044, pos_heart_s: 1.07, pos_lungs_x: 0,
+  posOrgan: 7, pos_heart_x: 0, pos_heart_y: 0.048, pos_heart_z: -0.044, pos_heart_s: 1.07, pos_lungs_x: 0,
   pos_lungs_y: 0.017, pos_lungs_z: 0.007, pos_lungs_s: 1.05, pos_sleep_x: 0, pos_sleep_y: 0.004,
   pos_sleep_z: 0.005, pos_sleep_s: 1.14, pos_digestion_x: 0, pos_digestion_y: 0.048, pos_digestion_z: -0.038,
   pos_digestion_s: 1, pos_bones_x: 0, pos_bones_y: 0, pos_bones_z: 0, pos_bones_s: 1, pos_muscles_x: 0,
@@ -117,6 +121,30 @@ export const CHOSEN_LOOK = {
   ja_muscles_R_wr_py: 0.485, ja_muscles_R_wr_pz: 0,
   rig_muscles_legs_on: true, rig_muscles_legs_mirror: true, rig_muscles_legs_side: 0,
   rig_muscles_legs_start: 0.015, rig_muscles_legs_cut: 0.47, rig_muscles_legs_soft: 0.02,
+  tintEyes: '#0f2a80',
+  tintEars: '#1f5fd1',
+  tintKidneys: '#1a3aa8',
+  pos_heart_g: 1,
+  pos_lungs_g: 1,
+  pos_sleep_g: 1,
+  pos_digestion_g: 1,
+  pos_bones_g: 1,
+  pos_muscles_g: 1,
+  pos_eyes_x: 0,
+  pos_eyes_y: 0.005,
+  pos_eyes_z: 0,
+  pos_eyes_s: 1,
+  pos_eyes_g: 1.19,
+  pos_ears_x: 0,
+  pos_ears_y: 0,
+  pos_ears_z: 0,
+  pos_ears_s: 1,
+  pos_ears_g: 1,
+  pos_kidneys_x: 0,
+  pos_kidneys_y: 0.033,
+  pos_kidneys_z: -0.01,
+  pos_kidneys_s: 0.68,
+  pos_kidneys_g: 1,
 };
 Object.assign(DEFAULTS, CHOSEN_LOOK);
 
@@ -167,6 +195,9 @@ export function applyLook(fx) {
   organFx.tints.muscles = fx.tintMuscles;
   organFx.tints.sleep = fx.tintBrain;
   organFx.tints.digestion = fx.tintDigestion;
+  organFx.tints.eyes = fx.tintEyes;
+  organFx.tints.ears = fx.tintEars;
+  organFx.tints.kidneys = fx.tintKidneys;
   organFx.rigs.showJoints = fx.armJoints;
   for (const [m] of RIG_MODELS) for (const [limb] of LIMBS) {
     const rig = organFx.rigs[m][limb];
@@ -185,7 +216,7 @@ export function applyLook(fx) {
   }
   // Organ positions (FX panel nudges, see organs.js organFx.place)
   for (const [id] of ORGAN_LIST) {
-    organFx.place[id] = { x: fx[`pos_${id}_x`], y: fx[`pos_${id}_y`], z: fx[`pos_${id}_z`], s: fx[`pos_${id}_s`] };
+    organFx.place[id] = { x: fx[`pos_${id}_x`], y: fx[`pos_${id}_y`], z: fx[`pos_${id}_z`], s: fx[`pos_${id}_s`], g: fx[`pos_${id}_g`] ?? 1 };
   }
   // Framing
   framing.size = fx.size;
