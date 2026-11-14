@@ -1,12 +1,13 @@
 import * as THREE from 'three';
-import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { camera, renderer, pivot, twin } from './scene.js';
 import { uni, pt } from './body.js';
 
 /* 3D organ models from assets/models/manifest.json. They sit inside the glass body
    and appear with an upward scan line when their system is opened.
 
-   Manifest fields per organ (on top of plan.md 5.6):
+   Manifest fields per organ (on top of plan.md 5.6). Files are .glb (geometry + normal map only):
    anchor  [x from centre line, height fraction from the feet] of the organ's centre
    width / height  organ size as a fraction of body height (scale multiplies it)
    depth   how far behind the body surface the centre sits (fraction of body height)
@@ -29,18 +30,17 @@ export function has3dOrgan(k) {
   return !!(twin.body && manifest?.organs?.[k] && !organs[k]?.failed);
 }
 
-// The FBX files point at textures we don't use (only the normal maps are wanted), so hand the loader a blank pixel instead.
-const BLANK = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-const quietTextures = new THREE.LoadingManager();
-quietTextures.setURLModifier(u => /\.(png|jpe?g|bmp|tga|tiff?)$/i.test(u) ? BLANK : u);
+// Models are meshopt-compressed .glb files that carry only geometry and a WebP normal map.
+const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 
 // Graphite organ with a thin cyan edge. Appears with an upward scan line, then a faint sweep repeats.
-function organMaterial(u, normalMap, doubleSided) {
+function organMaterial(u, source, doubleSided) {
   const m = new THREE.MeshStandardMaterial({
     color: '#1b2022', roughness: .42, metalness: 0,
-    normalMap: normalMap || null,
+    normalMap: source?.normalMap || null,
     side: doubleSided ? THREE.DoubleSide : THREE.FrontSide,
   });
+  if (source?.normalScale) m.normalScale.copy(source.normalScale);
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, u, { uCyan: uni.uCyan, uRegionCenter: uni.uRegionCenter, uRegionRadius: uni.uRegionRadius, uPulse: uni.uPulse });
     sh.vertexShader = sh.vertexShader
@@ -77,17 +77,13 @@ export function loadOrgan(k) {
     const cfg = manifest.organs[k];
     if (!cfg || !twin.body) throw new Error('No model for ' + k);
     o.u.uRegionOn.value = cfg.region ? 1 : 0;
-    return new FBXLoader(quietTextures).loadAsync(encodeURI(MODEL_DIR + cfg.file)).then(model => {
-      const textures = new THREE.TextureLoader();
-      const normals = Object.entries(cfg.normalMaps || {}).map(([key, file]) => {
-        const t = textures.load(encodeURI(MODEL_DIR + file));
-        t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-        return [key, t];
-      });
+    return loader.loadAsync(encodeURI(MODEL_DIR + cfg.file)).then(gltf => {
+      const model = gltf.scene;
       model.traverse(m => {
         if (!m.isMesh) return;
-        const normal = normals.find(([key]) => m.name.includes(key));
-        m.material = organMaterial(o.u, normal?.[1], !!cfg.clipTop);
+        // Keep the model's normal map for surface detail, swap everything else for the VITALIS look.
+        if (m.material.normalMap) m.material.normalMap.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        m.material = organMaterial(o.u, m.material, !!cfg.clipTop);
       });
       placeOrgan(k, cfg, model, o);
       pivot.add(o.group);
