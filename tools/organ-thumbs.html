@@ -1,0 +1,120 @@
+<!doctype html><html><head><meta charset="UTF-8"><title>Organ thumbnails</title></head><body style="margin:0;background:#f5f5f2">
+<!-- Dev tool: renders the body panel thumbnails (assets/thumbs/*.webp) from the 3D models,
+     in the app's graphite + cyan look. Open http://localhost:8000/tools/organ-thumbs.html,
+     then save each image from the page (right click) or run window.__thumbs in the console
+     (data URLs). Brain and eyes have no models yet, so they are head close-ups of the body. -->
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+
+const SIZE = 360;
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setSize(SIZE, SIZE); renderer.setPixelRatio(1);
+renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.localClippingEnabled = true;
+document.body.append(renderer.domElement);
+const CYAN = new THREE.Color('#0aa5bd');
+
+// Same look as the app's organs: graphite, normal map, thin cyan edge. Optional cyan region glow.
+function graphite(color, src, clipY, region) {
+  const m = new THREE.MeshStandardMaterial({ color, roughness: .42, metalness: 0, normalMap: src?.normalMap || null, side: clipY ? THREE.DoubleSide : THREE.FrontSide });
+  if (src?.normalScale) m.normalScale.copy(src.normalScale);
+  if (clipY !== undefined) m.clippingPlanes = [new THREE.Plane(new THREE.Vector3(0, -1, 0), clipY)];
+  m.onBeforeCompile = sh => {
+    sh.uniforms.uCyan = { value: CYAN };
+    sh.uniforms.uC = { value: region ? region.c : new THREE.Vector3(0, 999, 0) };
+    sh.uniforms.uR = { value: region ? region.r : 1 };
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vW;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vW; uniform vec3 uCyan, uC; uniform float uR;')
+      .replace('#include <opaque_fragment>', `
+float facing = clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);
+float rim = pow(1.0 - facing, 3.0);
+float d = distance(vW, uC) / uR;
+float reg = (1.0 - smoothstep(.45, 1.0, d)) * .7;
+float ring = 1.0 - smoothstep(0.0, .05, abs(d - .92));
+outgoingLight = mix(outgoingLight, uCyan, clamp(rim * .6 + reg * .45 + ring * .9, 0.0, 1.0));
+#include <opaque_fragment>`);
+  };
+  return m;
+}
+
+function sceneWith(obj) {
+  const s = new THREE.Scene();
+  s.add(new THREE.HemisphereLight(0xffffff, 0x2a2f31, 1.1));
+  const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(-3, 5, 6); s.add(key);
+  const rim = new THREE.DirectionalLight(0xffffff, 2.4); rim.position.set(3, 3, -5); s.add(rim);
+  s.add(obj); return s;
+}
+
+// Normalize to height H, centered on x/z, feet at y=0.
+function normalize(obj, H = 4.65) {
+  const b = new THREE.Box3().setFromObject(obj), sz = b.getSize(new THREE.Vector3());
+  obj.scale.multiplyScalar(H / sz.y);
+  const b2 = new THREE.Box3().setFromObject(obj), c = b2.getCenter(new THREE.Vector3());
+  obj.position.x -= c.x; obj.position.z -= c.z; obj.position.y -= b2.min.y;
+  obj.updateMatrixWorld(true);
+  return H;
+}
+
+// Frame the slice [v0, v1] of the object's height (fractions), turned by yaw.
+function shoot(obj, { v0 = 0, v1 = 1, yaw = 0, fill = .86, pitch = 0 } = {}) {
+  const pivot = new THREE.Group(); pivot.add(obj); pivot.rotation.y = yaw; pivot.updateMatrixWorld(true);
+  const b = new THREE.Box3().setFromObject(pivot), H = b.max.y - b.min.y;
+  const y0 = b.min.y + v0 * H, y1 = b.min.y + v1 * H;
+  const bc = b.getCenter(new THREE.Vector3()), bs = b.getSize(new THREE.Vector3());
+  const c = new THREE.Vector3(bc.x, (y0 + y1) / 2, bc.z);
+  // Whole object: fit both ways. A slice: fit its height and let wide parts (arms) run off the sides.
+  let half = (y1 - y0) / 2;
+  if (v0 === 0 && v1 === 1) half = Math.max(half, bs.x / 2);
+  half /= fill;
+  const sz = bs;
+  const cam = new THREE.PerspectiveCamera(30, 1, .01, 200);
+  const dist = half / Math.tan(THREE.MathUtils.degToRad(15)) + sz.z / 2;
+  cam.position.set(c.x, c.y + Math.sin(pitch) * dist, c.z + Math.cos(pitch) * dist); cam.lookAt(c);
+  renderer.setClearColor(0x000000, 0);
+  renderer.render(sceneWith(pivot), cam);
+  return renderer.domElement.toDataURL('image/png');
+}
+
+const gltf = f => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(f).then(g => g.scene);
+const manifest = await (await fetch('../assets/models/manifest.json')).json();
+const out = {};
+
+async function organ(id, file, opts = {}) {
+  const obj = await gltf('../assets/models/' + file);
+  const cfg = manifest.organs[id] || {};
+  normalize(obj);
+  let clipY;
+  if (cfg.clipTop) { const b = new THREE.Box3().setFromObject(obj); clipY = b.min.y + (b.max.y - b.min.y) * cfg.clipTop; }
+  obj.traverse(m => { if (m.isMesh) m.material = graphite(cfg.color || '#1b2022', m.material, clipY); });
+  out[id] = shoot(obj, { v1: cfg.clipTop || 1, ...opts });
+}
+await organ('heart', 'heart.glb', { yaw: -.35, fill: 1.05 });
+await organ('lungs', 'lungs.glb', { yaw: -.25, fill: 1.02 });
+await organ('muscles', 'ecorche.glb', { v0: .5, v1: .84, yaw: -.35, fill: .95 });
+await organ('bones', 'skeleton.glb', { v0: .62, v1: 1, yaw: -.35, fill: .95 });
+
+// Brain (sleep) and eyes: no models yet, so a close-up of the body's head with that area lit.
+async function head(id, regionAt, yaw = -.35) {
+  const body = await gltf('../assets/models/' + manifest.body.file);
+  const H = normalize(body);
+  const c = regionAt(H, body);
+  body.traverse(m => { if (m.isMesh) m.material = graphite('#1b2022', null, undefined, c); });
+  out[id] = shoot(body, { v0: .895, v1: 1, yaw, fill: .82 });
+}
+// Front surface z at a height, by raycast.
+function frontZ(obj, x, y) {
+  const r = new THREE.Raycaster(new THREE.Vector3(x, y, 50), new THREE.Vector3(0, 0, -1));
+  const hit = r.intersectObject(obj, true)[0]; return hit ? hit.point.z : .3;
+}
+await head('sleep', (H, b) => ({ c: new THREE.Vector3(0, H * .985, frontZ(b, 0, H * .96) - .3), r: .3 }));
+await head('eyes', (H, b) => ({ c: new THREE.Vector3(0, H * .944, frontZ(b, 0.06, H * .944) - .01), r: .085 }), 0);
+
+window.__thumbs = out; document.title = 'DONE';
+// Show the results on the page so they can be saved.
+renderer.domElement.remove();
+document.body.innerHTML += Object.entries(out).map(([k, url]) => `<figure style="display:inline-block;margin:12px;text-align:center;font:14px sans-serif"><img src="${url}" width="180"><figcaption>${k}.png</figcaption></figure>`).join('');
+</script></body></html>
