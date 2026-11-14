@@ -1,0 +1,65 @@
+/* 3D owner styles (plan.md section 4). Loaded after styles.css. */
+
+/* The anatomy panel replaces the buttons on the body. */
+#spots { display: none; }
+
+/* ---------- anatomy panel ---------- */
+.anatomy {
+  --depth: 0;
+  position: absolute; left: 40px; top: 32px; width: 320px;
+  max-height: calc(100% - 300px); overflow-y: auto;
+  padding: 18px 20px 16px;
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(6px);
+}
+.an-title { margin: 0 0 14px; font: 600 12px var(--cond); letter-spacing: .24em; text-transform: uppercase; color: var(--soft); }
+
+/* Layer tabs, outside to inside */
+.an-tabs { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--ink); }
+.an-tab {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 8px 0 7px; font: 600 13px var(--cond); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink); transition: background .3s, color .3s;
+}
+.an-tab + .an-tab { border-left: 1px solid var(--line); }
+.an-tab span { font: 500 10px var(--cond); letter-spacing: .14em; color: var(--soft); transition: color .3s; }
+.an-tab:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.an-tab.on { background: var(--ink); color: var(--white); }
+.an-tab.on span { color: #9fe3ee; }
+.an-tab:focus-visible { outline: 2px solid var(--cyan); outline-offset: -2px; }
+
+/* Depth gauge under the tabs: how far into the body this layer is */
+.an-depth { position: relative; height: 2px; margin-top: 8px; background: var(--line); }
+.an-depth i {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: calc((var(--depth) + 1) * 25%); background: var(--cyan);
+  transition: width .6s var(--ease);
+}
+.an-note { margin: 12px 0 4px; font: 400 14px/1.4 var(--sans); color: var(--soft); }
+
+/* Parts of the picked layer, grouped by body region */
+.an-list { display: none; }
+.an-list.on { display: block; animation: anIn .45s var(--ease) both; }
+@keyframes anIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.an-group h4 { margin: 16px 0 4px; font: 600 11px var(--cond); letter-spacing: .22em; text-transform: uppercase; color: var(--soft); }
+.an-row {
+  display: grid; grid-template-columns: 12px 1fr auto 52px; align-items: center; gap: 10px;
+  width: 100%; padding: 9px 8px; text-align: left; border-bottom: 1px solid var(--line);
+  transition: background .25s, color .25s;
+}
+.an-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink); }
+.an-row.watch .an-dot { background: var(--amber); }
+.an-name { font: 600 15px var(--cond); letter-spacing: .08em; text-transform: uppercase; }
+.an-tag { margin-left: 8px; font: 500 10px var(--cond); letter-spacing: .16em; color: var(--soft); }
+.an-val { font: 300 18px var(--cond); font-variant-numeric: tabular-nums; }
+.an-val small { margin-left: 3px; font-size: 12px; color: var(--soft); }
+.an-status { justify-self: end; font: 600 11px var(--cond); letter-spacing: .16em; text-transform: uppercase; color: var(--soft); }
+.an-row.watch .an-status { color: var(--amber); }
+button.an-row:hover, button.an-row:focus-visible { background: var(--ink); color: var(--white); outline: none; }
+button.an-row:hover .an-dot, button.an-row:focus-visible .an-dot { background: var(--cyan); }
+button.an-row:hover small, button.an-row:hover .an-status { color: #9fe3ee; }
+.an-row.soon { color: var(--soft); }
+.an-row.soon .an-dot { background: transparent; border: 1px dashed var(--soft); }
+.an-row.soon .an-val { grid-column: 3 / 5; justify-self: end; font: 500 11px var(--cond); letter-spacing: .16em; text-transform: uppercase; }
+.an-hint { margin: 14px 0 0; font: 500 11px var(--cond); letter-spacing: .16em; text-transform: uppercase; color: #b4b4ae; }
