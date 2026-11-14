@@ -46,7 +46,10 @@ export const organFx = {
   // Positions are fractions of body height: x from the centre line, y from the feet.
   // A bone counts as arm if its centre is further out than `start` and below the shoulder;
   // below `elbowY` it is forearm/hand and also turns at the elbow.
-  arm: { on: true, angle: 18, elbow: 8, shoulderX: .105, shoulderY: .81, elbowY: .63, start: .095 },
+  // Below `wristY` it is the hand and also turns at the wrist.
+  arm: { on: true, angle: 18, elbow: -12, wrist: 0, shoulderX: .105, shoulderY: .81, elbowY: .63, wristY: .485, start: .095 },
+  // Per-organ nudge from the FX panel: { x, y, z } as fractions of body height, s = size multiplier.
+  place: {},
 };
 const DEFAULT_TINT = '#1846c4';
 const NAVY = new THREE.Color('#0A1F6B');   // plan.md 5.2 severe end of the blue scale
@@ -57,15 +60,15 @@ const shared = {
   uPivot: { value: new THREE.Matrix4() }, uPivotInv: { value: new THREE.Matrix4() },
   uBodyCX: { value: 0 }, uBodyMinY: { value: 0 }, uBodyH: { value: 1 },
   uArmAngle: { value: 0 }, uElbowAngle: { value: 0 }, uShoulderX: { value: .1 }, uShoulderY: { value: .8 },
-  uElbowY: { value: .6 },
+  uElbowY: { value: .6 }, uWristAngle: { value: 0 }, uWristY: { value: .48 },
 };
 
 // Arm bend, in the body's own (pivot) space. aArm is set per bone on the CPU (classifyArms):
-// x = 0 not arm, 1 upper arm, 2 forearm/hand; y = side (-1 left, 1 right). Whole bones turn together.
+// x = 0 not arm, 1 upper arm, 2 forearm, 3 hand; y = side (-1 left, 1 right). Whole bones turn together.
 const ARM_GLSL = `
 attribute vec2 aArm;
 uniform mat4 uPivot, uPivotInv;
-uniform float uArmOn, uBodyCX, uBodyMinY, uBodyH, uArmAngle, uElbowAngle, uShoulderX, uShoulderY, uElbowY;
+uniform float uArmOn, uBodyCX, uBodyMinY, uBodyH, uArmAngle, uElbowAngle, uShoulderX, uShoulderY, uElbowY, uWristAngle, uWristY;
 vec2 rot2(vec2 v, float a) { float c = cos(a), s = sin(a); return vec2(c * v.x - s * v.y, s * v.x + c * v.y); }
 vec4 armBend(vec4 pv, out float ang, out float side) {
   side = aArm.y;
@@ -76,7 +79,12 @@ vec4 armBend(vec4 pv, out float ang, out float side) {
   vec2 v = sp + rot2(q - sp, a1);
   vec2 elbow = sp + rot2(vec2(uShoulderX, uElbowY) - sp, a1);
   v = elbow + rot2(v - elbow, a2);
-  ang = a1 + a2;
+  // Wrist: where the wrist ended up after the shoulder and elbow turns.
+  float a3 = radians(uWristAngle) * step(2.5, aArm.x);
+  vec2 wrist = sp + rot2(vec2(uShoulderX, uWristY) - sp, a1);
+  wrist = elbow + rot2(wrist - elbow, a2);
+  v = wrist + rot2(v - wrist, a3);
+  ang = a1 + a2 + a3;
   return vec4(uBodyCX + side * v.x * uBodyH, uBodyMinY + v.y * uBodyH, pv.z, 1.0);
 }`;
 
@@ -157,7 +165,11 @@ function classifyArms(o) {
       const r = root[base + i];
       const dx = (sx[r] / cnt[r] - cx) / H, y = (sy[r] / cnt[r] - B.min.y) / H;
       let role = 0;
-      if (Math.abs(dx) > a.start && y < a.shoulderY) role = y < a.elbowY ? 2 : 1;
+      if (Math.abs(dx) > a.start && y < a.shoulderY) {
+        role = 1;
+        if (y < a.elbowY) role = 2;
+        if (y < a.wristY) role = 3;
+      }
       arr[i * 2] = role;
       arr[i * 2 + 1] = dx < 0 ? -1 : 1;
     }
@@ -293,6 +305,12 @@ function placeOrgan(k, cfg, model, o) {
   if (cfg.clipTop) maxY = minY + 2 * halfY * cfg.clipTop;
   o.u.uMinY.value = minY;
   o.u.uMaxY.value = maxY;
+  // Remember the fitted spot so the FX panel can nudge it.
+  o.basePos = center.clone();
+  o.base0 = s;
+  o.H = H;
+  o.minY0 = minY;
+  o.maxY0 = maxY;
 
   const tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
   if (cfg.frame) {
@@ -327,6 +345,8 @@ function applyOrganFx() {
   shared.uShoulderX.value = a.shoulderX;
   shared.uShoulderY.value = a.shoulderY;
   shared.uElbowY.value = a.elbowY;
+  shared.uWristAngle.value = a.wrist;
+  shared.uWristY.value = a.wristY;
   pivot.updateMatrixWorld();
   shared.uPivot.value.copy(pivot.matrixWorld);
   shared.uPivotInv.value.copy(pivot.matrixWorld).invert();
@@ -361,8 +381,21 @@ export function updateOrgans(now, dt) {
     o.u.uArmOn.value = arm.on && o.bones ? 1 : 0;
     // Re-sort bones into arm / not arm when the related sliders change.
     if (o.bones && arm.on) {
-      const key = arm.start + '|' + arm.shoulderY + '|' + arm.elbowY;
+      const key = arm.start + '|' + arm.shoulderY + '|' + arm.elbowY + '|' + arm.wristY;
       if (key !== o.bones.key) { classifyArms(o); o.bones.key = key; }
+    }
+    // FX panel nudge: move / resize the organ (and its scan-in range) from its fitted spot.
+    const p = organFx.place[k];
+    if (p && o.basePos) {
+      const cy = o.basePos.y + p.y * o.H;
+      o.group.position.set(o.basePos.x + p.x * o.H, cy, o.basePos.z + p.z * o.H);
+      if (o.placeScale !== p.s) {
+        o.base = o.base0 * p.s;   // animate3dOrgan breathes / beats around o.base
+        o.group.scale.setScalar(o.base);
+        o.placeScale = p.s;
+      }
+      o.u.uMinY.value = cy + (o.minY0 - o.basePos.y) * p.s;
+      o.u.uMaxY.value = cy + (o.maxY0 - o.basePos.y) * p.s;
     }
     o.group.visible = o.reveal > 0;
   }

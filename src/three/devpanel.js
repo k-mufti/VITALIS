@@ -26,11 +26,17 @@ const DEFAULTS = {
   orgStyle: 0, orgEdge: .45, orgShade: .3, orgDot: '#7fe9ff',
   tintHeart: '#0a1f6b', tintLungs: '#1f5fd1', tintBones: '#13308f', tintMuscles: '#1846c4', tintBrain: '#3d6ff0', tintDigestion: '#22409e',
   // Skeleton arm fit (fractions of body height)
-  armOn: true, armAngle: 18, armElbow: 8,
-  armShoulderX: .105, armShoulderY: .81, armElbowY: .63, armStart: .095,
+  armOn: true, armAngle: 18, armElbow: -12, armWrist: 0,
+  armShoulderX: .105, armShoulderY: .81, armElbowY: .63, armWristY: .485, armStart: .095,
+  // Organ position: which organ the sliders move
+  posOrgan: 0,
 };
+// Organs you can nudge: [id in manifest, label]
+const ORGAN_LIST = [['heart', 'Heart'], ['lungs', 'Lungs'], ['sleep', 'Brain'], ['digestion', 'Digestion'], ['bones', 'Skeleton'], ['muscles', 'Muscles']];
+for (const [id] of ORGAN_LIST) Object.assign(DEFAULTS, { [`pos_${id}_x`]: 0, [`pos_${id}_y`]: 0, [`pos_${id}_z`]: 0, [`pos_${id}_s`]: 1 });
+const BODY_CM = 180;  // body height used to show positions in cm
 const STORE_KEY = 'vitalis-fx';
-const VERSION = 2;  // bump to push new defaults over saved settings
+const VERSION = 3;  // bump to push new defaults over saved settings
 const LINE_COLORS = [['Ink', '#0e0e0e'], ['Cyan', '#0aa5bd'], ['Gray', '#8a8a85'], ['White', '#f5f5f2']];
 const HALFTONE = 0, OUTLINE = 3;  // indexes in STYLES
 
@@ -40,15 +46,15 @@ const band = s => (s < .33 ? 'OK' : s < .66 ? 'Watch' : 'Act');
 // Panel layout. `only` = show for these body styles. `when` = show if it returns true.
 const CONTROLS = [
   { section: 'Framing' },
-  { k: 'size', label: 'Model size', min: .7, max: 2.6, step: .01 },
-  { k: 'lift', label: 'Model height', min: -.2, max: .4, step: .01 },
+  { k: 'size', label: 'Model size', min: .7, max: 2.6, step: .01, unit: 'x' },
+  { k: 'lift', label: 'Model height', min: -.2, max: .4, step: .01, unit: 'cm' },
   { k: 'autoTurn', label: 'Auto turn', type: 'check' },
 
   { section: 'Body' },
   { type: 'styles' },
-  { k: 'dot', label: 'Dot size', min: 3, max: 16, step: 1, only: [HALFTONE, OUTLINE] },
-  { k: 'edge', label: 'Edge dots', min: 0, max: 1, step: .01, only: [HALFTONE] },
-  { k: 'shade', label: 'Shading dots', min: 0, max: 1, step: .01, only: [HALFTONE] },
+  { k: 'dot', label: 'Dot size', min: 3, max: 16, step: 1, unit: 'px', only: [HALFTONE, OUTLINE] },
+  { k: 'edge', label: 'Edge dots', min: 0, max: 1, step: .01, unit: '%', only: [HALFTONE] },
+  { k: 'shade', label: 'Shading dots', min: 0, max: 1, step: .01, unit: '%', only: [HALFTONE] },
   { k: 'outWidth', label: 'Line width', min: .05, max: 1, step: .01, only: [OUTLINE] },
   { k: 'outSoft', label: 'Line softness', min: 0, max: 1, step: .01, only: [OUTLINE] },
   { k: 'outFill', label: 'Body tone', min: 0, max: 1, step: .01, only: [OUTLINE] },
@@ -76,8 +82,8 @@ const CONTROLS = [
 
   { section: 'Organs' },
   { k: 'orgStyle', label: 'Organ style', type: 'choice', options: ['Halftone', 'Silhouette'] },
-  { k: 'orgEdge', label: 'Edge dots', min: 0, max: 1, step: .01, when: f => f.orgStyle === 0 },
-  { k: 'orgShade', label: 'Shading dots', min: 0, max: 1, step: .01, when: f => f.orgStyle === 0 },
+  { k: 'orgEdge', label: 'Edge dots', min: 0, max: 1, step: .01, unit: '%', when: f => f.orgStyle === 0 },
+  { k: 'orgShade', label: 'Shading dots', min: 0, max: 1, step: .01, unit: '%', when: f => f.orgStyle === 0 },
   { k: 'orgDot', label: 'Dot color', type: 'color', when: f => f.orgStyle === 0 },
   { k: 'tintHeart', label: 'Heart', type: 'color' },
   { k: 'tintLungs', label: 'Lungs', type: 'color' },
@@ -88,13 +94,25 @@ const CONTROLS = [
 
   { section: 'Skeleton fit' },
   { k: 'armOn', label: 'Bend arms to match body', type: 'check' },
-  { k: 'armAngle', label: 'Arm angle', min: -10, max: 45, step: .5, when: f => f.armOn },
-  { k: 'armElbow', label: 'Elbow angle', min: -20, max: 40, step: .5, when: f => f.armOn },
-  { k: 'armShoulderX', label: 'Shoulder width', min: .06, max: .16, step: .001, when: f => f.armOn },
-  { k: 'armShoulderY', label: 'Shoulder height', min: .7, max: .9, step: .001, when: f => f.armOn },
-  { k: 'armElbowY', label: 'Elbow height', min: .5, max: .75, step: .001, when: f => f.armOn },
-  { k: 'armStart', label: 'Arm bones start at', min: .05, max: .15, step: .001, when: f => f.armOn },
-  { type: 'note', text: 'Open Body → Bones. Elbow height splits upper arm from forearm. If a rib or hip bone swings out, raise "Arm bones start at"; if a finger stays behind, lower it.', when: f => f.armOn },
+  { k: 'armAngle', label: 'Arm out from body', min: -10, max: 45, step: .5, unit: '°', when: f => f.armOn },
+  { k: 'armElbow', label: 'Elbow bend (− = in)', min: -60, max: 60, step: .5, unit: '°', when: f => f.armOn },
+  { k: 'armWrist', label: 'Wrist bend (− = in)', min: -60, max: 60, step: .5, unit: '°', when: f => f.armOn },
+  { k: 'armShoulderX', label: 'Shoulder from centre', min: .06, max: .16, step: .001, unit: 'cm', when: f => f.armOn },
+  { k: 'armShoulderY', label: 'Shoulder height', min: .7, max: .9, step: .001, unit: 'cmUp', when: f => f.armOn },
+  { k: 'armElbowY', label: 'Elbow height', min: .5, max: .75, step: .001, unit: 'cmUp', when: f => f.armOn },
+  { k: 'armWristY', label: 'Wrist height', min: .38, max: .6, step: .001, unit: 'cmUp', when: f => f.armOn },
+  { k: 'armStart', label: 'Arm bones start at', min: .05, max: .15, step: .001, unit: 'cm', when: f => f.armOn },
+  { type: 'note', text: 'Open Body → Bones. Heights are measured up from the feet on a 180 cm body. If a rib or hip bone swings out, raise "Arm bones start at"; if a finger stays behind, lower it.', when: f => f.armOn },
+
+  { section: 'Organ position' },
+  { k: 'posOrgan', label: 'Organ', type: 'choice', options: ORGAN_LIST.map(o => o[1]) },
+  ...ORGAN_LIST.flatMap(([id], i) => [
+    { k: `pos_${id}_x`, label: 'X · left / right', min: -.1, max: .1, step: .001, unit: 'cm', when: f => f.posOrgan === i },
+    { k: `pos_${id}_y`, label: 'Y · up / down', min: -.1, max: .1, step: .001, unit: 'cm', when: f => f.posOrgan === i },
+    { k: `pos_${id}_z`, label: 'Z · depth (+ = front)', min: -.1, max: .1, step: .001, unit: 'cm', when: f => f.posOrgan === i },
+    { k: `pos_${id}_s`, label: 'Size', min: .5, max: 1.5, step: .01, unit: 'x', when: f => f.posOrgan === i },
+  ]),
+  { type: 'note', text: 'Open the organ (or its layer) to see it move. Double-click a slider to reset it.' },
 
   { section: 'Adaptive' },
   { k: 'adaptive', label: 'Follow crew health', type: 'check' },
@@ -108,7 +126,9 @@ const collapsed = new Set();
 function load() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
-    if (saved.v !== VERSION) saved.bgIntensity = 0;  // v2: background dots turned off
+    const v = saved.v || 1;
+    if (v < 2) saved.bgIntensity = 0;                            // v2: background dots turned off
+    if (v < 3 && saved.armElbow === 8) saved.armElbow = -12;     // v3: elbow bends in by default
     return { ...DEFAULTS, ...saved };
   } catch {
     return { ...DEFAULTS };
@@ -164,9 +184,12 @@ function apply() {
   organFx.tints.sleep = fx.tintBrain;
   organFx.tints.digestion = fx.tintDigestion;
   Object.assign(organFx.arm, {
-    on: fx.armOn, angle: fx.armAngle, elbow: fx.armElbow,
-    shoulderX: fx.armShoulderX, shoulderY: fx.armShoulderY, elbowY: fx.armElbowY, start: fx.armStart,
+    on: fx.armOn, angle: fx.armAngle, elbow: fx.armElbow, wrist: fx.armWrist,
+    shoulderX: fx.armShoulderX, shoulderY: fx.armShoulderY, elbowY: fx.armElbowY, wristY: fx.armWristY, start: fx.armStart,
   });
+  for (const [id] of ORGAN_LIST) {
+    organFx.place[id] = { x: fx[`pos_${id}_x`], y: fx[`pos_${id}_y`], z: fx[`pos_${id}_z`], s: fx[`pos_${id}_s`] };
+  }
   // Framing
   framing.size = fx.size;
   framing.lift = fx.lift;
@@ -174,7 +197,20 @@ function apply() {
   twin.autoTurn = fx.autoTurn;
 }
 
-const fmt = (k, v) => (k === 'health' ? `${v} · ${band(v)}` : v);
+// Readable values: cm on a 180 cm body, degrees, percent, multipliers.
+const CTRL = Object.fromEntries(CONTROLS.filter(c => c.k).map(c => [c.k, c]));
+const signed = n => (n > 0 ? '+' : '') + n;
+function fmt(k, v) {
+  if (k === 'health') return `${Math.round(v * 100)}% · ${band(v)}`;
+  const unit = CTRL[k]?.unit;
+  if (unit === 'cm') return `${signed(+(v * BODY_CM).toFixed(1))} cm`;
+  if (unit === 'cmUp') return `${(v * BODY_CM).toFixed(1)} cm`;
+  if (unit === '°') return `${signed(+v)}°`;
+  if (unit === '%') return `${Math.round(v * 100)}%`;
+  if (unit === 'x') return `×${(+v).toFixed(2)}`;
+  if (unit === 'px') return `${v} px`;
+  return v;
+}
 
 function controlHTML(c) {
   if (c.type === 'styles') {
@@ -195,8 +231,10 @@ function controlHTML(c) {
   if (c.type === 'color') {
     return `<label class="color"><span>${c.label}<b data-out="${c.k}">${fx[c.k]}</b></span><input type="color" data-key="${c.k}" value="${fx[c.k]}"></label>`;
   }
-  return `<label><span>${c.label}<b data-out="${c.k}">${fmt(c.k, fx[c.k])}</b></span>
-    <input type="range" data-key="${c.k}" min="${c.min}" max="${c.max}" step="${c.step}" value="${fx[c.k]}"></label>`;
+  return `<div class="slider"><div class="top"><span>${c.label}</span><b data-out="${c.k}">${fmt(c.k, fx[c.k])}</b></div>
+    <div class="ctl"><button data-nudge="${c.k}" data-dir="-1" aria-label="Less">−</button>
+    <input type="range" data-key="${c.k}" min="${c.min}" max="${c.max}" step="${c.step}" value="${fx[c.k]}" title="Double-click to reset">
+    <button data-nudge="${c.k}" data-dir="1" aria-label="More">+</button></div></div>`;
 }
 
 function render(panel) {
@@ -218,7 +256,7 @@ function render(panel) {
 }
 
 const CSS = `
-#fxPanel { position: fixed; z-index: 40; top: 80px; right: 16px; width: 270px; max-height: calc(100vh - 100px); overflow-y: auto;
+#fxPanel { position: fixed; z-index: 40; top: 80px; right: 16px; width: 300px; max-height: calc(100vh - 100px); overflow-y: auto;
   background: #fff; border: 1px solid #e1e1dc; font: 500 13px 'Barlow', sans-serif; color: #0e0e0e; padding: 14px 16px 16px;
   user-select: none; scrollbar-width: thin; }
 #fxPanel.off { display: none; }
@@ -241,6 +279,14 @@ const CSS = `
   letter-spacing: .16em; text-transform: uppercase; color: #8a8a85; margin-bottom: 3px; }
 #fxPanel label b { color: #0e0e0e; font-variant-numeric: tabular-nums; }
 #fxPanel input[type=range] { width: 100%; accent-color: #0aa5bd; }
+#fxPanel .slider { margin-bottom: 12px; }
+#fxPanel .slider .top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px; }
+#fxPanel .slider .top span { font: 600 13px 'Barlow', sans-serif; color: #3d3d3a; }
+#fxPanel .slider .top b { font: 600 15px 'Barlow', sans-serif; font-variant-numeric: tabular-nums; color: #0e0e0e; }
+#fxPanel .slider .ctl { display: flex; align-items: center; gap: 6px; }
+#fxPanel .slider .ctl input { flex: 1; }
+#fxPanel .slider .ctl button { width: 22px; height: 22px; flex: none; border: 1px solid #e1e1dc; font: 500 15px/1 'Barlow', sans-serif; color: #3d3d3a; }
+#fxPanel .slider .ctl button:hover { border-color: #0e0e0e; color: #0e0e0e; }
 #fxPanel input[type=color] { width: 100%; height: 26px; border: 1px solid #e1e1dc; background: none; padding: 2px; cursor: pointer; }
 #fxPanel .check { display: flex; align-items: center; gap: 8px; font: 600 11px 'Barlow Condensed', sans-serif;
   letter-spacing: .16em; text-transform: uppercase; color: #8a8a85; }
@@ -304,12 +350,24 @@ export function initDevPanel() {
     if (JSON.stringify(visibleKeys()) !== before) render(panel);
   });
 
+  // Double-click a slider to put it back to its default.
+  panel.addEventListener('dblclick', e => {
+    const k = e.target.dataset?.key;
+    if (k && e.target.type === 'range') setValue(panel, k, DEFAULTS[k]);
+  });
+
   // Buttons
   panel.addEventListener('click', e => {
     const b = e.target.closest('button');
     if (!b) return;
     const d = b.dataset;
     if (d.act === 'close') return show(false);
+    if (d.nudge) {
+      const c = CTRL[d.nudge];
+      const next = Math.min(c.max, Math.max(c.min, fx[d.nudge] + c.step * +d.dir));
+      setValue(panel, d.nudge, +next.toFixed(4));
+      return;
+    }
     if (d.act === 'copy') {
       navigator.clipboard?.writeText(JSON.stringify(fx));
       b.textContent = 'Copied';
@@ -332,6 +390,17 @@ export function initDevPanel() {
     apply();
     save();
   });
+}
+
+// Set one slider value from code (nudge / reset) and keep the panel in step.
+function setValue(panel, k, v) {
+  fx[k] = v;
+  const input = panel.querySelector(`input[data-key="${k}"]`);
+  if (input) input.value = v;
+  const out = panel.querySelector(`[data-out="${k}"]`);
+  if (out) out.textContent = fmt(k, v);
+  apply();
+  save();
 }
 
 // Which controls are showing right now (used to decide when to re-render).
