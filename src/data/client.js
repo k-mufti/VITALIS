@@ -63,7 +63,7 @@ export const api = {
 
 /* One organ, merged from live data and the mock fallback, in the shape the views use.
    Always returns something for every organ id in ORGAN_IDS. */
-export const ORGAN_IDS = ['bones', 'sleep', 'eyes', 'heart', 'muscles', 'lungs'];
+export const ORGAN_IDS = ['bones', 'sleep', 'eyes', 'heart', 'muscles', 'lungs', 'ears'];
 // Shown only when the backend is off, so the panel still reads sensibly in a demo.
 const FALLBACK_WRONG = {
   bones: [{ title: 'Hip or spine fracture after landing' }],
@@ -72,8 +72,11 @@ const FALLBACK_WRONG = {
   sleep: [{ title: 'Slower reactions and mistakes during critical tasks' }],
   muscles: [{ title: 'Weak legs at landing, harder first surface walk' }],
   lungs: [{ title: 'Breathing problems from cabin air or dust' }],
+  ears: [{ title: 'Hearing loss from months of cabin noise' }],
 };
 const FALLBACK = {
+  ears: { name: 'Ears & balance', value: 64, unit: 'dBA noise, day average', usual: 'under 70', level: 'low',
+    note: 'Hearing, balance and cabin pressure are normal.', l2: 'Hearing test', v2: 'Monthly' },
   bones: { name: 'Bones', value: 95.9, unit: '% of preflight density (estimated)', usual: '97-100', level: 'mild',
     note: 'Estimated hip and spine density down 4.1% since launch. Scanned after landing.', l2: 'Next scan', v2: 'After landing' },
   eyes: { name: 'Eyes', value: 5.2, unit: 'mm optic nerve sheath', usual: 'under 5.0 mm', level: 'mild',
@@ -87,7 +90,7 @@ export function organ(id) {
       id, name: o.name, value: o.value, unit: o.unit, usual: o.usual, note: o.note,
       level: o.level, status: o.status, severity: o.severity, rank: o.rank,
       drivers: o.drivers, wrong: o.what_could_go_wrong, countermeasures: o.countermeasures,
-      hrpRisks: o.hrp_risks, hazards: o.hazards, projection: o.projection, measurement: o.measurement,
+      hrpRisks: o.hrp_risks, hazards: o.hazards, projection: o.projection, measurement: o.measurement, checks: o.checks,
       l2: (SYS[id] || FALLBACK[id] || {}).l2 || 'Watching for', v2: (SYS[id] || FALLBACK[id] || {}).v2 || o.status,
       week: (SYS[id] || {}).week,
     };

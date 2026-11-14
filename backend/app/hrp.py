@@ -56,6 +56,7 @@ ORGAN_MAP = {
     "sleep": {"hrp_risks": ["sleep", "behavioral", "teamwork"], "hazards": ["isolation", "distance", "radiation"]},
     "eyes": {"hrp_risks": ["sans"], "hazards": ["gravity"]},
     "lungs": {"hrp_risks": ["hypoxia", "microbes"], "hazards": ["environment"]},
+    "ears": {"hrp_risks": ["sensorimotor", "decompression"], "hazards": ["gravity", "environment"]},
 }
 
 # Risks we track for the whole mission instead of one organ.

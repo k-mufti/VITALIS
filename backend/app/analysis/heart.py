@@ -29,6 +29,8 @@ DRIVERS = {
     "stress": lambda v: "stress",
     "bp_offset": lambda v: f"blood pressure up {v:.0f} mmHg",
     "missed_exercise_days": lambda v: f"{v:.0f} missed workouts",
+    "pressure_drop_kpa": lambda v: f"cabin pressure down {v:.0f} kPa (less oxygen)",
+    "co2_offset": lambda v: f"cabin CO2 up {v:.1f} mmHg",
 }
 
 
