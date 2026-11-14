@@ -35,7 +35,7 @@ const PARTS = [
 export const LAYER_MODELS = { muscle: ['muscles'], skeleton: ['bones'], organs: ['eyes', 'ears', 'sleep', 'heart', 'lungs', 'digestion', 'kidneys'] };
 
 function tile(p) {
-  // Parts without data yet (inner ear, digestion, kidneys) can be found on the body but don't open a detail view.
+  // Parts without data yet (inner ear, digestion, kidneys) have no detail view: clicking zooms the body to them.
   if (p.noData) {
     return `<div class="an-tile no-data" data-part="${p.sys}" tabindex="0">
     <img src="assets/thumbs/${p.sys}.webp" alt="" loading="lazy" />
@@ -55,7 +55,24 @@ function grid(layer) {
   return `<div class="an-grid" data-layer="${layer}">${parts.map(tile).join('')}</div>`;
 }
 
+// Zoom on a part without data (no detail view). Click again, Esc or another tab zooms back out.
+let zoomed = null, focusFn = null, resetFn = null;
+function zoomOut() {
+  if (!zoomed) return;
+  zoomed = null;
+  $$('.an-tile.no-data').forEach(t => t.classList.remove('on'));
+  resetFn?.();
+}
+function zoomTo(tile) {
+  const k = tile.dataset.part;
+  if (zoomed === k) { zoomOut(); return; }
+  zoomed = k;
+  $$('.an-tile.no-data').forEach(t => t.classList.toggle('on', t === tile));
+  focusFn?.(k);
+}
+
 export function setLayer(id) {
+  zoomOut();
   twin.layer = id;
   $$('.an-tab').forEach(t => {
     const on = t.dataset.layer === id;
@@ -67,7 +84,9 @@ export function setLayer(id) {
   (LAYER_MODELS[id] || []).forEach(k => loadOrgan(k));
 }
 
-export function initAnatomyPanel(setHover) {
+export function initAnatomyPanel(setHover, focus, reset) {
+  focusFn = focus;
+  resetFn = reset;
   const view = $('#view-body');
   if (!view) return;
   const panel = document.createElement('aside');
@@ -98,5 +117,10 @@ export function initAnatomyPanel(setHover) {
     t.addEventListener('focus', () => setHover(t.dataset.part));
     t.addEventListener('blur', () => setHover(null));
   });
+  $$('.an-tile.no-data').forEach(t => {
+    t.addEventListener('click', () => zoomTo(t));
+    t.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); zoomTo(t); } });
+  });
+  addEventListener('keydown', e => { if (e.key === 'Escape') zoomOut(); });
   setLayer('skin');
 }
