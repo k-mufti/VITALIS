@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { $, $$ } from '../util.js';
-import { pivot, HOME, cam, twin } from './scene.js';
+import { pivot, HOME, cam, twin, renderer } from './scene.js';
+import { createHalftoneSkin, halftoneUniforms } from './effects.js';
 
 /* Body model, skin shader, and the body regions each system lives at. */
 
@@ -16,29 +17,11 @@ export const REGIONS = {
 export const uni = {
   uRegionCenter: { value: new THREE.Vector3(0, 99, 0) }, uRegionRadius: { value: .3 },
   uHighlight: { value: 0 }, uGhost: { value: 0 }, uPulse: { value: 0 }, uCyan: { value: new THREE.Color('#0aa5bd') },
+  ...halftoneUniforms(renderer.getPixelRatio()),
 };
 
-// Charcoal body. Shader adds a thin cyan ring on the hovered region and turns the body to glass when zoomed in.
-export const skin = new THREE.MeshStandardMaterial({ color: '#131516', roughness: .6, metalness: 0, transparent: true });
-skin.onBeforeCompile = sh => {
-  Object.assign(sh.uniforms, uni);
-  sh.vertexShader = sh.vertexShader
-    .replace('#include <common>', '#include <common>\nvarying vec3 vW;')
-    .replace('#include <project_vertex>', '#include <project_vertex>\nvW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-  sh.fragmentShader = sh.fragmentShader
-    .replace('#include <common>', `#include <common>
-varying vec3 vW; uniform vec3 uRegionCenter; uniform float uRegionRadius, uHighlight, uGhost, uPulse; uniform vec3 uCyan;`)
-    .replace('#include <opaque_fragment>', `
-float facing = clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);
-float rim = pow(1.0 - facing, 2.4);
-float dR = distance(vW, uRegionCenter);
-float region = (1.0 - smoothstep(uRegionRadius * .5, uRegionRadius, dR)) * uHighlight;
-float ring = (1.0 - smoothstep(0.0, .03, abs(dR / uRegionRadius - .9))) * uHighlight;
-outgoingLight = mix(outgoingLight, uCyan, clamp(smoothstep(.42, .8, rim) * region + ring * (1.0 - .6 * uGhost) + region * .1 * (1.0 - uGhost), 0.0, 1.0));
-outgoingLight = mix(outgoingLight, uCyan, region * uGhost * (.25 + .35 * uPulse));
-diffuseColor.a *= mix(1.0, clamp(.045 + rim * .42 + region * (.16 + .22 * uPulse) + ring * .5, 0.0, 1.0), uGhost);
-#include <opaque_fragment>`);
-};
+// Pitch-black halftone body (see effects.js).
+export const skin = createHalftoneSkin(uni);
 
 export function loadBody() {
   new FBXLoader().load('./malebody.fbx', obj => {

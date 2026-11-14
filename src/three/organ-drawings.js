@@ -1,4 +1,5 @@
 import { $, $$ } from '../util.js';
+import { ORGAN_HALFTONE_DEFS } from './effects.js';
 
 /* Organ drawings shown in the Detail view, their live motion, and drag-to-turn. */
 
@@ -86,4 +87,11 @@ export function initOrganDrag() {
   el.addEventListener('pointermove', e => { if (!start) return; ty = Math.max(-50, Math.min(50, start.ty + (e.clientX - start.x) * .3)); tx = Math.max(-20, Math.min(20, start.tx - (e.clientY - start.y) * .2)); });
   el.addEventListener('pointerup', () => { start = null; tx = 0; ty = 0; });
   (function loop() { rx += (tx - rx) * .1; ry += (ty - ry) * .1; const s = el.querySelector('svg'); if (s) s.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`; requestAnimationFrame(loop); })();
+}
+
+// Halftone fill for the organ shapes (pattern from effects.js).
+for (const k of Object.keys(ORGANS)) {
+  ORGANS[k] = ORGANS[k]
+    .replace('<svg viewBox="0 0 400 400">', '<svg viewBox="0 0 400 400">' + ORGAN_HALFTONE_DEFS)
+    .replaceAll('class="shape"', 'class="shape" style="fill:url(#ht)"');
 }
