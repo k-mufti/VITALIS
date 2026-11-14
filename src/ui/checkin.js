@@ -1,5 +1,6 @@
 import { $, $$ } from '../util.js';
-import { VITALS, ROUTINE, COMMS_DELAY_MIN } from '../data/mock.js';
+import { VITALS, ROUTINE } from '../data/mock.js';
+import { commsDelayMin } from '../data/client.js';
 import { JUDGE, GUIDE, STATUS_WORD } from '../data/health-rules.js';
 import { renderToday, showToast } from './today.js';
 
@@ -137,7 +138,7 @@ function save() {
   renderToday();
   const done = ROUTINE.filter(r => r.done).length;
   if (act) {
-    showToast(`<span class="t-time">Flagged</span><span>The crew doctor has been told. A copy is on its way to Earth and arrives in about ${Math.round(COMMS_DELAY_MIN)} min.</span>`, 'act', 10000);
+    showToast(`<span class="t-time">Flagged</span><span>The crew doctor has been told. A copy is on its way to Earth and arrives in about ${Math.round(commsDelayMin())} min.</span>`, 'act', 10000);
   } else if (watch) {
     showToast(`<span class="t-time">Saved</span><span>${watch} reading${watch > 1 ? 's' : ''} to keep an eye on. ${done} of ${ROUTINE.length} checks done today.</span>`, 'watch');
   } else {

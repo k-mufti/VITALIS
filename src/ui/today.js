@@ -4,8 +4,9 @@ import { JUDGE, STATUS_WORD } from '../data/health-rules.js';
 import { openCheckin } from './checkin.js';
 import { state } from '../state.js';
 
-/* Body view, right side: today's health routine, your latest check-in readings,
-   the streak, and a reminder when a check is due. Every reading here is made up. */
+/* Today's checks drawer, opened by the "Check in" button on the right rail: the health
+   routine, your latest readings, the streak, and a reminder when a check is due.
+   Every reading here is made up. */
 
 let streak = STREAK;
 let streakEarned = false;
@@ -84,11 +85,12 @@ function updateStatusLine() {
     if (s && s.status === 'watch') watch++;
     if (s && s.status === 'act') act++;
   });
-  let text = 'All OK', dot = 'ok';
-  if (watch) { text = `${watch} thing${watch > 1 ? 's' : ''} to watch`; dot = 'watch'; }
-  if (act) { text = `${act} need${act > 1 ? '' : 's'} action` + (watch ? ` · ${watch} to watch` : ''); dot = 'act'; }
-  const btn = $('.body-foot .status');
-  if (btn) btn.innerHTML = `<i class="dot ${dot}"></i>${text} <span>→</span>`;
+  let dot = 'ok';
+  if (watch) dot = 'watch';
+  if (act) dot = 'act';
+  // Nudge the Check in button when something needs doing.
+  const btn = $('#checkinOpen');
+  if (btn) btn.classList.toggle('due', dot !== 'ok');
 }
 
 export function showToast(html, kind = '', ms = 7000) {
@@ -114,8 +116,23 @@ function scheduleReminder() {
   }, 1000);
 }
 
+export function openToday() {
+  renderToday();
+  $('#todayDrawer').classList.add('on');
+  $('#toast').classList.remove('on');
+}
+
+export function closeToday() {
+  $('#todayDrawer').classList.remove('on');
+}
+
 export function initToday() {
   renderToday();
+  $('#checkinOpen').addEventListener('click', openToday);
+  $$('#todayDrawer [data-close]').forEach(el => el.addEventListener('click', closeToday));
+  addEventListener('keydown', e => {
+    if (e.key === 'Escape' && $('#todayDrawer').classList.contains('on')) closeToday();
+  });
   $$('.tab').forEach(t => t.addEventListener('click', () => $('#toast').classList.remove('on')));
   scheduleReminder();
 }
