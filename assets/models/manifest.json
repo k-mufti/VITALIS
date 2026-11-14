@@ -1,8 +1,5 @@
 {
-  "body": {
-    "file": "../../malebody.fbx",
-    "scale": 1.0
-  },
+  "body": { "file": "body.glb", "scale": 1.0 },
   "organs": {
     "heart": {
       "file": "heart.glb",
