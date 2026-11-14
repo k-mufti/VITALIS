@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { $, $$, ease } from '../util.js';
-import { scene, camera, renderer, host, pivot, HOME, cam, twin, flyTo, initScene } from './scene.js';
+import { scene, camera, renderer, host, pivot, HOME, cam, twin, flyTo, initScene, backdrop } from './scene.js';
 import { REGIONS, uni, skin, loadBody, pt } from './body.js';
 
 /* The ONLY 3D functions the rest of the app should call (plan.md section 5.4).
@@ -29,12 +29,14 @@ export function focusOrgan(organId) {
     flyTo({ pos: new THREE.Vector3(p.x, p.y, p.z + REGIONS[organId].dist + .6), look: p });
   }
   twin.ghostTarget = 1;
+  backdrop.setVisible(false);
 }
 
 // Back to the full body. instant = jump with no camera flight.
 export function resetView(instant) {
   twin.focus = null;
   twin.ghostTarget = 0;
+  backdrop.setVisible(true);
   if (instant) {
     twin.fly = null;
     cam.pos.copy(HOME.pos);
