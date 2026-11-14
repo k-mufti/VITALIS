@@ -41,7 +41,7 @@ Working prototype, vanilla JS, no build step, three.js from CDN via importmap.
   3D body = FBX + custom shader with cyan highlight and "glass" mode. Organ SVG drawings, crew view,
   scripted Ask answers.
 - `styles.css`: all styles.
-- `malebody.fbx` (5.3 MB): the body model.
+- `assets/models/body.glb` (580 KB, meshopt): the body model. Source FBX kept locally in `assets/models/source/` (gitignored).
 - All data is hardcoded in `src/data/mock.js`. No backend yet.
 - Run it: `python3 -m http.server 8000` then open http://localhost:8000
 
@@ -66,7 +66,7 @@ Added Sat afternoon to cover the challenge text directly (branch `feature/challe
 - Backend: Python FastAPI in `backend/`, served on port 8001. REST + one WebSocket.
 - AI medical officer: browser Web Speech API (listen + speak, push-to-talk, text fallback)
   plus an LLM API called only from the backend so the API key never reaches the browser.
-- 3D models: `.glb` preferred (smaller, faster than FBX). Keep `malebody.fbx` until a replacement is in.
+- 3D models: `.glb` preferred (smaller, faster than FBX). The body is now `body.glb` too (converted from `malebody.fbx`, all 153,670 triangles kept).
 
 ## 4. Target folder structure and ownership
 

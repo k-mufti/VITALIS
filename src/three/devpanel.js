@@ -3,7 +3,7 @@ import { renderer, backdrop, twin } from './scene.js';
 import { STYLES } from './effects.js';
 
 /*
-  FX dev panel for trying looks. Toggle with the ` (backtick) key.
+  FX dev panel for trying looks. Only loads with ?dev in the URL. Toggle with the ` (backtick) key.
   Settings are saved in this browser only. "Copy settings" puts them on the
   clipboard so they can be made the defaults below.
 */
@@ -15,13 +15,15 @@ const DEFAULTS = {
   style: 0, dot: 6, edge: .34, shade: .23, aura: 0, auraSize: .245,
   outWidth: .63, outSoft: .98, outColor: 0, outFill: .1, outShade: .31, outDots: .23,
   // Background
-  bgIntensity: 1, bgCell: 7, bgDot: .48, bgShape: 0, bgAngle: 45,
+  bgIntensity: 0,  // background dots off by default
+  bgCell: 7, bgDot: .48, bgShape: 0, bgAngle: 45,
   bgGlowW: 1, bgGlowH: 1, bgGlowY: .5, bgFloor: 1,
   bgGradient: 0, bgColA: '#c4c4be', bgColB: '#0aa5bd', bgPulse: 0, bgPulseSpeed: .25,
   // Adaptive
   adaptive: false, health: 0,
 };
 const STORE_KEY = 'vitalis-fx';
+const VERSION = 2;  // bump to push new defaults over saved settings
 const LINE_COLORS = [['Ink', '#0e0e0e'], ['Cyan', '#0aa5bd'], ['Gray', '#8a8a85'], ['White', '#f5f5f2']];
 const HALFTONE = 0, OUTLINE = 3;  // indexes in STYLES
 
@@ -77,7 +79,7 @@ const collapsed = new Set();
 function load() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
-    if (saved.backdrop !== undefined && saved.bgIntensity === undefined) saved.bgIntensity = saved.backdrop;  // old key
+    if (saved.v !== VERSION) saved.bgIntensity = 0;  // v2: background dots turned off
     return { ...DEFAULTS, ...saved };
   } catch {
     return { ...DEFAULTS };
@@ -85,7 +87,7 @@ function load() {
 }
 
 function save() {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(fx)); } catch {}
+  try { localStorage.setItem(STORE_KEY, JSON.stringify({ ...fx, v: VERSION })); } catch {}
 }
 
 function apply() {
@@ -208,7 +210,16 @@ const CSS = `
 #fxToggle.off { display: none; }
 `;
 
+// Developers only: the panel exists when the page is opened with ?dev (e.g. http://localhost:8000/?dev).
+// Everyone else gets the default look, never the settings saved in this browser.
+const DEV = new URLSearchParams(location.search).has('dev');
+
 export function initDevPanel() {
+  if (!DEV) {
+    fx = { ...DEFAULTS };
+    apply();
+    return;
+  }
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.append(style);
