@@ -22,7 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import Response, StreamingResponse  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
-from . import director, history, hrp, officer, provenance, triage  # noqa: E402
+from . import director, history, hrp, officer, provenance, trends, triage  # noqa: E402
 from . import constants as C  # noqa: E402
 from . import missions as M  # noqa: E402
 from .analysis import heart as heart_analysis  # noqa: E402
@@ -174,6 +174,12 @@ def get_vitals():
     return {"latest": sim.latest, "devices": devices,
             "not_measurable_in_flight": {k: v["how"] for k, v in catalog.ORGAN_MEASUREMENT.items()
                                          if v["method"] == catalog.ESTIMATED}}
+
+
+@app.get("/api/trends")
+def get_trends(days: int = 7):
+    """Last few mission days of every reading, for the trend lines (simulated, see trends.py)."""
+    return trends.week(sim, max(2, min(days, 30)))
 
 
 @app.post("/api/countermeasure")

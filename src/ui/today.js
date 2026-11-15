@@ -1,96 +1,83 @@
 import { $, $$ } from '../util.js';
-import { SYS, VITALS, ROUTINE, SHIP_TIME, STREAK } from '../data/mock.js';
-import { JUDGE, STATUS_WORD } from '../data/health-rules.js';
-import { openCheckin } from './checkin.js';
+import { SYS, VITALS, STREAK } from '../data/mock.js';
+import { JUDGE } from '../data/health-rules.js';
 import { state } from '../state.js';
 
-/* Today's checks drawer, opened by the "Check in" button on the right rail: the health
-   routine, your latest readings, the streak, and a reminder when a check is due.
-   Every reading here is made up. */
+/* Mood drawer, opened by the "Check in" button on the right rail.
+   One question, five faces, a week of dots. Every reading here is made up. */
+
+const WORDS = ['Awful', 'Low', 'Okay', 'Good', 'Great'];
+// Day letters for the last seven days, ending today.
+const DAYS = [...Array(7)].map((_, i) => 'SMTWTFS'[(new Date().getDay() + i + 1) % 7]);
+const WEEK = [4, 3, 4, 5, 3, 4];        // the last six days (made up); today is added on save
+const MOUTH = [-9, -4.5, 0, 5, 10];       // mouth curve per mood: frown to smile
 
 let streak = STREAK;
-let streakEarned = false;
+let today = null;     // mood logged today (1-5)
+let pick = null;      // mood tapped but not saved yet
 let toastTimer;
 
-export function formatVital(k, v) {
-  if (v === null || v === undefined) return '—';
-  if (k === 'bp') return v[0] + '/' + v[1];
-  return String(v);
-}
-
-// { status, say } for a check-in reading, or null if it has not been taken.
-export function vitalStatus(k) {
-  const v = VITALS[k].value;
-  if (v === null) return null;
-  return JUDGE[k](v);
-}
-
-// The first unfinished check whose time has passed.
-function dueItem() {
-  return ROUTINE.find(r => !r.done && r.time <= SHIP_TIME);
-}
+// A line-drawn face. The mouth bends with the mood.
+const face = (m, cls = '') => {
+  const c = MOUTH[m - 1] ?? 0;
+  return `<svg class="mface ${cls}" viewBox="0 0 60 60" aria-hidden="true">
+    <circle cx="30" cy="30" r="27"/>
+    <circle class="eye" cx="21" cy="24" r="2.2"/><circle class="eye" cx="39" cy="24" r="2.2"/>
+    <path d="M18 ${39 - c / 2} Q30 ${39 + c} 42 ${39 - c / 2}"/></svg>`;
+};
 
 export function renderToday() {
-  const done = ROUTINE.filter(r => r.done).length;
-  const allDone = done === ROUTINE.length;
-  if (allDone && !streakEarned) { streak++; streakEarned = true; }
-  const due = dueItem();
-
-  const routine = ROUTINE.map(r => {
-    let mark = '';
-    if (r.done) mark = '✓';
-    else if (r === due) mark = 'Due';
-    const cls = (r.done ? 'done' : '') + (r === due ? ' due' : '');
-    return `<li class="${cls}"><button data-r="${r.id}"><time>${r.time}</time><span>${r.label}</span><i>${mark}</i></button></li>`;
-  }).join('');
-
-  const vitals = Object.entries(VITALS).map(([k, v]) => {
-    const s = vitalStatus(k);
-    const status = s ? s.status : 'none';
-    const word = s ? STATUS_WORD[s.status] : 'Not taken';
-    return `<li><button data-check="${k}" title="${s ? s.say : 'Tap to check in'}">
-      <i class="dot ${status}"></i><span class="v-name">${v.name}<small>${v.when} · ${word}</small></span>
-      <b>${formatVital(k, v.value)}<small>${v.value === null ? '' : v.unit}</small></b></button></li>`;
-  }).join('');
+  const shown = pick ?? today;
+  const week = [...WEEK, today];
+  const strip = week.map((m, i) => `<li class="${i === 6 ? 'now' : ''}">
+      <span class="col">${m ? `<i style="bottom:${(m - 1) * 25}%"></i>` : '<i class="empty"></i>'}</span>
+      <small>${DAYS[i]}</small></li>`).join('');
+  const changed = pick !== null && pick !== today;
 
   $('#today').innerHTML = `
-    <div class="t-head">
-      <span>Today<small>Ship time ${SHIP_TIME}</small></span>
-      <b class="streak${allDone ? ' up' : ''}">${streak}<small>day streak</small></b>
-    </div>
-    <div class="t-bar"><i style="width:${(done / ROUTINE.length) * 100}%"></i></div>
-    <p class="t-count">${allDone ? 'Every check done today' : `${done} of ${ROUTINE.length} done today`}</p>
-    <ul class="routine">${routine}</ul>
-    <h3 class="t-label">Your readings</h3>
-    <ul class="vitals">${vitals}</ul>
-    <button class="checkin-btn" id="checkinBtn">Check in <span>→</span></button>`;
+    <div class="mood">
+      <p class="m-q">How are you?</p>
+      <div class="m-hero ${shown ? 'set' : ''}" data-m="${shown ?? 0}">
+        ${face(shown ?? 3, 'big')}
+        <b class="m-word">${shown ? WORDS[shown - 1] : '—'}</b>
+      </div>
+      <div class="m-pick" role="radiogroup" aria-label="Mood">
+        ${WORDS.map((w, i) => `<button role="radio" aria-checked="${shown === i + 1}" aria-label="${w}" data-v="${i + 1}" class="${shown === i + 1 ? 'on' : ''}">${face(i + 1)}</button>`).join('')}
+      </div>
+      <button class="checkin-btn m-save" id="moodSave" ${changed ? '' : 'disabled'}>${today && !changed ? 'Logged' : 'Save'} <span>${today && !changed ? '✓' : '→'}</span></button>
+      <div class="m-week">
+        <ol>${strip}</ol>
+        <p class="m-streak"><b>${streak}</b> days</p>
+      </div>
+    </div>`;
 
-  $$('#today [data-r]').forEach(b => b.addEventListener('click', () => {
-    const r = ROUTINE.find(x => x.id === b.dataset.r);
-    if (r.check) { openCheckin(r.check); return; }
-    r.done = !r.done; // exercise is ticked off by hand
+  $$('#today .m-pick button').forEach(b => b.addEventListener('click', () => {
+    pick = +b.dataset.v;
     renderToday();
   }));
-  $$('#today [data-check]').forEach(b => b.addEventListener('click', () => openCheckin(b.dataset.check)));
-  $('#checkinBtn').addEventListener('click', () => openCheckin(due ? due.check : 'bp'));
+  $('#moodSave').addEventListener('click', save);
   updateStatusLine();
 }
 
-// The "N things to watch" line under the day number, counting body systems and check-ins.
+function save() {
+  if (!pick) return;
+  if (!today) streak++;
+  today = pick;
+  pick = null;
+  VITALS.mood.value = today;
+  VITALS.mood.when = 'Just now';
+  renderToday();
+  showToast(`<span class="t-time">Saved</span><span>${WORDS[today - 1]}. Thanks.</span>`, 'ok', 3500);
+  setTimeout(closeToday, 900);
+}
+
+// Nudge the Check in button while mood hasn't been logged, or a body system needs a look.
 function updateStatusLine() {
-  let watch = 0, act = 0;
-  Object.values(SYS).forEach(s => { if (s.state === 'watch') watch++; if (s.state === 'act') act++; });
-  Object.keys(VITALS).forEach(k => {
-    const s = vitalStatus(k);
-    if (s && s.status === 'watch') watch++;
-    if (s && s.status === 'act') act++;
-  });
-  let dot = 'ok';
-  if (watch) dot = 'watch';
-  if (act) dot = 'act';
-  // Nudge the Check in button when something needs doing.
+  let flag = !today;
+  Object.values(SYS).forEach(s => { if (s.state === 'watch' || s.state === 'act') flag = true; });
+  if (today && JUDGE.mood(today).status !== 'ok') flag = true;
   const btn = $('#checkinOpen');
-  if (btn) btn.classList.toggle('due', dot !== 'ok');
+  if (btn) btn.classList.toggle('due', flag);
 }
 
 export function showToast(html, kind = '', ms = 7000) {
@@ -99,24 +86,24 @@ export function showToast(html, kind = '', ms = 7000) {
   t.innerHTML = html;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('on'), ms);
-  const go = t.querySelector('[data-check]');
-  if (go) go.addEventListener('click', () => { t.classList.remove('on'); openCheckin(go.dataset.check); });
+  const go = t.querySelector('[data-mood]');
+  if (go) go.addEventListener('click', () => { t.classList.remove('on'); openToday(); });
 }
 
-// Remind the astronaut about a due check a few seconds after they reach the body view.
+// A gentle mood reminder a few seconds after reaching the body view.
 function scheduleReminder() {
   const wait = setInterval(() => {
     if ($('#signin') || state.view !== 'body') return;
     clearInterval(wait);
     setTimeout(() => {
-      const due = dueItem();
-      if (!due || !due.check) return;
-      showToast(`<span class="t-time">${due.time}</span><span>Time to check your ${due.label.toLowerCase()}</span><button data-check="${due.check}">Check in →</button>`, 'prompt', 12000);
+      if (today) return;
+      showToast(`<span class="t-time">Mood</span><span>How are you today?</span><button data-mood>Tell us →</button>`, 'prompt', 12000);
     }, 2500);
   }, 1000);
 }
 
 export function openToday() {
+  pick = null;
   renderToday();
   $('#todayDrawer').classList.add('on');
   $('#toast').classList.remove('on');
@@ -127,6 +114,9 @@ export function closeToday() {
 }
 
 export function initToday() {
+  // The drawer heading lives in index.html; set it here so this file owns the mood copy.
+  const h = $('#todayDrawer h2');
+  if (h) h.textContent = 'Mood';
   renderToday();
   $('#checkinOpen').addEventListener('click', openToday);
   $$('#todayDrawer [data-close]').forEach(el => el.addEventListener('click', closeToday));

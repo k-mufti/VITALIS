@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { camera, renderer, pivot, twin } from './scene.js';
+import { camera, renderer, pivot, twin, XRAY_LAYER } from './scene.js';
 import { uni, pt } from './body.js';
 import { LAYER_MODELS } from './anatomy-panel.js';
 
@@ -340,7 +340,7 @@ if (aArm.x > 0.0 || aLeg.x > 0.0) {
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
 varying vec3 vW; uniform vec3 uCyan, uRegionCenter, uTint, uOrgDot;
-uniform float uRegionRadius, uPulse, uReveal, uMinY, uMaxY, uTime, uRegionOn, uHover, uCell, uOrgStyle, uOrgEdge, uOrgShade, uSeverity;
+uniform float uRegionRadius, uPulse, uReveal, uMinY, uMaxY, uTime, uRegionOn, uHover, uCell, uOrgStyle, uOrgEdge, uOrgShade, uSeverity, uFlag, uSheer;
 float dotMask(float d, float r) { return 1.0 - smoothstep(r - .06, r + .06, d); }`)
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
 float span = uMaxY - uMinY;
@@ -363,7 +363,11 @@ float sweepY = uMinY + span * (fract(uTime * .16) * 1.4 - .2);
 float sweep = (1.0 - smoothstep(0.0, span * .006, abs(vW.y - sweepY))) * .45 * step(.999, uReveal);
 float reg = uRegionOn * (1.0 - smoothstep(uRegionRadius * .45, uRegionRadius, distance(vW, uRegionCenter)));
 float hoverEdge = smoothstep(.55, .95, rim) * uHover;
-outgoingLight = mix(col, uCyan, clamp(hoverEdge + scanLine + sweep + reg * (.22 + .3 * uPulse), 0.0, 1.0));
+// Needs a look: the edge glows cyan and breathes slowly.
+float flagEdge = smoothstep(.3, .95, rim) * uFlag * (.55 + .45 * sin(uTime * 3.2));
+outgoingLight = mix(col, uCyan, clamp(hoverEdge + flagEdge + scanLine + sweep + reg * (.22 + .3 * uPulse), 0.0, 1.0));
+// Sheer (whole-body systems seen through the body): outline stays, the inside goes see-through.
+diffuseColor.a *= mix(1.0, .12 + .75 * smoothstep(.25, .95, rim), uSheer);
 #include <opaque_fragment>`);
   };
   return m;
@@ -376,7 +380,7 @@ export function loadOrgan(k) {
     reveal: 0,
     u: {
       uReveal: { value: 0 }, uMinY: { value: 0 }, uMaxY: { value: 1 }, uTime: { value: 0 }, uRegionOn: { value: 0 }, uHover: { value: 0 },
-      uTint: { value: new THREE.Color(DEFAULT_TINT) }, uSeverity: { value: 0 }, uArmOn: { value: 0 },
+      uTint: { value: new THREE.Color(DEFAULT_TINT) }, uSeverity: { value: 0 }, uFlag: { value: 0 }, uSheer: { value: 0 }, uArmOn: { value: 0 },
       uLegOn: { value: 0 },
       // Limb rigs: 3 joint rotations and pivots per side (skeleton and muscles only)
       ...Object.fromEntries(['Arm', 'Leg'].flatMap(l => ['L', 'R'].flatMap(sd => [
@@ -494,10 +498,45 @@ export function prefetchOrgans() {
   loadOrgan('lungs').then(() => loadOrgan('heart'));
 }
 
-// Should this model be showing? The open system's model, or (on the Body view) the models of the picked layer.
+// The écorché is the whole body, so it cannot show through it.
+const NO_XRAY = ['muscles'];
+// The skeleton fills the body: through the skin it shows as a sheer outline so organs stay visible.
+const SHEER = ['bones'];
+
+/* On the Body view, an organ that needs a look (or is hovered in a panel) shows through the
+   skin: it is drawn in a second pass over the body instead of on the body's surface. */
+export function xrayWanted(k) {
+  if (twin.focus || NO_XRAY.includes(k) || !has3dOrgan(k)) return false;
+  if ((LAYER_MODELS[twin.layer] || []).includes(k)) return false;   // already showing in its layer
+  return (twin.showFlagged && twin.flagged.has(k)) || twin.hover === k;   // showFlagged: "Highlight" switch
+}
+
+// True when at least one organ is showing through the body (api.js then draws the x-ray pass).
+export function xrayShowing() {
+  return Object.values(organs).some(o => o.xray && o.group?.visible);
+}
+
+// Should this model be showing? The open system's model, or (on the Body view) the models of the
+// picked layer and any organ that needs a look.
 function wanted(k, now) {
+  if (twin.injury) return twin.injuryModel === k && now - twin.focusAt > 650;   // injury drill: only the hurt part
   if (twin.focus) return twin.focus === k && now - twin.focusAt > 650;
-  return (LAYER_MODELS[twin.layer] || []).includes(k);
+  return (LAYER_MODELS[twin.layer] || []).includes(k) || xrayWanted(k);
+}
+
+// Move an organ between the normal pass and the x-ray pass. Sheer systems blend only while in x-ray.
+function setXray(k, o, on) {
+  if (o.xray === on) return;
+  o.xray = on;
+  const sheer = on && SHEER.includes(k);
+  o.group.traverse(m => {
+    m.layers.set(on ? XRAY_LAYER : 0);
+    if (!m.isMesh) return;
+    m.material.transparent = sheer;
+    // In x-ray, draw only inside the body's silhouette (the skin writes 1 into the stencil).
+    Object.assign(m.material, { stencilWrite: on, stencilRef: 1, stencilFunc: THREE.EqualStencilFunc,
+      stencilZPass: THREE.KeepStencilOp, stencilFail: THREE.KeepStencilOp, stencilZFail: THREE.KeepStencilOp });
+  });
 }
 
 // Small cyan dots on each limb joint (FX panel "Show joint markers"), drawn on top of everything.
@@ -586,10 +625,17 @@ export function updateOrgans(now, dt) {
   for (const [k, o] of Object.entries(organs)) {
     if (!o.group) continue;
     const want = wanted(k, now);
+    // X-ray while it is wanted that way; when it is fading out, stay in x-ray until it is gone.
+    const xray = xrayWanted(k);
+    if (xray) setXray(k, o, true);
+    else if (want || o.reveal <= 0) setXray(k, o, false);
+    o.u.uFlag.value += ((o.xray && twin.showFlagged && twin.flagged.has(k) ? 1 : 0) - o.u.uFlag.value) * Math.min(1, dt * 4);
+    o.u.uSheer.value = o.xray && SHEER.includes(k) ? 1 : 0;
     o.u.uHover.value += ((twin.hover === k ? 1 : 0) - o.u.uHover.value) * Math.min(1, dt * 8);
     // Region glow (the thigh on the écorché) only while that system is hovered or open.
     let regionGoal = 0;
     if (o.region && (twin.focus === k || twin.hover === k)) regionGoal = 1;
+    if (twin.injury && twin.injuryModel === k) regionGoal = 1.8;   // injury: the hurt spot glows strong (red)
     o.u.uRegionOn.value += (regionGoal - o.u.uRegionOn.value) * Math.min(1, dt * 6);
     if (want) o.reveal = Math.min(1, o.reveal + dt / (k === 'muscles' ? 2.2 : 1.5));
     else o.reveal = Math.max(0, o.reveal - dt / .5);

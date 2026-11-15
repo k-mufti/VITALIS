@@ -124,15 +124,7 @@ function placeBody(obj) {
   const b = new THREE.Box3().setFromObject(obj), H = b.max.y - b.min.y;
   // Find each region's surface point by casting a ray at the front of the body.
   obj.updateMatrixWorld(true);
-  const ray = new THREE.Raycaster();
-  Object.values(REGIONS).forEach(r => {
-    const y = b.min.y + r.v * H;
-    ray.set(new THREE.Vector3(r.x, y, b.max.z + 5), new THREE.Vector3(0, 0, -1));
-    const hit = ray.intersectObject(obj, true)[0];
-    const surf = hit ? hit.point.clone() : new THREE.Vector3(r.x, y, .3);
-    const core = surf.clone(); core.z -= r.radius * .45; if (r.coreX !== undefined) core.x = r.coreX;
-    r.surface = obj.worldToLocal(surf); r.core = obj.worldToLocal(core);
-  });
+  Object.values(REGIONS).forEach(r => locate(r, obj, b));
   addAura(obj);  // after the raycasts, so rays only hit the body
   framing.H = H;
   applyFraming();
@@ -140,6 +132,29 @@ function placeBody(obj) {
   twin.bodyBox = b.clone();
   $('#loadNote').remove();
   $('#spots').classList.remove('hide');
+}
+
+// Find a region's surface point by casting a ray at the body (from behind when r.back).
+const ray = new THREE.Raycaster();
+function locate(r, obj = twin.body, b = twin.bodyBox) {
+  const y = b.min.y + r.v * (b.max.y - b.min.y);
+  const back = r.back ? -1 : 1;
+  ray.set(new THREE.Vector3(r.x, y, back > 0 ? b.max.z + 5 : b.min.z - 5), new THREE.Vector3(0, 0, -back));
+  // r.z: a fixed depth instead of the skin surface (a point inside the body).
+  const hit = r.z === undefined && ray.intersectObject(obj, true).find(h => h.object.material === skin);
+  const surf = hit ? hit.point.clone() : new THREE.Vector3(r.x, y, r.z ?? .3 * back);
+  if (r.depth) surf.z -= r.depth * back;   // a point inside the body (e.g. an injured organ)
+  const core = surf.clone(); core.z -= r.radius * .45 * back; if (r.coreX !== undefined) core.x = r.coreX;
+  r.surface = obj.worldToLocal(surf); r.core = obj.worldToLocal(core);
+}
+
+// Add (or move) a region after the body has loaded, e.g. an injury spot. False if the body is not ready.
+export function setRegion(k, r) {
+  REGIONS[k] = r;
+  if (!twin.body) return false;
+  pivot.updateMatrixWorld(true);   // callers turn the body to face front first
+  locate(r);
+  return true;
 }
 
 // World position of a region on the body ('surface' or 'core').

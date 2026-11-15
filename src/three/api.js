@@ -1,12 +1,11 @@
 import * as THREE from 'three';
 import { $, $$, ease } from '../util.js';
-import { scene, camera, renderer, host, pivot, HOME, cam, twin, flyTo, initScene, backdrop } from './scene.js';
-import { REGIONS, uni, skin, loadBody, pt } from './body.js';
-import { organs, loadOrgan, prefetchOrgans, updateOrgans, has3dOrgan, organFrame } from './organs.js';
+import { scene, camera, renderer, host, pivot, HOME, cam, twin, flyTo, initScene, backdrop, XRAY_LAYER } from './scene.js';
+import { REGIONS, uni, skin, loadBody, pt, setRegion } from './body.js';
+import { organs, loadOrgan, prefetchOrgans, updateOrgans, has3dOrgan, organFrame, xrayWanted, xrayShowing } from './organs.js';
 import { DRAWINGS } from './organ-drawings.js';
-import { initAnatomyPanel } from './anatomy-panel.js';
+import { initAnatomyPanel, setLayer } from './anatomy-panel.js';
 import { initDevPanel } from './devpanel.js';
-import { MAX_HOTSPOTS } from './effects.js';
 
 /* The ONLY 3D functions the rest of the app should call (plan.md section 5.4).
    Anything inside src/three/ can change as long as these keep working. */
@@ -85,30 +84,59 @@ export function resetView(instant) {
   flyTo({ pos: HOME.pos.clone(), look: HOME.look.clone(), done: () => twin.body && $('#spots').classList.remove('hide') }, 1200);
 }
 
+// Injury alert (src/ui/injury.js): fly to a spot on the body and light only that spot, in red.
+// spot = { x, v, radius, dist, back, depth }: x/v as in REGIONS, back = on the back of the body.
+// model = the system to show with the spot lit on it ('bones', 'muscles', 'heart'...), or null for skin only.
+// Call again with a smaller spot to zoom further in. False if the body has not loaded yet.
+const RED = new THREE.Color('#e0442e');
+let restColor = null;
+export function showInjury(spot, model = null) {
+  if (twin.layer !== 'skin') setLayer('skin');   // the glow is drawn on the skin
+  twin.rotTarget = 0; twin.rot = 0; pivot.rotation.y = 0;
+  if (!setRegion('injury', { ...spot })) return false;
+  if (!twin.injury) restColor = uni.uCyan.value.clone();
+  twin.injury = true;
+  twin.injuryModel = has3dOrgan(model) ? model : null;
+  if (twin.injuryModel && !organs[model]) loadOrgan(model);
+  uni.uCyan.value.copy(RED);
+  twin.focus = 'injury';
+  twin.focusAt = performance.now();
+  twin.hover = null;
+  twin.ghostTarget = 1;
+  $('#spots').classList.add('hide');
+  backdrop.setVisible(false);
+  const point = pt('injury'), side = spot.back ? -1 : 1, yaw = spot.back ? Math.PI : 0;
+  Object.assign(twin.orbit, { on: true, base: spot.dist, dist: spot.dist, distT: spot.dist, yaw, yawT: yaw, pitch: 0, pitchT: 0 });
+  twin.orbit.focus.copy(point);
+  flyTo({ pos: point.clone().add(new THREE.Vector3(0, 0, spot.dist * side)), look: point.clone() }, 1300);
+  return true;
+}
+
+export function clearInjury() {
+  if (!twin.injury) return;
+  twin.injury = false;
+  twin.injuryModel = null;
+  uni.uCyan.value.copy(restColor);
+  resetView();
+}
+
 // Severity 0..1 per organ (plan.md 5.2). The worst organ drives the background halftone.
 export function setOrganSeverity(organId, severity) {
   twin.severity[organId] = Math.min(1, Math.max(0, severity));
 }
 
-// Push a list of { id, severity } organs into the hotspot shader so they glow on the body.
-// Low-severity organs get a faint healthy-cyan glow; high-severity get deep navy + pulsing ring.
+// Organs from Watch up (plan.md 5.2) need a look: their model shows through the body.
+const FLAG_AT = .33;
+
+// A list of { id, severity }. Each organ's severity sets its blue; the ones that need a look
+// show through the body with a breathing cyan edge (organs.js). Nothing is drawn on the skin.
 export function showRisks(organList) {
-  const entries = organList.filter(o => (o.severity || 0) > 0.01).slice(0, MAX_HOTSPOTS);
-  uni.uHotCount.value = entries.length;
-  twin._hotEntries = entries.map(o => o.id);
-  entries.forEach((o, i) => {
+  twin.flagged = new Set();
+  organList.forEach(o => {
     const sev = Math.min(1, Math.max(0, o.severity || 0));
     twin.severity[o.id] = sev;
-    if (twin.body && REGIONS[o.id]) {
-      uni.uHotPos.value[i].copy(pt(o.id, 'surface'));
-      uni.uHotRad.value[i] = REGIONS[o.id].radius * 0.9;
-    }
-    uni.uHotSev.value[i] = sev;
+    if (sev >= FLAG_AT) twin.flagged.add(o.id);
   });
-  for (let i = entries.length; i < MAX_HOTSPOTS; i++) {
-    uni.uHotPos.value[i].set(0, 999, 0);
-    uni.uHotSev.value[i] = 0;
-  }
 }
 
 // TODO(3d): play a fix animation, resolve when it ends.
@@ -131,15 +159,11 @@ export function renderTwin(now, pulse) {
   const follow = rate => 1 - Math.exp(-dt * rate);
   // Start loading the heart and lungs once sign-in is over, so the parse doesn't stutter the fingerprint screen.
   if (!prefetched && twin.body && !$('#signin')) { prefetched = true; prefetchOrgans(); }
+  // Organs that need a look (or are hovered) load as soon as they are asked for.
+  if (prefetched) [...twin.flagged, twin.hover].forEach(k => { if (k && !organs[k] && has3dOrgan(k)) loadOrgan(k); });
 
   if (twin.autoTurn && !twin.focus) twin.rotTarget += .004;
   uni.uTime.value = now / 1000;
-  // Refresh hotspot world positions each frame — the body rotates, so world positions move.
-  if (twin.body && twin._hotEntries?.length) {
-    twin._hotEntries.forEach((id, i) => {
-      if (REGIONS[id]) uni.uHotPos.value[i].copy(pt(id, 'surface'));
-    });
-  }
   backdrop.update(now, Math.max(twin.testSeverity, ...Object.values(twin.severity)));
   twin.rot += (twin.rotTarget - twin.rot) * .08;
   pivot.rotation.y = twin.rot;
@@ -166,17 +190,28 @@ export function renderTwin(now, pulse) {
   if (twin.body) twin.body.visible = uni.uFade.value > .01;
 
   const focus = twin.focus || twin.hover;
-  // Once a 3D organ is showing, the skin's own cyan region glow steps aside.
-  const skinGlow = twin.hover || (twin.focus && !organs[twin.focus]?.group?.visible);
+  // Once a 3D organ is showing (opened, or through the body), the skin's own cyan region glow steps aside.
+  // Injury: the skin glows only until the hurt bone, muscle or organ has scanned in.
+  const shown = twin.injury ? twin.injuryModel : twin.focus;
+  const skinGlow = (twin.hover && !xrayWanted(twin.hover)) || (twin.focus && !organs[shown]?.group?.visible);
   uni.uHighlight.value += ((skinGlow ? 1 : 0) - uni.uHighlight.value) * follow(6);
   let ghostGoal = twin.ghostTarget;
   if (!twin.focus && GLASS_LAYERS.includes(twin.layer)) ghostGoal = 1;
   uni.uGhost.value += (ghostGoal - uni.uGhost.value) * follow(3);
-  uni.uPulse.value = pulse;
+  uni.uPulse.value = twin.injury ? .5 + .5 * Math.sin(now / 160) : pulse;   // an injury spot throbs
   skin.depthWrite = uni.uGhost.value < .05;
   if (twin.body && focus) { uni.uRegionCenter.value.copy(pt(focus)); uni.uRegionRadius.value = REGIONS[focus].radius; }
   camera.position.copy(cam.pos); camera.lookAt(cam.look);
   renderer.render(scene, camera);
+  // X-ray pass: organs that need a look, drawn over the body (depth cleared, so the skin does not hide them).
+  if (xrayShowing()) {
+    renderer.autoClear = false;
+    renderer.clearDepth();
+    camera.layers.set(XRAY_LAYER);
+    renderer.render(scene, camera);
+    camera.layers.set(0);
+    renderer.autoClear = true;
+  }
   if (twin.body) {
     pivot.updateMatrixWorld();
     const { width: w, height: h } = host.getBoundingClientRect();
