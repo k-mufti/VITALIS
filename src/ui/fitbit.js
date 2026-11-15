@@ -11,8 +11,10 @@ import { API, api, live } from '../data/client.js';
    States:  off (not set up: hidden)  ready (set up, not signed in: "Connect Fitbit")
             live (a fresh reading)    stale (connected, nothing fresh)    error (sign in again) */
 
-const NAME = { heart_rate: 'Heart rate', hrv: 'Recovery (HRV)', spo2: 'Blood oxygen', resp_rate: 'Breathing rate', sleep_hours: 'Sleep last night' };
-const UNIT = { heart_rate: 'bpm', hrv: 'ms', spo2: '%', resp_rate: '/min', sleep_hours: 'h' };
+const NAME = { heart_rate: 'Heart rate', spo2: 'Blood oxygen', hrv: 'Recovery (HRV)', resp_rate: 'Breathing rate', skin_temp: 'Wrist temperature',
+  sleep_hours: 'Sleep last night', steps: 'Steps today', exercise_min: 'Exercise today', session_hr_avg: 'Workout heart rate' };
+const UNIT = { heart_rate: 'bpm', hrv: 'ms', spo2: '%', resp_rate: '/min', skin_temp: '°C', sleep_hours: 'h', steps: 'steps', exercise_min: 'min', session_hr_avg: 'bpm' };
+const DECIMALS = { sleep_hours: 1, skin_temp: 1 };      // everything else is whole numbers, except overnight readings (one decimal)
 
 let status = null;
 let fetchedAt = 0;
@@ -117,7 +119,8 @@ function paintPop() {
     const real = m && m.fresh;
     const v = live.vitals[k];
     const n = real ? m.value : v && typeof v.value === 'number' ? v.value : null;
-    const val = n === null ? '—' : `${k === 'sleep_hours' || (real && m.kind === 'night') ? (+n).toFixed(1) : Math.round(n)} <small>${UNIT[k]}</small>`;
+    const dp = DECIMALS[k] ?? (real && m.kind === 'night' ? 1 : 0);
+    const val = n === null ? '—' : `${dp ? (+n).toFixed(dp) : Math.round(n).toLocaleString()} <small>${UNIT[k]}</small>`;
     return `<div class="fb-row"><span>${name}</span><b>${val}</b></div>`;
   }).join('');
   const b = s.baseline_hr;
@@ -130,5 +133,6 @@ function paintPop() {
     <div class="fb-rows">${rows}</div>
     ${base}
     ${s.error ? `<p class="fb-err">${esc(s.error)}</p>` : ''}
-    <div class="fb-actions">${s.state === 'error' ? '<button class="fb-btn" id="fbReconnect">Connect again</button>' : '<button class="fb-btn ghost" id="fbDisconnect">Disconnect</button>'}</div>`;
+    <div class="fb-actions">${s.state === 'error' ? '<button class="fb-btn" id="fbReconnect">Connect again</button>'
+      : `${s.needs_activity_scope ? '<button class="fb-btn" id="fbReconnect">Allow steps and exercise</button> ' : ''}<button class="fb-btn ghost" id="fbDisconnect">Disconnect</button>`}</div>`;
 }

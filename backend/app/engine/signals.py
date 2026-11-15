@@ -101,6 +101,9 @@ def value(metric, mods, relief, mission_id, day, storm=False):
         return max(1.0, min(5.0, B["mood_1to5"] - 0.5 * m["sleep_debt"] - m["stress"]))
     if metric == "exercise_min":
         return session_minutes(m["missed_exercise_days"] > 0)
+    if metric == "steps":
+        # ASSUMPTION: ordinary movement through the day plus about 100 steps per minute of the exercise session.
+        return 4500 + 100 * session_minutes(m["missed_exercise_days"] > 0)
     if metric == "resistive_load_pct":
         # ASSUMPTION: the load you can lift drifts down with muscle loss and missed sessions.
         return max(60.0, 100 - 0.6 * unprotected - 2.5 * m["missed_exercise_days"] + 40 * relief["muscles"])

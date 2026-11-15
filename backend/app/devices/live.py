@@ -17,7 +17,7 @@ from ..sources import googlehealth
 from ..state import Sim
 
 LIVE_DEVICE = "wearable"                       # the smartwatch
-LIVE_METRICS = ("heart_rate", "hrv", "spo2", "resp_rate", "sleep_hours")
+LIVE_METRICS = ("heart_rate", "hrv", "spo2", "resp_rate", "sleep_hours", "skin_temp", "steps", "exercise_min", "session_hr_avg")
 _DEFAULT_MODS = Sim().mods                     # the body with no event running
 
 
