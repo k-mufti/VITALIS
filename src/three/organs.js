@@ -4,6 +4,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { camera, renderer, pivot, twin, XRAY_LAYER } from './scene.js';
 import { uni, pt } from './body.js';
 import { LAYER_MODELS } from './anatomy-panel.js';
+import { markHurt } from './injury-parts.js';
 
 /* 3D organ models from assets/models/manifest.json. They sit inside the glass body
    and appear with an upward scan line when their system is opened.
@@ -82,7 +83,8 @@ const shared = {
   uOrgStyle: { value: 0 }, uOrgEdge: { value: .45 }, uOrgShade: { value: .3 }, uOrgDot: { value: new THREE.Color() },
   uPivot: { value: new THREE.Matrix4() }, uPivotInv: { value: new THREE.Matrix4() },
   uBodyCX: { value: 0 }, uBodyCZ: { value: 0 }, uBodyMinY: { value: 0 }, uBodyH: { value: 1 },
-
+  // Injury: the hurt bone, muscle or organ turns this red, with lighter dots.
+  uHurtColor: { value: new THREE.Color('#e0442e') }, uHurtDot: { value: new THREE.Color('#ffc4b8') },
 };
 
 // Limb rigs, in the body's own (pivot) space, mirrored so x = distance from the centre line.
@@ -156,7 +158,7 @@ function buildGraph(o) {
     total += m.geometry.attributes.position.count;
     triTotal += m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count;
   });
-  const px = new Float32Array(total), py = new Float32Array(total), weld = new Int32Array(total), tri = new Int32Array(triTotal);
+  const px = new Float32Array(total), py = new Float32Array(total), pz = new Float32Array(total), weld = new Int32Array(total), tri = new Int32Array(triTotal);
   const seen = new Map();
   const toPivot = new THREE.Matrix4(), v = new THREE.Vector3();
   let base = 0, t3 = 0;
@@ -167,6 +169,7 @@ function buildGraph(o) {
       v.fromBufferAttribute(pos, i).applyMatrix4(toPivot);
       px[base + i] = v.x;
       py[base + i] = v.y;
+      pz[base + i] = v.z;
       const key = Math.round(v.x * 1e4) + ',' + Math.round(v.y * 1e4) + ',' + Math.round(v.z * 1e4);
       const same = seen.get(key);
       if (same === undefined) { seen.set(key, base + i); weld[base + i] = base + i; }
@@ -178,7 +181,7 @@ function buildGraph(o) {
     m.userData.armBase = base;
     base += pos.count;
   }
-  o.graph = { meshes, total, px, py, weld, tri };
+  o.graph = { meshes, total, px, py, pz, weld, tri };
 }
 
 // Union-find over the graph. `keep(i)` limits which vertices may be joined.
@@ -321,7 +324,7 @@ function organMaterial(u, source, doubleSided) {
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, u, shared, { uCyan: uni.uCyan, uRegionCenter: uni.uRegionCenter, uRegionRadius: uni.uRegionRadius, uPulse: uni.uPulse, uCell: uni.uCell });
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vW;' + LIMB_GLSL)
+      .replace('#include <common>', '#include <common>\nvarying vec3 vW; attribute vec2 aHurt; varying vec2 vHurt;' + LIMB_GLSL)
       .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
 if (aArm.x > 0.0 || aLeg.x > 0.0) {
   mat3 R; float side;
@@ -336,11 +339,11 @@ if (aArm.x > 0.0 || aLeg.x > 0.0) {
   vec4 bent = limbBend(uPivotInv * modelMatrix * vec4(transformed, 1.0), R, side);
   transformed = (inverse(modelMatrix) * uPivot * bent).xyz;
 }`)
-      .replace('#include <project_vertex>', '#include <project_vertex>\nvW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvW = (modelMatrix * vec4(transformed, 1.0)).xyz; vHurt = aHurt;');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
-varying vec3 vW; uniform vec3 uCyan, uRegionCenter, uTint, uOrgDot;
-uniform float uRegionRadius, uPulse, uReveal, uMinY, uMaxY, uTime, uRegionOn, uHover, uCell, uOrgStyle, uOrgEdge, uOrgShade, uSeverity, uFlag, uSheer;
+varying vec3 vW; varying vec2 vHurt; uniform vec3 uCyan, uRegionCenter, uTint, uOrgDot, uHurtColor, uHurtDot;
+uniform float uRegionRadius, uPulse, uReveal, uMinY, uMaxY, uTime, uRegionOn, uHover, uCell, uOrgStyle, uOrgEdge, uOrgShade, uSeverity, uFlag, uSheer, uHurt, uHurtAll;
 float dotMask(float d, float r) { return 1.0 - smoothstep(r - .06, r + .06, d); }`)
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
 float span = uMaxY - uMinY;
@@ -353,11 +356,18 @@ float lam = clamp(dot(n, normalize(vec3(-.55, .65, .55))), 0.0, 1.0);
 vec2 g = mat2(.7071, -.7071, .7071, .7071) * gl_FragCoord.xy / uCell;
 float d = length(fract(g) - .5);
 vec3 col = uTint;
+float dots = 0.0;
 if (uOrgStyle < .5) {
   float dense = 1.0 + uSeverity * .4;
   float htR = max(uOrgEdge * smoothstep(.35, .97, rim) * .74, uOrgShade * smoothstep(.45, 1.0, lam) * .45) * dense;
-  col = mix(col, uOrgDot, dotMask(d, htR) * step(.03, htR));
+  dots = dotMask(d, htR) * step(.03, htR);
+  col = mix(col, uOrgDot, dots);
 }
+// Injury: the hurt part itself turns red. vHurt.x = all of this bone or muscle,
+// vHurt.y = only the end of a bone near the hurt spot (a joint), uHurtAll = the whole organ.
+float nearSpot = 1.0 - smoothstep(uRegionRadius * .7, uRegionRadius * 1.7, distance(vW, uRegionCenter));
+float hurt = clamp(max(max(vHurt.x, uHurtAll), vHurt.y * nearSpot), 0.0, 1.0) * uHurt;
+col = mix(col, mix(uHurtColor, uHurtDot, dots) * (.94 + .06 * sin(uTime * 2.4)), hurt);
 float scanLine = (1.0 - smoothstep(0.0, span * .012, abs(vW.y - edgeY))) * step(uReveal, .999);
 float sweepY = uMinY + span * (fract(uTime * .16) * 1.4 - .2);
 float sweep = (1.0 - smoothstep(0.0, span * .006, abs(vW.y - sweepY))) * .45 * step(.999, uReveal);
@@ -381,6 +391,7 @@ export function loadOrgan(k) {
     u: {
       uReveal: { value: 0 }, uMinY: { value: 0 }, uMaxY: { value: 1 }, uTime: { value: 0 }, uRegionOn: { value: 0 }, uHover: { value: 0 },
       uTint: { value: new THREE.Color(DEFAULT_TINT) }, uSeverity: { value: 0 }, uFlag: { value: 0 }, uSheer: { value: 0 }, uArmOn: { value: 0 },
+      uHurt: { value: 0 }, uHurtAll: { value: 0 },   // injury: how red, and whether the whole organ is
       uLegOn: { value: 0 },
       // Limb rigs: 3 joint rotations and pivots per side (skeleton and muscles only)
       ...Object.fromEntries(['Arm', 'Leg'].flatMap(l => ['L', 'R'].flatMap(sd => [
@@ -635,7 +646,17 @@ export function updateOrgans(now, dt) {
     // Region glow (the thigh on the écorché) only while that system is hovered or open.
     let regionGoal = 0;
     if (o.region && (twin.focus === k || twin.hover === k)) regionGoal = 1;
-    if (twin.injury && twin.injuryModel === k) regionGoal = 1.8;   // injury: the hurt spot glows strong (red)
+    // Injury: the hurt bone, muscle or organ turns red (injury-parts.js). Limb models are marked once
+    // their rig is ready. Until then, or if nothing could be marked, the hurt spot glows instead.
+    const hurtHere = twin.injury && twin.injuryModel === k;
+    if (hurtHere && o.hurtId !== twin.injurySpot.id && (!organFx.rigs[k] || (o.graph && o.rigDone))) {
+      o.hurtId = twin.injurySpot.id;
+      o.hurtMode = markHurt(k, o, twin.injurySpot);
+      o.u.uHurtAll.value = o.hurtMode === 'all' ? 1 : 0;
+    }
+    const hurtShown = hurtHere && o.hurtId === twin.injurySpot.id && !!o.hurtMode;
+    o.u.uHurt.value += ((hurtShown ? 1 : 0) - o.u.uHurt.value) * Math.min(1, dt * 5);
+    if (hurtHere && !hurtShown) regionGoal = 1.8;
     o.u.uRegionOn.value += (regionGoal - o.u.uRegionOn.value) * Math.min(1, dt * 6);
     if (want) o.reveal = Math.min(1, o.reveal + dt / (k === 'muscles' ? 2.2 : 1.5));
     else o.reveal = Math.max(0, o.reveal - dt / .5);
