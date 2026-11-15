@@ -3,8 +3,8 @@
 set -euo pipefail
 export GIT_SSH_COMMAND="ssh -i /etc/vitalis/deploy_key -o IdentitiesOnly=yes"
 cd /opt/vitalis
-sudo -E git checkout -- backend/data/cache   # the backend refreshes these itself
-sudo -E git pull --ff-only
+sudo -E git -c safe.directory=/opt/vitalis checkout -- backend/data/cache   # the backend refreshes these itself
+sudo -E git -c safe.directory=/opt/vitalis pull --ff-only
 sudo backend/.venv/bin/pip install -q -r backend/requirements.txt
 sudo chown -R www-data:www-data /opt/vitalis
 sudo systemctl restart vitalis
