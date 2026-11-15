@@ -107,25 +107,24 @@ Sources include the AHA blood pressure guideline, Cole 1999 (heart-rate recovery
 
 ## 8. Vitaly (voice assistant, `app/vitaly/`)
 
+Standalone by design: Vitaly guides the crew member directly. It never dispatches anyone and never waits on Earth.
+
 - **Summon:** say "Hey Vitaly" (Chrome speech recognition) or press **T**. The screen switches to a pulsing orb: teal calm, amber warning, red emergency.
 - **Watchdog** (`watchdog.py`): fixed rules, every second, on the latest good readings. It catches:
   - limit crossings: heart rate, blood oxygen, blood pressure, cabin pressure, O2, CO2, temperature, smoke, noise, solar storm
   - sharp spikes: heart rate changing 25+ bpm within 60 s
   - drift: resting heart rate 15+ above baseline
 
-  A serious problem hides the side effects it causes (an arrest doesn't also raise "low blood pressure").
+  Critical limits use the two latest readings (about 2 s to detect a sudden arrest or smoke). A serious problem hides the side effects it causes.
+- **Alert guides** (`protocols.py`): each alert has an opening line and a list of spoken steps the crew member does themselves.
+- **Symptom guides** (`guides.py`): what the sensors can't see, the crew member says. "Sharp pain in my chest", "she's not breathing", "I cut my arm" are matched by keywords in a few milliseconds, with separate wording for yourself and for helping someone else. Nine guides: chest pain, not breathing (CPR), choking, trouble breathing, bleeding, fainting, burn, seizure, head injury. For your own symptoms Vitaly first says what your sensors show.
+- **Walkthrough:** Vitaly reads one step and waits for "next", "repeat", "back" or "stop". The whole guide arrives in one reply, so stepping needs no server call.
 - **Medical profile** (`profile.py`): Crew 03 has a history of paroxysmal AF, so an irregular rhythm is an emergency and the fast-heart-rate limit is 120.
-- **Checklists** (`protocols.py`): preloaded and spoken the instant an alert fires.
-  - **Emergencies** call the help crew at once.
-  - **Warnings** wait 15 s for "I'm OK", then call help.
-  - Every help call notifies the Earth flight surgeon with the real comms delay.
-- **Crew** (`crew.py`): five simulated crew with roles and locations. Help means the medical officer, the nearest crew member, and the commander for ship emergencies, with ETAs.
-- **AI** (`brain.py`): one cheap OpenRouter model (default Mistral Nemo, Llama 3.1 8B as backup, about $0.00003 per answer).
-  - It writes one tailored line per alert and answers follow-up questions from a compact live-data snapshot.
-  - Voice commands (log, call or cancel help, note to Earth) are matched by rules first, and run only after a spoken "yes".
-  - AI lines that claim help is coming when it isn't, or that skip a known heart condition on a heart alert, are rejected and replaced by a rule-written line.
-  - Without a key or network, everything falls back to rules.
-- `eval_vitaly.py` compares models on real questions. `test_vitaly.py` covers the rules.
+- **Everyday questions** (`quick.py`): answered from live data in about 3 ms, no AI.
+- **AI** (`brain.py`): one cheap OpenRouter model (default Mistral Nemo) only for unusual questions; replies are cached for 2 minutes. Voice commands (log a countermeasure, note to Earth) are matched by rules and run after a spoken "yes". Without a key or network, rules answer.
+- **Voice** (`voice.py`): Deepgram Aura, streamed (first audio in about 0.2 s). No guide line contains live numbers, so all of them are voiced once in advance and kept on disk (`data/voice_cache/`, git-ignored); they start in under 50 ms. Chrome's voice is the fallback.
+- The steps are standard first aid in plain words, written for the demo. They are not a reviewed medical procedure.
+- `eval_vitaly.py` compares models on real questions. `test_vitaly.py` covers the rules and guides.
 
 ## 9. API
 
@@ -133,6 +132,6 @@ Sources include the AHA blood pressure guideline, Cole 1999 (heart-rate recovery
 - `GET /api/analysis/{heart|muscles|radiation}`: one pipeline.
 - `GET /api/vitals`: latest good readings, the device list and what cannot be measured in flight.
 - `GET /api/state`: the full mission state; heart and muscles include their `analysis` block.
-- `GET /api/vitaly/incidents`, `POST /api/vitaly/incidents/{id}/ack`, `POST /api/vitaly/incidents/{id}/tailor`, `POST /api/vitaly/ask`, `POST /api/vitaly/action`, `GET /api/vitaly/status`: the Vitaly assistant.
+- `GET /api/vitaly/incidents`, `POST /api/vitaly/ask`, `POST /api/vitaly/action`, `POST /api/vitaly/prewarm`, `GET /api/vitaly/tts`, `GET /api/vitaly/status`: the Vitaly assistant.
 
 Tests: `test_analysis.py`, `test_devices.py`, `test_engine.py`.

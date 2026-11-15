@@ -17,7 +17,7 @@ from app.vitaly import brain, watchdog  # noqa: E402
 MODELS = sys.argv[1:] or ["meta-llama/llama-3.1-8b-instruct", "mistralai/mistral-nemo", "qwen/qwen3.7-flash"]
 CASES = [  # (event, question, words a good answer contains)
     ("irregular_rhythm", "What's going on with my heart?", ["irregular", "rhythm"]),
-    ("irregular_rhythm", "How long until help gets here?", ["32", "20"]),
+    ("irregular_rhythm", "Could stress have set this off?", ["stress"]),
     ("cabin_leak", "Is the air safe to breathe?", ["pressure"]),
     (None, "How much radiation have I had?", ["339"]),
     (None, "Am I healthy enough to land?", ["bone"]),

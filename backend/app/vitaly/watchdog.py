@@ -5,19 +5,15 @@ Three kinds of problem:
   spike   a sharp change: heart rate moving 25+ bpm within a minute
   drift   far from this person's normal: resting heart rate 15+ above baseline
 
-Rules decide; the AI never does. Each detected problem becomes an incident with a preloaded
-checklist (protocols.py). Emergencies call the help crew at once; warnings ask the crew member
-to answer and call help if there is no answer in 15 s. Every call for help also sends a note to
-the flight surgeon on Earth, which arrives after the real comms delay.
+Rules decide; the AI never does. Each detected problem becomes an incident with an opening line
+and a step-by-step guide (protocols.py) that Vitaly walks the crew member through. Standalone:
+nothing is dispatched and nothing waits on another person or on Earth.
 """
 import time
 
 from .. import constants as C
-from .. import missions as M
 from . import crew, profile, protocols
 
-ESCALATE_AFTER_S = 15
-MANUAL = {"help_requested"}  # opened by voice, closed by voice (not by the rules)
 KEEP_RESOLVED_S = 60
 SPIKE_BPM, SPIKE_WINDOW_S = 25, 60
 DRIFT_BPM = 15
@@ -147,14 +143,8 @@ def tick(sim, now=None):
         changed = True
 
     for kind, inc in open_by_kind.items():
-        if kind not in found and kind not in MANUAL:
+        if kind not in found:
             inc["state"], inc["resolved_at"] = "resolved", now
-            changed = True
-
-    for inc in sim.incidents:
-        if (inc["state"] == "open" and inc["escalate_at"] and not inc["acked"] and not inc["help"]
-                and now >= inc["escalate_at"]):
-            call_help(sim, inc, now, reason="no answer in 15 s")
             changed = True
 
     before = len(sim.incidents)
@@ -165,58 +155,12 @@ def tick(sim, now=None):
 def new_incident(sim, kind, value, now):
     p = protocols.PROTOCOLS[kind]
     sim.incident_seq += 1
-    sev = severity_for(kind)
     who = profile.profile(crew.PATIENT_ID)["name"]
-    inc = {
-        "id": sim.incident_seq, "kind": kind, "title": p["title"], "severity": sev, "value": value,
-        "say": protocols.spoken(kind, value, who), "steps": p["steps"],
+    return {
+        "id": sim.incident_seq, "kind": kind, "title": p["title"], "severity": severity_for(kind), "value": value,
+        "say": protocols.spoken(kind, who), "guide": p["guide"],
         "created": now, "state": "open", "resolved_at": None,
-        "acked": False, "escalate_at": None, "help": None, "earth": None, "tailored": None,
     }
-    help_now = p["help"] == "now" or (sev == "emergency" and p["help"] == "if_no_answer")
-    if help_now:
-        call_help(sim, inc, now, reason="emergency")
-    elif p["help"] == "if_no_answer":
-        inc["escalate_at"] = now + ESCALATE_AFTER_S
-    return inc
-
-
-def call_help(sim, inc, now, reason):
-    team = crew.dispatch(need_commander=protocols.PROTOCOLS[inc["kind"]]["ship"])
-    inc["help"] = {**team, "called_at": now, "reason": reason}
-    send_to_earth(sim, inc, now, f"{inc['title']} for Crew {crew.PATIENT_ID}: {inc['value']}. Help crew called ({reason}).")
-
-
-def send_to_earth(sim, inc, now, text):
-    delay_min = M.environment(sim.mission, sim.day)["comms_delay_min"]
-    inc["earth"] = {"text": text, "sent_at": now, "delay_min": round(delay_min, 1), "arrives_at": now + delay_min * 60}
-
-
-def acknowledge(sim, incident_id):
-    """The crew member said "I'm OK": stop the 15 s countdown."""
-    inc = find(sim, incident_id)
-    if inc:
-        inc["acked"] = True
-        inc["escalate_at"] = None
-    return inc
-
-
-def cancel_help(sim, incident_id):
-    inc = find(sim, incident_id)
-    if inc and inc["help"]:
-        inc["help"]["cancelled"] = True
-        inc["acked"] = True
-    if inc and inc["kind"] in MANUAL:
-        inc["state"], inc["resolved_at"] = "resolved", time.time()
-    return inc
-
-
-def request_help(sim, now=None):
-    """The crew member asked for help by voice."""
-    now = now or time.time()
-    inc = new_incident(sim, "help_requested", "by voice", now)
-    sim.incidents.append(inc)
-    return inc
 
 
 def find(sim, incident_id):

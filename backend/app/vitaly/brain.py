@@ -1,7 +1,7 @@
 """Vitaly's AI: one cheap model on OpenRouter, fed a compact snapshot of everything live.
 
 Two jobs, both short:
-  tailor(incident)  one personal line after the preloaded checklist (e.g. about a known condition)
+  (alerts and symptom guides are preloaded text: watchdog.py, protocols.py, guides.py)
   ask(question)     a spoken answer of at most two sentences, plus an optional action to confirm
 
 The model never decides that something is wrong (the watchdog does) and never invents numbers:
@@ -19,7 +19,7 @@ import httpx
 import time
 
 from .. import officer
-from . import crew, profile, quick
+from . import crew, guides, profile, quick
 
 URL = "https://openrouter.ai/api/v1/chat/completions"
 # Picked by eval_vitaly.py: best answers of the cheap models tested, ~$0.03 per 1M tokens in and out.
@@ -27,7 +27,7 @@ DEFAULT_MODEL = "mistralai/mistral-nemo"
 DEFAULT_FALLBACK = "meta-llama/llama-3.1-8b-instruct"
 TIMEOUT_S = 8
 
-ACTIONS = ("call_help", "cancel_help", "log_countermeasure", "note_earth")
+ACTIONS = ("log_countermeasure", "note_earth")
 
 
 def settings():
@@ -54,9 +54,7 @@ def snapshot(state, sim, focus=None):
     if open_inc:  # first, so small models notice them
         lines.append("ACTIVE ALERTS (most important):")
         for i in open_inc:
-            helpers = ", ".join(f"{t['name']} ({t['role']}, {t['eta_s']} s away)" for t in (i["help"] or {}).get("team", []))
-            lines.append(f"- [{i['severity']}] {i['title']}: {i['value']}. Checklist: {'; '.join(i['steps'])}."
-                         + (f" Help coming: {helpers}." if helpers else " Help not called."))
+            lines.append(f"- [{i['severity']}] {i['title']}: {i['value']}. Guide being followed: {' '.join(i['guide'])}")
     else:
         lines.append("ACTIVE ALERTS: none.")
     lines += [
@@ -94,7 +92,8 @@ PERSONA = ("You are Vitaly, the onboard medical AI on a crewed Mars mission. Cal
            "Use only facts and numbers from DATA. Never diagnose; never add medical steps beyond the checklist. "
            "If DATA lists active alerts and the question touches them, name the most serious alert first. "
            "Refer to crew members by name or role, never he or she. "
-           "If something is life-threatening, say help is coming and what to do now.")
+           "There is no one to call: the crew member handles it with your guidance. Never say help is coming. "
+           "If something is life-threatening, say what to do right now.")
 
 
 async def complete(messages, max_tokens):
@@ -113,80 +112,8 @@ async def complete(messages, max_tokens):
         return None
 
 
-HEART_KINDS = {"irregular_rhythm", "fast_heart", "slow_heart", "heart_spike", "heart_drift", "cardiac_arrest", "bp_crash", "bp_high"}
-CABIN_METRICS = {"pressure_low": "cabin_pressure_kpa", "pressure_high": "cabin_pressure_kpa", "o2_low": "ppo2_kpa",
-                 "o2_high": "ppo2_kpa", "co2_high": "co2_mmhg", "temp_high": "cabin_temp_c", "temp_low": "cabin_temp_c",
-                 "noise_high": "noise_dba", "fire": "smoke_index"}
-
-
-def tailor_facts(incident, sim):
-    """Only the facts that matter for this alert, so a small model can't grab the wrong one."""
-    p = profile.profile(crew.PATIENT_ID)
-    facts = [f"Alert: {incident['title']}, reading {incident['value']}."]
-    if incident["kind"] in HEART_KINDS and p["conditions"]:
-        facts.append(f"Crew member's known condition: {p['conditions'][0]}. Kit: {p.get('medical_kit', 'med kit')}.")
-    team = (incident.get("help") or {}).get("team", [])
-    if team:
-        facts.append("Help coming: " + ", ".join(f"{t['name']} ({t['role']}) in {t['eta_s']} s" for t in team) + ".")
-    else:
-        facts.append("Help not called yet.")
-    if incident.get("escalate_at"):
-        facts.append("If the crew member doesn't say I'm OK within 15 seconds, help is called.")
-    if incident.get("earth"):
-        facts.append(f"Flight surgeon on Earth notified; message takes {incident['earth']['delay_min']} minutes.")
-    return "\n".join(facts)
-
-
-async def tailor(incident, state, sim):
-    """One personal line to follow the checklist."""
-    p = profile.profile(crew.PATIENT_ID)
-    prompt = (f"Checklist already spoken: \"{incident['say']}\"\n\nFACTS:\n{tailor_facts(incident, sim)}\n\n"
-              "Write ONE extra sentence (max 18 words) for the crew member, using only FACTS: who is coming and how soon, "
-              "or their known condition if it is listed. Do not repeat the checklist. Reply with the sentence only.")
-    out = await complete([{"role": "system", "content": PERSONA}, {"role": "user", "content": prompt}], 50)
-    if out and out["text"]:
-        line = first_sentences(clean(out["text"]), 1)
-        if line_is_safe(line, incident, p):
-            return {"line": line, "engine": out["model"]}
-    return {"line": tailor_rules(incident, p), "engine": "rules"}
-
-
-HELP_CLAIM = re.compile(r"help (is )?(coming|on (its|the) way)|on (their|the) way|will be (here|there)|en route|arriv", re.I)
-CONDITION_WORDS = re.compile(r"fibrillation|\bAF\b|rhythm|condition|history", re.I)
-
-
-def line_is_safe(line, incident, p):
-    """Reject AI lines that are wrong in a way that matters in an emergency."""
-    if not line or len(line) > 160:
-        return False
-    if not (incident.get("help") or {}).get("team") and HELP_CLAIM.search(line):
-        return False  # says help is coming when it hasn't been called
-    if incident["kind"] in HEART_KINDS and p["conditions"] and not CONDITION_WORDS.search(line):
-        return False  # a heart alert must mention the known heart condition
-    return True
-
-
-def tailor_rules(incident, p):
-    """Accurate fallback line, built only from facts."""
-    team = (incident.get("help") or {}).get("team", [])
-    first = team[0] if team else None
-    if incident["kind"] in HEART_KINDS and p["conditions"]:
-        condition = p["conditions"][0].split(" (")[0]
-        if first:
-            return f"Given your history of {condition}, {first['name']} is bringing your kit, about {first['eta_s']} seconds out."
-        return f"Given your history of {condition}, I'll call the medical officer if this continues."
-    if first:
-        extra = f", with {team[1]['name']}" if len(team) > 1 else ""
-        return f"{first['name']} is about {first['eta_s']} seconds away{extra}."
-    if incident.get("escalate_at"):
-        return "If I don't hear \"I'm OK\" in 15 seconds, I'll call the medical officer."
-    return "I'm watching the readings and will tell you when it's clear."
-
-
 # Voice commands are matched by rules first: instant, free and never confused by a small model.
 COMMANDS = [
-    ("cancel_help", re.compile(r"\b(cancel|false alarm|stand down|never ?mind|i'?m (ok|okay|fine|good))\b", re.I)),
-    ("call_help", re.compile(r"\b(call|get|send|need)\b.{0,20}\b(help|medic|doctor|chen|crew|someone)\b|\bhelp me\b", re.I)),
     ("note_earth", re.compile(r"\b(tell|send|message|note|notify)\b.{0,30}\b(earth|ground|flight surgeon|houston|mission control)\b", re.I)),
     ("log_countermeasure", re.compile(r"\b(log|record|i did|i've done|i have done|i finished|done with)\b", re.I)),
 ]
@@ -215,12 +142,6 @@ def command(question, state, sim):
     for kind, pattern in COMMANDS:
         if not pattern.search(question):
             continue
-        if kind == "cancel_help":
-            if not any(i["state"] == "open" and i["help"] and not i["help"].get("cancelled") for i in sim.incidents):
-                return None  # "I'm fine" with nothing to cancel is just conversation
-            return "Cancel the help call? Say yes to confirm.", {"type": "cancel_help"}
-        if kind == "call_help":
-            return "Call the medical officer to you? Say yes to confirm.", {"type": "call_help"}
         if kind == "note_earth":
             text = re.split(r"\b(?:that|saying|:)\b", question, maxsplit=1)
             body = text[1].strip() if len(text) > 1 and text[1].strip() else question
@@ -238,6 +159,10 @@ def command(question, state, sim):
 
 async def ask(question, state, sim, focus=None):
     """Spoken answer (max two sentences) and an optional action for the crew member to confirm."""
+    guide = guides.match(question)
+    if guide:
+        return {"say": guide["say"], "action": None, "engine": "guide",
+                "guide": {**guide, "readings": readings_line(guide, sim)}}
     cmd = command(question, state, sim)
     if cmd:
         return {"say": cmd[0], "action": cmd[1], "engine": "command"}
@@ -256,6 +181,26 @@ async def ask(question, state, sim, focus=None):
     return reply
 
 
+def readings_line(guide, sim):
+    """What the sensors show right now, said once at the start of a guide about the crew member
+    themselves. Vitaly can't see anyone else's body, so there is no line for "other"."""
+    if guide["who"] != "self":
+        return None
+    hr, spo2 = quick.val(sim, "heart_rate"), quick.val(sim, "spo2")
+    irregular = quick.val(sim, "ecg_irregular") >= 0.5
+    p = profile.profile(crew.PATIENT_ID)
+    if guide["id"] in ("chest_pain", "fainting"):
+        line = f"Your heart rate is about {quick.about(hr, 2)}, rhythm {'irregular' if irregular else 'regular'}, oxygen {quick.about(min(spo2, 100), 1)} percent."
+        if irregular and p["conditions"]:
+            line += " That looks like your atrial fibrillation."
+        elif not irregular and 50 <= hr <= 100 and spo2 >= 95:
+            line += " Those look steady, which is a good sign."
+        return line
+    if guide["id"] == "breathing":
+        return f"Your blood oxygen is {quick.about(min(spo2, 100), 1)} percent and cabin oxygen is {quick.val(sim, 'ppo2_kpa'):.0f} kilopascals."
+    return None
+
+
 # AI replies are reused for the same question while the situation is the same.
 REPLY_TTL_S = 120
 _replies = {}
@@ -272,7 +217,7 @@ def cache_key(question, state, sim, focus):
 async def ask_model(question, state, sim, focus):
     prompt = (f"DATA:\n{snapshot(state, sim, focus)}\n\nCrew member says: \"{question}\"\n\n"
               "Reply with JSON only: {\"say\": \"at most two short sentences\", \"action\": null} "
-              "or with action set to one of: {\"type\": \"call_help\"}, {\"type\": \"cancel_help\"}, "
+              "or with action set to one of: "
               "{\"type\": \"log_countermeasure\", \"organ\": \"...\", \"id\": \"...\"}, {\"type\": \"note_earth\", \"text\": \"...\"}. "
               "Only propose an action if they ask for one; the say text should then ask them to confirm.")
     out = await complete([{"role": "system", "content": PERSONA}, {"role": "user", "content": prompt}], 160)

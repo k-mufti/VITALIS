@@ -1,10 +1,10 @@
-"""Offline checks for Vitaly: watchdog rules, escalation, voice commands, AI line safety.
+"""Offline checks for Vitaly: watchdog rules, self-help guides, symptom matching, voice commands.
 No network needed. Run: python test_vitaly.py"""
 from app import director
 from app.devices.simulated import DEVICES
 from app.engine.physiology import mission_state
 from app.state import sim
-from app.vitaly import brain, crew, profile, watchdog
+from app.vitaly import brain, guides, profile, protocols, quick, watchdog
 
 
 def fire(event):
@@ -39,23 +39,15 @@ assert set(arrest) == {"cardiac_arrest"}, arrest.keys()  # no extra low-BP / low
 # The medical profile turns an irregular rhythm into an emergency for Crew 03
 assert "irregular_rhythm" in profile.profile("03")["escalate"]
 af = fire("irregular_rhythm")["irregular_rhythm"]
-assert af["severity"] == "emergency" and af["help"], af
+assert af["severity"] == "emergency"
 
-# Emergencies call help at once: medical officer + nearest crew, Earth note with the comms delay
-team = af["help"]["team"]
-assert team[0]["role"] == "Medical officer" and len(team) == 2 and all(t["eta_s"] > 0 for t in team)
-assert af["earth"]["arrives_at"] > af["earth"]["sent_at"]
-assert any(t["role"] == "Commander" for t in fire("fire_smoke")["fire"]["help"]["team"])  # ship emergency
-
-# Warnings wait 15 s for "I'm OK", then call help on their own
-warn = fire("cabin_overpressure")["pressure_high"]
-assert warn["escalate_at"] and not warn["help"]
-watchdog.tick(sim, now=warn["escalate_at"] + 1)
-assert warn["help"] and warn["help"]["reason"] == "no answer in 15 s"
-warn = fire("cabin_overpressure")["pressure_high"]
-watchdog.acknowledge(sim, warn["id"])
-watchdog.tick(sim, now=warn["created"] + 30)
-assert not warn["help"], "acknowledged warnings must not escalate"
+# Standalone: every alert carries a guide the crew member can do themselves, and nothing is dispatched
+for kind, p in protocols.PROTOCOLS.items():
+    assert len(p["guide"]) >= 2 and p["say"], kind
+    for line in [p["say"], *p["guide"]]:
+        assert "{value}" not in line, f"{kind}: lines must be static so they can be voiced in advance"
+        assert "on the way" not in line and "medical officer" not in line.lower(), f"{kind}: must not rely on help arriving"
+assert af["guide"] == protocols.PROTOCOLS["irregular_rhythm"]["guide"] and "help" not in af
 
 # Alerts resolve when the problem goes away
 fire("cabin_leak")
@@ -70,37 +62,50 @@ sim.hr_trace.extend([(100.0, 60.0), (110.0, 62.0)])
 sim.record({"metric": "heart_rate", "value": 92.0, "quality": "good", "cadence": "continuous", "ts": 0})
 assert "heart_spike" in watchdog.detect(sim, 120.0)
 
-# Voice commands are matched by rules, not the model
+# Symptoms the crew member reports: matched by rules, for themselves or for someone else
+cases = [
+    ("I have a sharp pain in my chest", "chest_pain", "self"),
+    ("someone else has a sharp pain in their chest", "chest_pain", "other"),
+    ("my crewmate has chest pain", "chest_pain", "other"),
+    ("my chest hurts", "chest_pain", "self"),
+    ("Amir is not breathing", "unresponsive", "other"),
+    ("I can't breathe", "breathing", "self"),
+    ("she is choking", "choking", "other"),
+    ("I cut my arm and it's bleeding", "bleeding", "self"),
+    ("I feel dizzy", "fainting", "self"),
+    ("he hit his head", "head_injury", "other"),
+]
+for text, gid, person in cases:
+    g = guides.match(text)
+    assert g and g["id"] == gid and g["who"] == person, (text, g and (g["id"], g["who"]))
+    assert len(g["steps"]) >= 4 and g["say"]
+assert guides.match("how is my heart") is None
+assert guides.match("I don't have any pain") is None
+
+# ask(): a symptom returns the whole guide at once (the browser then steps through it with no server calls)
 sim.reset()
 state = mission_state(sim)
+import asyncio  # noqa: E402
+r = asyncio.run(brain.ask("sharp pain in my chest", state, sim))
+assert r["engine"] == "guide" and r["guide"]["id"] == "chest_pain" and "heart rate" in r["guide"]["readings"]
+r = asyncio.run(brain.ask("someone else has a sharp pain in their chest", state, sim))
+assert r["guide"]["who"] == "other" and r["guide"]["readings"] is None  # can't see someone else's body
+
+# Voice commands are matched by rules, not the model
 say, action = brain.command("I did sixty minutes on the treadmill, log it", state, sim)
 assert action == {"type": "log_countermeasure", "organ": "heart", "id": "cardio_45"}, action
-assert brain.command("Vitaly, call the medic", state, sim)[1]["type"] == "call_help"
 assert brain.command("tell earth that I feel fine", state, sim)[1]["type"] == "note_earth"
-assert brain.command("I'm fine", state, sim) is None  # nothing to cancel: just conversation
 assert brain.command("how is my heart", state, sim) is None
 assert brain.command("How long does a message take to reach Earth?", state, sim) is None
-assert brain.command("Can you call the medic", state, sim)[1]["type"] == "call_help"
 
 # Everyday questions are answered instantly from live data, no AI
-from app.vitaly import quick  # noqa: E402
 for q, word in (("How's my heart?", "Heart rate"), ("What's my oxygen?", "Blood oxygen"), ("How much radiation?", "millisieverts"),
                 ("Is the cabin air okay?", "Cabin pressure"), ("What day is it?", "day 184"),
                 ("How long does a message take to reach Earth?", "minutes")):
     a = quick.answer(q, state, sim)
     assert a and word in a, (q, a)
 assert quick.answer("Tell me a fun fact about Mars", state, sim) is None
-
-# AI lines that would mislead in an emergency are rejected
-warn = fire("cabin_overpressure")["pressure_high"]
-p = profile.profile(crew.PATIENT_ID)
-assert not brain.line_is_safe("Help is coming.", warn, p)
-assert brain.line_is_safe("Clear your ears and close any open valves.", warn, p)
-af = fire("irregular_rhythm")["irregular_rhythm"]
-assert not brain.line_is_safe("Dr. Chen will be here in 32 seconds.", af, p)
-assert brain.line_is_safe("With your AF history, Dr. Chen is bringing your kit.", af, p)
-assert "fibrillation" in brain.tailor_rules(af, p)
-assert brain.first_sentences("Help is coming, Dr. Chen is 32 s away. Stay still. More.", 2).endswith("Stay still.")
+assert brain.first_sentences("Stay calm, Dr. Chen wrote the plan. Stay still. More.", 2).endswith("Stay still.")
 
 sim.reset()
 print("vitaly checks passed")
