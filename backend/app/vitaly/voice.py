@@ -7,9 +7,13 @@ starts playing at once. Each finished clip is cached, and a line being generated
 checklist the moment it fires) is shared with anyone who asks for it meanwhile, so the same line
 is never generated twice.
 
-Settings (backend/.env): DEEPGRAM_API_KEY, DEEPGRAM_TTS_MODEL (default aura-2-draco-en, a warm
-British male voice). Without a key the browser falls back to Chrome's built-in voice.
-https://developers.deepgram.com/docs/text-to-speech
+Settings (backend/.env): DEEPGRAM_API_KEY, DEEPGRAM_TTS_MODEL (default flux-colin-en, a warm British
+male voice; any flux-<name>-en or aura-2-<name>-en works), DEEPGRAM_TTS_SPEED (1.0 = normal),
+DEEPGRAM_TTS_EXPRESSIVITY (Flux only, -2 to 2, 0 = default; beta, higher risks mispronunciations).
+Without a key the browser falls back to Chrome's built-in voice.
+Flux is Deepgram's newest voice model and sounds more conversational than Aura-2; it is served from
+/v2/speak, Aura-2 from /v1/speak.
+https://developers.deepgram.com/docs/tts-models-languages-overview
 """
 import asyncio
 import hashlib
@@ -21,8 +25,9 @@ import httpx
 
 from . import net
 
-URL = "https://api.deepgram.com/v1/speak"
-DEFAULT_MODEL = "aura-2-draco-en"
+URL = "https://api.deepgram.com/v1/speak"       # Aura-2
+FLUX_URL = "https://api.deepgram.com/v2/speak"  # Flux
+DEFAULT_MODEL = "flux-colin-en"
 MAX_CHARS = 2000          # Deepgram's per-request limit
 CACHE_SIZE = 400
 TIMEOUT_S = 20
@@ -39,20 +44,43 @@ BACKGROUND_AT_ONCE = 3
 _slots = None
 
 # Short lines Vitaly says often: generated once at startup.
-COMMON = ["Yes?", "I'm here.", "Okay, I won't.", "Logged. Your plan is updated.", "That didn't go through. Try again.",
+GREETING = "What do you need help with?"   # said after "Hey Vitaly" on its own (the browser has the same text)
+COMMON = [GREETING, "Yes?", "I'm here.", "Okay, I won't.", "Logged. Your plan is updated.", "That didn't go through. Try again.",
           "Okay. Say next when you've done that.", "That was the last step. I'm still watching your readings. Say Vitaly if anything changes.",
           "Okay, I've stopped the guide. I'm still watching your readings.", "That's the first step.",
           "I can't reach the medical system right now. Your alerts still work."]
 
 
+def _number(name, default, low, high):
+    try:
+        return min(high, max(low, float(os.getenv(name, default))))
+    except ValueError:
+        return default
+
+
 def settings():
-    return {"key": os.getenv("DEEPGRAM_API_KEY", "").strip(),
-            "model": os.getenv("DEEPGRAM_TTS_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL}
+    model = os.getenv("DEEPGRAM_TTS_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    flux = model.startswith("flux-")
+    speed = round(_number("DEEPGRAM_TTS_SPEED", 1.0, 0.5 if flux else 0.7, 1.5) / 0.05) * 0.05   # Flux accepts steps of 0.05
+    express = int(_number("DEEPGRAM_TTS_EXPRESSIVITY", 0, -2, 2)) if flux else 0
+    return {"key": os.getenv("DEEPGRAM_API_KEY", "").strip(), "model": model, "flux": flux,
+            "speed": round(speed, 2), "expressivity": express}
+
+
+def request_params(s):
+    """URL and query for one speech request."""
+    params = {"model": s["model"], "encoding": "mp3"}
+    if s["speed"] != 1.0:
+        params["speed"] = s["speed"]
+    if s["flux"] and s["expressivity"]:
+        params["expressivity"] = s["expressivity"]
+    return (FLUX_URL if s["flux"] else URL), params
 
 
 def status():
     s = settings()
-    return {"voice": "deepgram" if s["key"] else "browser", "voice_model": s["model"]}
+    return {"voice": "deepgram" if s["key"] else "browser", "voice_model": s["model"], "voice_speed": s["speed"],
+            "voice_expressivity": s["expressivity"]}
 
 
 def remember(key, audio):
@@ -65,12 +93,14 @@ def remember(key, audio):
 def cached(text):
     """True if this line is ready to play instantly."""
     s = settings()
-    key = _key(s["model"], (text or "").strip()[:MAX_CHARS])
+    key = _key(s, (text or "").strip()[:MAX_CHARS])
     return key in _cache or (DISK / f"{key}.mp3").exists()
 
 
-def _key(model, text):
-    return hashlib.sha1(f"{model}|{text}".encode()).hexdigest()
+def _key(s, text):
+    """Same line, different voice or speed = different clip. Default settings keep the plain key."""
+    extra = f"|{s['speed']}|{s['expressivity']}" if (s["speed"] != 1.0 or s["expressivity"]) else ""
+    return hashlib.sha1(f"{s['model']}{extra}|{text}".encode()).hexdigest()
 
 
 class Job:
@@ -102,7 +132,8 @@ class Job:
             for attempt in range(3):
                 try:
                     self.chunks.clear()
-                    async with net.client().stream("POST", URL, params={"model": s["model"], "encoding": "mp3"}, json={"text": text},
+                    url, params = request_params(s)
+                    async with net.client().stream("POST", url, params=params, json={"text": text},
                                                    headers={"Authorization": f"Token {s['key']}"}, timeout=TIMEOUT_S) as r:
                         if r.status_code == 429 and attempt < 2:   # too many at once: wait and retry
                             await asyncio.sleep(0.6 * (attempt + 1))
@@ -154,7 +185,7 @@ def start(text, background=False):
     text = (text or "").strip()[:MAX_CHARS]
     if not s["key"] or not text:
         return None
-    key = _key(s["model"], text)
+    key = _key(s, text)
     if key in _cache:
         _cache.move_to_end(key)
         return _cache[key]

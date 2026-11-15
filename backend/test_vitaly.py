@@ -4,7 +4,7 @@ from app import director
 from app.devices.simulated import DEVICES
 from app.engine.physiology import mission_state
 from app.state import sim
-from app.vitaly import brain, ears, guides, net, profile, protocols, quick, watchdog
+from app.vitaly import brain, ears, guides, net, profile, protocols, quick, voice, watchdog
 
 
 def fire(event):
@@ -134,6 +134,33 @@ assert ears.slim(res("", False, False)) is None
 assert ears.slim(json.dumps({"type": "UtteranceEnd", "channel": [0, 1]})) == {"type": "stopped"}
 assert ears.slim(json.dumps({"type": "SpeechStarted", "channel": [0, 1]})) is None and ears.slim("not json") is None
 assert "keyterm=Vitaly" in ears.url("nova-3") and "keyterm" not in ears.url("nova-2") and "token" not in ears.url("nova-3").lower()
+
+# Voice settings: Flux and Aura-2 use different endpoints; speed and expressivity are clamped; clips never mix voices
+import os  # noqa: E402
+os.environ.pop("DEEPGRAM_TTS_MODEL", None); os.environ.pop("DEEPGRAM_TTS_SPEED", None); os.environ.pop("DEEPGRAM_TTS_EXPRESSIVITY", None)
+v = voice.settings()
+assert v["model"].startswith("flux-") and voice.request_params(v) == (voice.FLUX_URL, {"model": v["model"], "encoding": "mp3"})
+os.environ.update(DEEPGRAM_TTS_MODEL="flux-kit-en", DEEPGRAM_TTS_SPEED="1.07", DEEPGRAM_TTS_EXPRESSIVITY="5")
+k = voice.settings(); url, params = voice.request_params(k)
+assert url == voice.FLUX_URL and params["speed"] == 1.05 and params["expressivity"] == 2 and params["model"] == "flux-kit-en", params
+os.environ.update(DEEPGRAM_TTS_MODEL="aura-2-draco-en", DEEPGRAM_TTS_SPEED="0.5", DEEPGRAM_TTS_EXPRESSIVITY="1")
+a = voice.settings(); url, params = voice.request_params(a)
+assert url == voice.URL and params["speed"] == 0.7 and "expressivity" not in params, params   # Aura-2 has no expressivity, speed min 0.7
+assert len({voice._key(x, "Yes?") for x in (v, k, a)}) == 3
+for name in ("DEEPGRAM_TTS_MODEL", "DEEPGRAM_TTS_SPEED", "DEEPGRAM_TTS_EXPRESSIVITY"):
+    os.environ.pop(name, None)
+
+# The opening line and step 1 are voiced as one clip, in advance
+name = profile.profile("03")["name"]
+lines = set(protocols.all_lines(name)) | set(guides.all_lines())
+for p in protocols.PROTOCOLS.values():
+    assert f"{p['say'].format(name=name)} {p['guide'][0]}" in lines
+for g in guides.GUIDES.values():
+    for who, steps in g["steps"].items():
+        assert guides.opening(g["say"][who], steps[0]) in lines and len(guides.opening(g["say"][who], steps[0])) < voice.MAX_CHARS
+
+# The greeting after "Hey Vitaly" is voiced in advance and is the same text in the browser
+assert voice.GREETING in voice.COMMON and f"'{voice.GREETING}'" in open("../src/ui/vitaly.js").read()
 
 # One shared, reused connection per event loop (no new TLS handshake per call)
 async def _same():

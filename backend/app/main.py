@@ -12,6 +12,7 @@ Run from backend/:  uvicorn app.main:app --reload --port 8001
 import asyncio
 import contextlib
 import time
+import urllib.parse
 
 from dotenv import load_dotenv
 
@@ -19,7 +20,7 @@ load_dotenv()
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-from fastapi.responses import Response, StreamingResponse  # noqa: E402
+from fastapi.responses import RedirectResponse, Response, StreamingResponse  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
 from . import director, history, hrp, officer, provenance, trends, triage  # noqa: E402
@@ -33,7 +34,7 @@ from .devices import catalog, native  # noqa: E402
 from .vitaly import brain, crew, ears, guides, net, profile, protocols, voice, watchdog  # noqa: E402
 from .devices.simulated import DEVICES  # noqa: E402
 from .engine.physiology import COUNTERMEASURES, apply_change, mission_state  # noqa: E402
-from .sources import donki, horizons, noaa  # noqa: E402
+from .sources import donki, googlehealth, horizons, noaa  # noqa: E402
 from .state import sim  # noqa: E402
 
 REFRESH_EVERY_S = 600
@@ -98,7 +99,7 @@ async def sim_loop():
 async def lifespan(app):
     # Voice every checklist line and common phrase in advance (from disk after the first run).
     voice.prewarm(*voice.COMMON, *protocols.all_lines(profile.profile(crew.PATIENT_ID)["name"]), *guides.all_lines())
-    tasks = [asyncio.create_task(refresh_loop()), asyncio.create_task(sim_loop()), asyncio.create_task(net.keep_warm())]
+    tasks = [asyncio.create_task(refresh_loop()), asyncio.create_task(sim_loop()), asyncio.create_task(net.keep_warm()), asyncio.create_task(googlehealth.loop())]
     yield
     for t in tasks:
         t.cancel()
@@ -168,7 +169,9 @@ def get_vitals():
     devices = []
     for d in DEVICES:
         metrics = [k for k, v in catalog.METRICS.items() if v["device"] == d.name]
-        devices.append({"name": d.name, "label": d.label, "simulated": True,
+        real_now = d.name == "wearable" and googlehealth.report()["state"] == "live"
+        devices.append({"name": d.name, "label": googlehealth.device_name() if real_now else d.label,
+                        "simulated": not real_now, "live_source": "Google Health API" if real_now else None,
                         "kind": catalog.DEVICES[d.name]["kind"], "real": catalog.DEVICES[d.name]["real"],
                         "metrics": [{"metric": k, **catalog.METRICS[k]} for k in metrics]})
     return {"latest": sim.latest, "devices": devices,
@@ -180,6 +183,41 @@ def get_vitals():
 def get_vitals_raw():
     """Latest readings in each device's own record format (HealthKit sample, Dexcom EGV)."""
     return {"simulated": True, "devices": native.records(sim)}
+
+
+@app.get("/api/fitbit/status")
+def fitbit_status():
+    """Is the real watch connected, what does it say, and how old is each reading."""
+    return googlehealth.report()
+
+
+@app.get("/api/fitbit/connect")
+def fitbit_connect():
+    """Start the Google sign-in for the Fitbit's owner."""
+    if not googlehealth.configured():
+        raise HTTPException(status_code=400, detail="Set GOOGLE_HEALTH_CLIENT_ID and GOOGLE_HEALTH_CLIENT_SECRET in backend/.env first.")
+    return RedirectResponse(googlehealth.login_url())
+
+
+@app.get("/api/fitbit/callback")
+async def fitbit_callback(code: str = "", state: str = "", error: str = ""):
+    """Google sends the browser back here after sign-in; then on to the app with the result."""
+    back = googlehealth.settings()["app_url"]
+    if error or not code:
+        return RedirectResponse(f"{back}?fitbit=error&reason={urllib.parse.quote(error or 'cancelled')}")
+    try:
+        await googlehealth.exchange(code, state)
+    except googlehealth.AuthError as e:
+        return RedirectResponse(f"{back}?fitbit=error&reason={urllib.parse.quote(str(e))}")
+    asyncio.create_task(googlehealth.poll_once())     # first readings right away
+    return RedirectResponse(f"{back}?fitbit=connected")
+
+
+@app.post("/api/fitbit/disconnect")
+def fitbit_disconnect():
+    googlehealth.disconnect()
+    sim.fresh_readings(DEVICES)    # back to simulated at once
+    return googlehealth.report()
 
 
 @app.get("/api/trends")
@@ -397,7 +435,11 @@ async def vitaly_prewarm():
 
 @app.post("/api/vitaly/ask")
 async def vitaly_ask(body: VitalyAsk):
-    return await brain.ask(body.question[:500], mission_state(sim), sim, body.focus)
+    reply = await brain.ask(body.question[:500], mission_state(sim), sim, body.focus)
+    g = reply.get("guide")
+    if g and g.get("readings"):   # the live readings line is new each time: start voicing it with step 1 now
+        voice.prewarm(f"{g['readings']} {g['steps'][0]}", background=False)
+    return reply
 
 
 @app.post("/api/vitaly/action")

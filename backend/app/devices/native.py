@@ -8,7 +8,7 @@ simulator for hardware is a matter of reading these records instead of making th
   Blood sugar patch               -> a Dexcom API "EGV" record (value, trend arrow, rate of change)
   Everything else                 -> a plain VITALIS record; these devices have no common format
 
-Every record says "simulated": true. Nothing here claims a real device took the reading.
+Every record says whether it is simulated. Nothing here claims a real device took a reading unless the reading really came from one (devices/live.py).
 """
 import datetime as dt
 import uuid
@@ -74,6 +74,10 @@ def record(v, history=None):
         fmt = "VITALIS device record"
     if rec is None:
         return None
+    if v.get("real"):   # a reading from the real watch: say so, and name where it came from
+        rec = {**rec, "sourceName": f"{v['source']} (Google Health API)"}
+        rec["note"] = "Real reading from a worn watch" + (", with a simulated event added on top" if v.get("modified") else "")
+        return {"metric": v["metric"], "device": v["device"], "format": fmt, "simulated": False, "record": rec}
     return {"metric": v["metric"], "device": v["device"], "format": fmt, "simulated": True, "record": rec}
 
 

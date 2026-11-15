@@ -62,6 +62,7 @@ export const api = {
   provenance: () => request('/api/provenance'),
   trends: days => request('/api/trends' + query({ days })),
   vitalyStatus: () => request('/api/vitaly/status'),
+  fitbitStatus: () => request('/api/fitbit/status', { timeout: 2500 }),
   vitalyIncidents: () => request('/api/vitaly/incidents'),
   vitalyAsk: (question, focus) => post('/api/vitaly/ask', { question, focus }, 15000),
   vitalyAction: action => post('/api/vitaly/action', action, 15000),

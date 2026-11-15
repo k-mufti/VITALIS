@@ -27,6 +27,9 @@ const REPEAT = /\b(repeat|again|say (that|it) again|what was that|pardon)\b/i;
 const NEXT = /\b(next|done|did (it|that)|okay|ok|got it|continue|go on|ready|what now|then what|and then|yes|yeah|yep|no|nope)\b/i;
 const BACK = /\b(back|previous|before that)\b/i;
 const STOP = /\b(stop|exit|quit|end (the )?guide|cancel|i'?m (fine|okay|ok|good|alright) now|false alarm|never ?mind)\b/i;
+const GREETING = 'What do you need help with?';   // after "Hey Vitaly" on its own; voiced in advance by the backend
+// A lone "hey" or "um" is not a question (unless a guide or a yes/no is waiting for short answers).
+const FILLER = /^(?:hey|hi|hello|ok|okay|um+|uh+|hmm+|well|so)[\s.,!?]*$/i;
 const CLOSE_AFTER_MS = 5000;
 // How long a pause ends what you're saying. Chrome's own "final" result usually arrives first;
 // these are the backstop. Short guide commands are quick; a sentence that stops on a word like
@@ -224,7 +227,9 @@ async function announce(inc) {
 
 // ---------- guides: one step at a time ----------
 
-// Opening line, what the sensors show (if any), then step 1. Everything after is "next".
+// Opening line + step 1 play as one clip, so there is no gap between them (every clip has a little
+// silence at both ends). With a readings line ("Your heart rate is about 72...") it is two clips:
+// the opening, then the readings joined to step 1. Everything after that is "next".
 async function startGuide(g) {
   const mine = guide = { ...g, i: 0, started: false };
   $('#vConfirm').hidden = true;
@@ -233,9 +238,16 @@ async function startGuide(g) {
   paintGuide();
   // If the crew member says "next" during the opening, guideCommand takes over and this stops.
   const mineStill = () => guide === mine && !mine.started;
-  await say(g.say);
-  if (mineStill() && g.readings) await say(g.readings);
-  if (mineStill()) await sayStep();
+  const clips = g.readings ? [g.say, `${g.readings} ${g.steps[0]}`] : [`${g.say} ${g.steps[0]}`];
+  for (const clip of clips) {
+    if (!mineStill()) return;
+    await say(clip);
+  }
+  if (mineStill()) {
+    mine.started = true;
+    paintGuide();
+    mode = 'alert';
+  }
 }
 
 async function sayStep() {
@@ -615,7 +627,20 @@ function finishHearing(id, text, done) {
   handled = id;
   if (done) done();
   const q = afterWake(text);
-  if (q.length > 1 && !isEcho(q)) heard(q);
+  if (isEcho(q)) return;
+  if (q.length < 2 && WAKE.test(text)) return greet();     // "Hey Vitaly" on its own
+  if (FILLER.test(q) && !guide && !pending) return;        // a stray "hey" or "um"
+  if (q.length > 1) heard(q);
+}
+
+// "Hey Vitaly" and then a pause: ask what is needed. Not during a guide (it is already talking you
+// through something) and not if you carried straight on with a question (that never gets here).
+function greet() {
+  if (guide || speaking) return;
+  if (!open) show(openEmergency() ? 'emergency' : 'calm');
+  mode = 'listening';
+  status('Listening');
+  say(GREETING).then(() => { if (!guide) closeSoon(); });
 }
 function resetHearing() { handled = -1; clearTimeout(endTimer); }
 
@@ -633,11 +658,13 @@ function hearing(id, text, stopped, settle, done) {
   $('#vHeard').textContent = `“${text}”`;
   clearTimeout(endTimer);
   const command = guide && rest.split(/\s+/).length <= 2 && (NEXT.test(rest) || REPEAT.test(rest) || BACK.test(rest) || STOP.test(rest));
-  const unfinished = UNFINISHED.test(rest.replace(/[.,!?…]+$/, '')) || rest.length < 2;   // Deepgram adds punctuation
+  const wakeOnly = WAKE.test(text) && rest.length < 2;
+  const unfinished = !wakeOnly && (UNFINISHED.test(rest.replace(/[.,!?…]+$/, '')) || rest.length < 2);   // Deepgram adds punctuation
   let wait;
   // A finished sentence ("...today?") that Deepgram also heard end needs almost no extra wait.
   const sentenceEnd = /[.?!]$/.test(rest) && words(rest).length >= 3;
-  if (stopped) wait = command ? 0 : unfinished ? ENDPOINT_UNFINISHED_MS : sentenceEnd ? Math.min(settle, SETTLE_SENTENCE_MS) : settle;
+  if (wakeOnly) wait = stopped ? 300 : 1000;   // said just the name and paused: answer quickly
+  else if (stopped) wait = command ? 0 : unfinished ? ENDPOINT_UNFINISHED_MS : sentenceEnd ? Math.min(settle, SETTLE_SENTENCE_MS) : settle;
   else wait = command ? ENDPOINT_COMMAND_MS : unfinished ? ENDPOINT_UNFINISHED_MS : ENDPOINT_MS;
   // The microphone itself is the fastest sign you're still talking: if it was loud a moment ago,
   // hold on (for up to 3 s) and let the next words arrive instead of answering half a sentence.

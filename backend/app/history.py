@@ -5,6 +5,7 @@ countermeasures taken, triage alerts). Real missions would read this from the cr
 """
 from . import constants as C
 from . import missions as M
+from .sources import googlehealth
 from .engine.physiology import NAMES, mission_state
 
 # Readable labels for the things the director can throw at the crew.
@@ -81,7 +82,7 @@ def build(sim):
         },
         "baselines": {
             "preflight_bone_density_pct": 100,
-            "usual_resting_heart_rate": C.BASELINE["heart_rate"],
+            "usual_resting_heart_rate": googlehealth.resting_baseline(C.BASELINE["heart_rate"]) or C.BASELINE["heart_rate"],
             "usual_sleep_hours": C.BASELINE["sleep_hours"],
             "preflight_onsd_mm": C.ONSD_BASELINE_MM,
         },

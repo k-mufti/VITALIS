@@ -13,3 +13,5 @@ assets/models/human-brain/
 assets/models/digestive-system-2/
 # Vitaly's pre-generated voice clips (Deepgram); rebuilt automatically.
 backend/data/voice_cache/
+# The Fitbit sign-in tokens (secrets). Never commit.
+backend/data/fitbit_tokens.json

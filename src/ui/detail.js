@@ -1,4 +1,4 @@
-import { $, $$ } from '../util.js';
+import { $, $$, realTag } from '../util.js';
 import { state } from '../state.js';
 import { api, live, onData, organ, refreshState } from '../data/client.js';
 import { GUIDE } from '../data/health-rules.js';
@@ -79,7 +79,9 @@ function paintHow(d) {
   if (timed && m.method !== 'estimated') {
     last = ` <span class="d-how-last">${timed.sensor.toLowerCase()} · ${timed.cadence} · ${ago(timed.last_ts)}</span>`;
   }
-  setHtml(box, `<b class="d-how-tag ${m.method}">${METHOD_WORD[m.method] || m.method}</b>${m.how}${last}`);
+  // If a reading behind this number comes from the real watch, say so.
+  const real = (m.inputs || []).map(i => live.vitals[i.metric]).find(v => v && v.real);
+  setHtml(box, `<b class="d-how-tag ${m.method}">${METHOD_WORD[m.method] || m.method}</b>${realTag(real)}${m.how}${last}`);
 }
 
 function ago(ts) {

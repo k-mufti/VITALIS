@@ -395,10 +395,18 @@ def match(text):
     return None
 
 
+def opening(say, first_step):
+    """The opening line and step 1 as one clip, so there is no gap (every clip has a little silence
+    at both ends) between "I'll talk you through it" and the first instruction. The browser builds
+    the same string, so it is voiced in advance."""
+    return f"{say} {first_step}"
+
+
 def all_lines():
     out = []
     for g in GUIDES.values():
         out.extend(g["say"].values())
-        for steps in g["steps"].values():
+        for who, steps in g["steps"].items():
             out.extend(steps)
+            out.append(opening(g["say"][who], steps[0]))
     return out

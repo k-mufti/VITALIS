@@ -11,7 +11,7 @@ Sources panel in the app shows it.
 import datetime as dt
 
 from . import constants as C
-from .sources import cache, donki, horizons, noaa
+from .sources import cache, donki, googlehealth, horizons, noaa
 
 
 def _age(ts):
@@ -87,7 +87,32 @@ def live_sources():
         "docs": "https://www.swpc.noaa.gov/products/goes-proton-flux",
         "verify": noaa.URL,
     }]
+    out.extend(_watch_row())
     return out
+
+
+def _watch_row():
+    """The real watch, only once Fitbit is set up. Honest about the delay: it is not a live stream."""
+    if not googlehealth.configured():
+        return []
+    r = googlehealth.report()
+    hr = r["metrics"].get("heart_rate")
+    live = r["state"] == "live"
+    if hr:
+        sample = f"{round(hr['value'])} bpm, taken {round(hr['age_s'] / 60, 1)} min ago" + ("" if live else " (too old to use)")
+    else:
+        sample = "no reading yet" if r["connected"] else "not connected"
+    kind = "live" if live else ("cache" if hr else "fallback")
+    return [{
+        "id": "googlehealth", "name": f"Google Health API, {r['device']}", "org": "Google (Fitbit)",
+        "what": "Real heart rate, recovery, blood oxygen, breathing and sleep from a watch worn by a person. "
+                "It reaches us through the phone app, so it is minutes old, not a live stream.",
+        "status": kind, "kind": kind, "error": r["error"],
+        "fetched_min_ago": round(r["last_ok_s_ago"] / 60, 1) if r["last_ok_s_ago"] is not None else None,
+        "sample": sample,
+        "docs": "https://developers.google.com/health",
+        "verify": "https://developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints/list",
+    }]
 
 
 # Measured values from NASA documents and peer-reviewed papers. Not fetched: they do not change.

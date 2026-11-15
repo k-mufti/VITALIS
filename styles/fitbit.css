@@ -1,0 +1,52 @@
+/* The real-watch chip in the header, and the REAL tags on readings. */
+.fb-wrap { position: relative; }
+.fb { display: flex; align-items: center; gap: 10px; padding: 7px 14px; border: 1px solid var(--line); background: var(--white); font: 500 13px var(--cond); letter-spacing: .12em; text-transform: uppercase; color: var(--soft); cursor: pointer; transition: border-color .3s, color .3s; }
+.fb:hover, .fb[aria-expanded="true"] { border-color: var(--ink); color: var(--ink); }
+.fb b { font: 600 15px var(--cond); letter-spacing: .04em; color: var(--ink); text-transform: none; font-variant-numeric: tabular-nums; }
+.fb em { font-style: normal; font-weight: 600; }
+.fb-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--soft); flex: none; }
+.fb[data-state="live"] .fb-dot { background: var(--green); animation: fb-beat 1.4s ease-in-out infinite; }
+.fb[data-state="live"] em { color: var(--green); }
+.fb[data-state="stale"] { border-color: var(--amber); }
+.fb[data-state="stale"] .fb-dot { background: var(--amber); }
+.fb[data-state="stale"] em { color: var(--amber); }
+.fb[data-state="error"] { border-color: var(--red); color: var(--red); }
+.fb[data-state="error"] .fb-dot { background: var(--red); }
+.fb[data-state="ready"] { border-style: dashed; }
+@keyframes fb-beat { 50% { transform: scale(1.5); opacity: .6; } }
+@media (prefers-reduced-motion: reduce) { .fb-dot { animation: none !important; } }
+
+.fb-pop { position: absolute; top: calc(100% + 10px); right: 0; width: 300px; padding: 14px 16px 12px; background: var(--white); border: 1px solid var(--ink); box-shadow: 0 18px 40px rgba(0,0,0,.12); z-index: 40; font: 400 14px/1.45 var(--sans); color: var(--ink); text-align: left; }
+.fb-h { display: flex; justify-content: space-between; align-items: center; font: 600 13px var(--cond); letter-spacing: .2em; text-transform: uppercase; color: var(--soft); margin-bottom: 8px; }
+.fb-live, .fb-paused { display: inline-flex; align-items: center; gap: 6px; font: 600 13px var(--cond); letter-spacing: .16em; }
+.fb-live { color: var(--green); }
+.fb-live i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: fb-beat 1.4s ease-in-out infinite; }
+.fb-paused { color: var(--amber); }
+.fb-rows { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.fb-row { display: grid; grid-template-columns: 1fr auto; gap: 0 12px; padding: 6px 10px; background: var(--white); align-items: baseline; }
+.fb-row span { font-weight: 500; }
+.fb-row b { font: 600 15px var(--cond); text-align: right; font-variant-numeric: tabular-nums; }
+.fb-row b small { font-weight: 500; color: var(--soft); }
+.fb-row em { grid-column: 1 / -1; font: 500 11px var(--cond); letter-spacing: .1em; text-transform: uppercase; font-style: normal; }
+.fb-row em.real { color: var(--green); }
+.fb-row em.sim { color: var(--soft); }
+.fb-base { margin-top: 8px; font-size: 14px; }
+.fb-base b { font-weight: 600; }
+.fb-muted { margin-top: 6px; font-size: 12px; color: var(--soft); }
+.fb-note { margin-bottom: 8px; padding: 6px 10px; background: var(--paper); font-size: 13px; }
+.fb-err { margin-top: 8px; font-size: 13px; color: var(--red); }
+.fb-actions { margin-top: 12px; }
+.fb-btn { padding: 7px 14px; background: var(--ink); color: var(--white); font: 600 12px var(--cond); letter-spacing: .14em; text-transform: uppercase; }
+.fb-btn.ghost { background: none; color: var(--ink); border: 1px solid var(--line); }
+.fb-btn.ghost:hover { border-color: var(--ink); }
+
+/* REAL tag on a reading that comes from the watch */
+.real-tag { display: inline-block; margin-left: 8px; padding: 1px 6px; border: 1px solid var(--green); color: var(--green); font: 600 10px var(--cond); letter-spacing: .14em; text-transform: uppercase; vertical-align: middle; white-space: nowrap; }
+.real-tag.event { border-color: var(--amber); color: var(--amber); }
+
+/* One line always; on small screens drop the watch name and keep the reading and its age. */
+.fb, .fb b, .fb em { white-space: nowrap; }
+@media (max-width: 1280px) {
+  .fb[data-state="live"] .fb-label, .fb[data-state="stale"] .fb-label { display: none; }
+  .fb { padding: 7px 10px; gap: 8px; letter-spacing: .08em; }
+}
