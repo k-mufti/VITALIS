@@ -44,6 +44,24 @@ SUPPRESSES = {
 }
 
 
+def last_two(sim, metric):
+    """The two most recent good readings. Critical limits need both to agree: fast (about 1-2 s
+    after a sudden change, instead of waiting for a 5 s average) but one noisy reading can't
+    raise an alarm on its own."""
+    vals = list(sim.history.get(metric) or [])[-2:]
+    return vals if vals else None
+
+
+def below(sim, metric, limit):
+    v = last_two(sim, metric)
+    return v is not None and max(v) < limit
+
+
+def above(sim, metric, limit):
+    v = last_two(sim, metric)
+    return v is not None and min(v) > limit
+
+
 def detect(sim, now):
     """Problems present right now: {kind: value text}."""
     r = sim.recent
@@ -52,54 +70,54 @@ def detect(sim, now):
 
     hr = r("heart_rate")
     if hr is not None:
-        sim.hr_trace.append((now, hr))
-        if hr < lim["hr_arrest"]:
+        latest = last_two(sim, "heart_rate")[-1]
+        sim.hr_trace.append((now, latest))
+        if below(sim, "heart_rate", lim["hr_arrest"]):
             found["cardiac_arrest"] = "0"
-        elif hr < lim["hr_low"]:
-            found["slow_heart"] = f"{hr:.0f}"
-        elif hr > lim["hr_high"] and (r("ecg_irregular") or 0) < 0.5:
-            found["fast_heart"] = f"{hr:.0f}"
+        elif below(sim, "heart_rate", lim["hr_low"]):
+            found["slow_heart"] = f"{latest:.0f} bpm"
+        elif above(sim, "heart_rate", lim["hr_high"]) and (r("ecg_irregular") or 0) < 0.5:
+            found["fast_heart"] = f"{latest:.0f} bpm"
         recent = [v for t, v in sim.hr_trace if now - t <= SPIKE_WINDOW_S]
         if len(recent) >= 3 and max(recent) - min(recent) >= SPIKE_BPM:
             found["heart_spike"] = f"{max(recent) - min(recent):.0f}"
-        if hr - C.BASELINE["heart_rate"] >= DRIFT_BPM:
-            found["heart_drift"] = f"{hr - C.BASELINE['heart_rate']:.0f} beats"
-    if (r("ecg_irregular") or 0) >= 0.5:
-        found["irregular_rhythm"] = f"{hr:.0f}" if hr else "?"
-    spo2 = r("spo2")
-    if spo2 is not None and spo2 < lim["spo2_low"]:
-        found["low_oxygen_blood"] = f"{spo2:.0f}"
+        if hr - C.BASELINE["heart_rate"] >= DRIFT_BPM:  # drift is slow: the smoothed value is right
+            found["heart_drift"] = f"+{hr - C.BASELINE['heart_rate']:.0f} bpm"
+    if above(sim, "ecg_irregular", 0.5):
+        found["irregular_rhythm"] = f"{hr:.0f} bpm" if hr else "?"
+    if below(sim, "spo2", lim["spo2_low"]):
+        found["low_oxygen_blood"] = f"{last_two(sim, 'spo2')[-1]:.0f}%"
     sys_, dia = r("bp_sys"), r("bp_dia")
     if sys_ is not None:
         if sys_ < lim["bp_low"]:
-            found["bp_crash"] = f"{sys_:.0f} over {dia:.0f}"
+            found["bp_crash"] = f"{sys_:.0f}/{dia:.0f}"
         elif sys_ >= lim["bp_high"]:
-            found["bp_high"] = f"{sys_:.0f} over {dia:.0f}"
+            found["bp_high"] = f"{sys_:.0f}/{dia:.0f}"
 
     p, o2, co2 = r("cabin_pressure_kpa"), r("ppo2_kpa"), r("co2_mmhg")
     if p is not None:
         if p < lim["pressure_low"]:
-            found["pressure_low"] = f"{p:.0f}"
+            found["pressure_low"] = f"{p:.1f} kPa"
         elif p > lim["pressure_high"]:
-            found["pressure_high"] = f"{p:.0f}"
+            found["pressure_high"] = f"{p:.1f} kPa"
     if o2 is not None:
         if o2 < lim["o2_low"]:
-            found["o2_low"] = f"{o2:.1f}"
+            found["o2_low"] = f"{o2:.1f} kPa O2"
         elif o2 > lim["o2_high"]:
-            found["o2_high"] = f"{o2:.1f}"
+            found["o2_high"] = f"{o2:.1f} kPa O2"
     if co2 is not None and co2 > lim["co2_high"]:
-        found["co2_high"] = f"{co2:.1f}"
-    if (r("smoke_index") or 0) > lim["smoke"]:
+        found["co2_high"] = f"{co2:.1f} mmHg"
+    if above(sim, "smoke_index", lim["smoke"]):  # smoke: act on the first two readings
         found["fire"] = "smoke"
     t = r("cabin_temp_c")
     if t is not None:
         if t > lim["temp_high"]:
-            found["temp_high"] = f"{t:.0f}"
+            found["temp_high"] = f"{t:.0f} °C"
         elif t < lim["temp_low"]:
-            found["temp_low"] = f"{t:.0f}"
+            found["temp_low"] = f"{t:.0f} °C"
     noise = r("noise_dba")
     if noise is not None and noise > lim["noise_high"]:
-        found["noise_high"] = f"{noise:.0f}"
+        found["noise_high"] = f"{noise:.0f} dBA"
     if sim.storm:
         found["radiation_storm"] = "storm"
 

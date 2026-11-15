@@ -15,16 +15,20 @@ import asyncio
 import hashlib
 import os
 from collections import OrderedDict
+from pathlib import Path
 
 import httpx
 
 URL = "https://api.deepgram.com/v1/speak"
 DEFAULT_MODEL = "aura-2-draco-en"
 MAX_CHARS = 2000          # Deepgram's per-request limit
-CACHE_SIZE = 200
+CACHE_SIZE = 400
 TIMEOUT_S = 20
 
 _cache = OrderedDict()    # key -> finished MP3 bytes
+# Finished clips also go to disk, so checklists and common answers are instant after a restart
+# and never paid for twice. Git-ignored.
+DISK = Path(__file__).resolve().parents[2] / "data" / "voice_cache"
 _jobs = {}                # key -> Job still streaming from Deepgram
 
 # Short lines Vitaly says often: generated once at startup.
@@ -40,6 +44,20 @@ def settings():
 def status():
     s = settings()
     return {"voice": "deepgram" if s["key"] else "browser", "voice_model": s["model"]}
+
+
+def remember(key, audio):
+    _cache[key] = audio
+    _cache.move_to_end(key)
+    if len(_cache) > CACHE_SIZE:
+        _cache.popitem(last=False)
+
+
+def cached(text):
+    """True if this line is ready to play instantly."""
+    s = settings()
+    key = _key(s["model"], (text or "").strip()[:MAX_CHARS])
+    return key in _cache or (DISK / f"{key}.mp3").exists()
 
 
 def _key(model, text):
@@ -64,9 +82,13 @@ class Job:
                         self.chunks.append(chunk)
                         self.changed.set()
             self.ok = True
-            _cache[key] = b"".join(self.chunks)
-            if len(_cache) > CACHE_SIZE:
-                _cache.popitem(last=False)
+            audio = b"".join(self.chunks)
+            remember(key, audio)
+            try:
+                DISK.mkdir(parents=True, exist_ok=True)
+                (DISK / f"{key}.mp3").write_bytes(audio)
+            except OSError:
+                pass
         except Exception:
             self.ok = False
         finally:
@@ -99,6 +121,11 @@ def start(text):
     if key in _cache:
         _cache.move_to_end(key)
         return _cache[key]
+    f = DISK / f"{key}.mp3"
+    if f.exists():
+        audio = f.read_bytes()
+        remember(key, audio)
+        return audio
     if key not in _jobs:
         _jobs[key] = Job(s, text, key)
     return _jobs[key]
