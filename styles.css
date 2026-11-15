@@ -234,3 +234,81 @@ form button:hover { transform: translateX(4px); }
 #ridges path.drawn.on { stroke: var(--ink); fill: none; }
 #ridges path.drawn.lit { stroke: var(--cyan); fill: none; }
 #scanLine { transition: opacity .3s; }
+
+/* Holographic sign-in print (signin.js builds the layers). Tilt is set per frame in JS,
+   so only the match shrink animates the transform here. */
+.print-wrap { width: calc(min(360px, 44vh) * var(--k-size, 1)); height: calc(min(419px, 51vh) * var(--k-size, 1)); z-index: 2; }
+.print { transition: opacity .6s; transform-origin: 50% 50%; will-change: transform; }
+.print-wrap.done .print { transition: transform .9s var(--ease), opacity .6s; }
+.print-wrap:not(.holding):not(.done) .print { animation: none; }
+
+/* Cyan depth copy (colour split), glint, glitch slices and scanlines appear once the print has traced in. */
+#ridgesNear, #ridgesGlint, #ridgesGlitch, #holoLines { opacity: 0; transition: opacity 1.2s var(--ease); pointer-events: none; }
+#ridgesNear path { fill: var(--cyan); }
+#ridgesGlint path { fill: url(#holoGlint); }
+#ridgesGlitch path { fill: var(--cyan); }
+#ridgesGlitch.navy path { fill: #0a1f6b; }
+#holoLines { fill: url(#holoLinePattern); }
+.print.settled #ridgesNear { opacity: calc(.45 * var(--k-split, 1)); }
+.print.settled #ridgesGlint { opacity: calc(.95 * var(--k-glint, 1)); }
+.print.settled #holoLines { opacity: calc(.6 * var(--k-lines, 1)); }
+.print.settled #ridgesGlitch { opacity: 1; transition: none; }
+.print-wrap.holding .print.settled #ridgesGlint { opacity: calc(.55 * var(--k-glint, 1)); }
+.print-wrap.matched .print #ridgesGlint { opacity: var(--k-glint, 1); }
+.print.ready #ridges path.hit { fill: var(--cyan); transition: fill .06s; }
+
+/* Orbit rings on the tilted plane. */
+.holo-ring { fill: none; transform-box: fill-box; transform-origin: center; opacity: 0; transition: stroke .4s, opacity 1.2s; }
+.print.settled .holo-ring { opacity: 1; }
+#holoRing { stroke: #b4b4ae; stroke-width: .7; stroke-dasharray: 1 5; animation: ringSpin 40s linear infinite; }
+#holoRing2 { stroke: #c9c9c4; stroke-width: .5; stroke-dasharray: 14 4 2 4; animation: ringSpin 70s linear infinite reverse; }
+#holoArc { stroke: var(--cyan); stroke-width: 1.6; stroke-linecap: round; stroke-dasharray: 60 900; animation: ringSpin 9s linear infinite; }
+.print-wrap.holding #holoRing { stroke: var(--cyan); animation-duration: 5s; }
+.print-wrap.holding #holoArc { animation-duration: 2.2s; stroke-width: 2.4; }
+@keyframes ringSpin { to { transform: rotate(360deg); } }
+
+/* Scan line with a glow and a trail. */
+#scanLine { stroke-width: 1.4; transition: opacity .3s; }
+#scanGlow { stroke: var(--cyan); stroke-width: 5; opacity: 0; filter: blur(3px); transition: opacity .3s; }
+.print-wrap.holding #scanGlow { opacity: calc(.75 * var(--k-glow, 1)); }
+#scanTrailRect { fill: url(#scanTrail); opacity: 0; transition: opacity .3s; }
+.print-wrap.holding #scanTrailRect { opacity: var(--k-glow, 1); }
+
+/* HUD around the print (not tilted). */
+.holo-hud { position: absolute; left: -50%; top: -25%; width: 200%; height: 150%; overflow: visible; pointer-events: none; opacity: 0; transition: opacity 1.4s var(--ease) .6s; }
+.signin.hud-on .holo-hud { opacity: 1; }
+.print-wrap.done .holo-hud { opacity: 0; transition: opacity .5s; }
+.holo-hud .hair { stroke: #c9c9c4; stroke-width: .6; }
+.holo-hud .tick { stroke: #b4b4ae; stroke-width: .6; }
+.holo-hud .brk { fill: none; stroke: var(--ink); stroke-width: 1.4; transition: transform .5s var(--ease), stroke .3s; }
+.print-wrap.holding .holo-hud .brk { stroke: var(--cyan); }
+.print-wrap.holding .holo-hud .brk.tl { transform: translate(14px, 14px); }
+.print-wrap.holding .holo-hud .brk.tr { transform: translate(-14px, 14px); }
+.print-wrap.holding .holo-hud .brk.bl { transform: translate(14px, -14px); }
+.print-wrap.holding .holo-hud .brk.br { transform: translate(-14px, -14px); }
+.holo-hud text { font: 600 7.5px 'Barlow Condensed', sans-serif; letter-spacing: .16em; fill: var(--soft); text-transform: uppercase; font-variant-numeric: tabular-nums; }
+.holo-hud text.ink { fill: var(--ink); }
+.holo-hud text.cy { fill: var(--cyan); }
+.holo-hud .marker { fill: var(--cyan); }
+.holo-hud .dust circle { fill: var(--cyan); }
+.holo-hud .shock { fill: none; stroke: var(--cyan); stroke-width: 1.2; opacity: 0; }
+.print-wrap.matched .holo-hud .shock { animation: shock 1s var(--ease) forwards; }
+.print-wrap.matched .holo-hud .shock.two { animation-delay: .18s; }
+@keyframes shock { from { r: 20; opacity: .9; stroke-width: 3; } to { r: 260; opacity: 0; stroke-width: .3; } }
+
+/* Halftone dot field behind the print, shifts with the tilt. */
+.holo-field { position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: 0; transition: opacity 1.6s var(--ease);
+  background-image: radial-gradient(circle, rgba(14,14,14,.2) 1.1px, transparent 1.7px), radial-gradient(circle, rgba(10,165,189,.35) 1.1px, transparent 1.8px);
+  background-size: 10px 10px, 10px 10px;
+  background-position: calc(var(--fx, 0) * 1px) calc(var(--fy, 0) * 1px), calc(var(--fx, 0) * -2.2px + 5px) calc(var(--fy, 0) * -2.2px + 5px);
+  -webkit-mask-image: radial-gradient(ellipse 30% 40% at 50% 40%, #000 0%, rgba(0,0,0,.35) 55%, transparent 100%);
+  mask-image: radial-gradient(ellipse 30% 40% at 50% 40%, #000 0%, rgba(0,0,0,.35) 55%, transparent 100%); }
+.signin.hud-on .holo-field { opacity: calc(.55 * var(--k-field, 1)); }
+.signin.scanning .holo-field { opacity: var(--k-field, 1); }
+.signin.welcome .holo-field { opacity: 0; }
+
+/* Sign-in look toggles (src/signin-look.js sets these "off-*" classes on #signin). */
+.signin.off-split #ridgesNear, .signin.off-glint #ridgesGlint, .signin.off-lines #holoLines, .signin.off-glitch #ridgesGlitch,
+.signin.off-particles .holo-hud .dust, .signin.off-rings .holo-ring, .signin.off-arc #holoArc, .signin.off-glow #scanGlow,
+.signin.off-glow #scanTrailRect, .signin.off-field .holo-field, .signin.off-brackets .holo-hud .brk, .signin.off-ruler .holo-hud .rul,
+.signin.off-readouts .holo-hud .read, .signin.off-crosshairs .holo-hud .hair, .signin.off-shock .holo-hud .shock { display: none; }
