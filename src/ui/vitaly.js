@@ -1,5 +1,5 @@
 import { $ } from '../util.js';
-import { api, live, onData } from '../data/client.js';
+import { API, api, live, onData } from '../data/client.js';
 import { state } from '../state.js';
 
 /* Vitaly: the voice assistant.
@@ -13,7 +13,8 @@ import { state } from '../state.js';
    Warnings wait 15 s for "I'm OK" before help is called. Follow-up questions go to the AI with
    all live data; actions (call or cancel help, log a countermeasure, note to Earth) need a "yes".
 
-   Voice: Chrome's built-in speech for now. Mic and voice need Chrome; typing always works. */
+   Voice: Deepgram Aura (through the backend, so the key stays there); Chrome's built-in voice if
+   Deepgram isn't set up. Listening needs Chrome; typing always works. */
 
 const WAKE = /\b(?:hey|hi|ok|okay)?\s*(?:vitaly|vitali|vitalie|vitaley|vitality|vitally|vitale|vital e)\b[,.!?]?\s*/i;
 const YES = /\b(yes|yeah|yep|confirm|do it|go ahead|please do|affirmative|correct)\b/i;
@@ -105,8 +106,7 @@ function show(lv = 'calm') {
 
 function close() {
   clearTimeout(closeTimer);
-  speechSynthesis.cancel();
-  speaking = false;
+  hush();
   open = false;
   mode = 'idle';
   pending = null;
@@ -187,7 +187,7 @@ async function announce(inc) {
   show(inc.severity === 'emergency' ? 'emergency' : 'warning');
   mode = 'alert';
   status(inc.title);
-  speechSynthesis.cancel();
+  hush();
   // The checklist is preloaded: speak it at once, no waiting on the AI.
   const tailored = api.vitalyTailor(inc.id).catch(() => null);
   await say(inc.say);
@@ -298,7 +298,7 @@ async function runAction(action) {
   closeSoon();
 }
 
-// ---------- voice out (Chrome speech) ----------
+// ---------- voice out: Deepgram, with Chrome's voice as the fallback ----------
 
 let voice = null;
 function pickVoice() {
@@ -317,32 +317,99 @@ function pickVoice() {
 }
 speechSynthesis.onvoiceschanged = () => { voice = pickVoice(); };
 
-function say(text) {
+let deepgram = null;          // null = not checked yet; true/false from /api/vitaly/status
+let audioEl = null;
+let audioCtx = null;
+let analyser = null;
+let levels = null;
+let speakToken = 0;           // newer speech cancels older
+
+// Stop whatever Vitaly is saying.
+function hush() {
+  speakToken++;
+  speechSynthesis.cancel();
+  if (audioEl) { audioEl.pause(); audioEl.onended = audioEl.onerror = audioEl.onplaying = null; }
+  speaking = false;
+}
+
+async function deepgramReady() {
+  if (deepgram === null) {
+    try { deepgram = (await api.vitalyStatus()).voice === 'deepgram'; } catch (err) { deepgram = false; }
+  }
+  return deepgram;
+}
+
+// The orb follows the real loudness of Deepgram's audio.
+function audioLevel() {
+  if (!analyser || !audioEl || audioEl.paused) return 0;
+  analyser.getByteTimeDomainData(levels);
+  let sum = 0;
+  for (const v of levels) sum += ((v - 128) / 128) ** 2;
+  return Math.sqrt(sum / levels.length);
+}
+
+// Deepgram audio streams from the backend; the audio element starts playing as soon as the first
+// chunk lands (about 0.2 s). Resolves true when it finished, false if it failed (use Chrome's voice).
+function playDeepgram(text, token) {
   return new Promise(resolve => {
-    if (!text) return resolve();
-    $('#vSay').textContent = text;
+    if (!audioEl) {
+      audioEl = new Audio();
+      audioEl.crossOrigin = 'anonymous';  // lets the analyser read the backend's audio
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const src = audioCtx.createMediaElementSource(audioEl);
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 512;
+        levels = new Uint8Array(analyser.fftSize);
+        src.connect(analyser);
+        analyser.connect(audioCtx.destination);
+      } catch (err) { analyser = null; }
+    }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    let started = false;
+    const done = ok => { audioEl.onended = audioEl.onerror = audioEl.onplaying = null; clearTimeout(stall); resolve(ok && token === speakToken); };
+    // If nothing plays within 4 s (network, Deepgram down), give up and use Chrome's voice.
+    const stall = setTimeout(() => { if (!started) { audioEl.pause(); done(false); } }, 4000);
+    audioEl.onplaying = () => { started = true; };
+    audioEl.onended = () => done(true);
+    audioEl.onerror = () => done(started);
+    audioEl.src = `${API}/api/vitaly/tts?text=${encodeURIComponent(text)}`;
+    audioEl.play().catch(() => done(false));  // autoplay blocked before the first click: fall back
+  });
+}
+
+function browserSay(text, token) {
+  return new Promise(resolve => {
     voice = voice || pickVoice();
     const u = new SpeechSynthesisUtterance(text);
     if (voice) u.voice = voice;
     u.rate = 1.0;
     u.pitch = 0.95;
-    speaking = true;
-    const prev = mode;
-    if (mode !== 'alert' && mode !== 'confirm') mode = 'speaking';
     u.onboundary = () => { pulse = Math.min(1, pulse + 0.55); };
-    const done = () => {
-      speaking = false;
-      ignoreUntil = Date.now() + 500;
-      if (mode === 'speaking') mode = prev === 'speaking' ? 'listening' : prev;
-      resolve();
-      setTimeout(checkIncidents, 0);
-    };
+    let finished = false;
+    const done = () => { if (!finished) { finished = true; resolve(); } };
     u.onend = done;
     u.onerror = done;
     speechSynthesis.speak(u);
-    // Safety net: some voices never fire onend.
-    setTimeout(() => { if (speaking) done(); }, 2500 + text.length * 90);
+    setTimeout(() => { if (token === speakToken) done(); }, 2500 + text.length * 90);  // some voices never fire onend
   });
+}
+
+async function say(text) {
+  if (!text) return;
+  $('#vSay').textContent = text;
+  const token = ++speakToken;
+  speaking = true;
+  const prev = mode;
+  if (mode !== 'alert' && mode !== 'confirm') mode = 'speaking';
+  let played = false;
+  if (await deepgramReady() && token === speakToken) played = await playDeepgram(text, token);
+  if (!played && token === speakToken) await browserSay(text, token);
+  if (token !== speakToken) return;  // something newer took over
+  speaking = false;
+  ignoreUntil = Date.now() + 500;
+  if (mode === 'speaking') mode = prev === 'speaking' ? 'listening' : prev;
+  setTimeout(checkIncidents, 0);
 }
 
 // ---------- ears (Chrome speech recognition) ----------
@@ -424,8 +491,9 @@ function startOrb() {
     const col = a => `rgba(${rgb.map(Math.round).join(',')},${a})`;
 
     // Voice energy: decays; while speaking it never drops below a murmur.
-    const live = speaking ? 0.25 + 0.15 * Math.sin(t * 9) : mode === 'thinking' ? 0.15 + 0.1 * Math.sin(t * 4) : 0.05;
-    pulse = Math.max(live, pulse * 0.92);
+    const loud = audioLevel();
+    const base = loud ? Math.min(1, loud * 4) : speaking ? 0.25 + 0.15 * Math.sin(t * 9) : mode === 'thinking' ? 0.15 + 0.1 * Math.sin(t * 4) : 0.05;
+    pulse = Math.max(base, pulse * 0.9);
     const cx = w / 2, cy = h * 0.42, R = Math.min(w, h) * 0.24;
 
     // Outer rings of particles, deformed by the voice.
