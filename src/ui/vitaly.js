@@ -635,7 +635,9 @@ function hearing(id, text, stopped, settle, done) {
   const command = guide && rest.split(/\s+/).length <= 2 && (NEXT.test(rest) || REPEAT.test(rest) || BACK.test(rest) || STOP.test(rest));
   const unfinished = UNFINISHED.test(rest.replace(/[.,!?…]+$/, '')) || rest.length < 2;   // Deepgram adds punctuation
   let wait;
-  if (stopped) wait = command ? 0 : unfinished ? ENDPOINT_UNFINISHED_MS : settle;
+  // A finished sentence ("...today?") that Deepgram also heard end needs almost no extra wait.
+  const sentenceEnd = /[.?!]$/.test(rest) && words(rest).length >= 3;
+  if (stopped) wait = command ? 0 : unfinished ? ENDPOINT_UNFINISHED_MS : sentenceEnd ? Math.min(settle, SETTLE_SENTENCE_MS) : settle;
   else wait = command ? ENDPOINT_COMMAND_MS : unfinished ? ENDPOINT_UNFINISHED_MS : ENDPOINT_MS;
   // The microphone itself is the fastest sign you're still talking: if it was loud a moment ago,
   // hold on (for up to 3 s) and let the next words arrive instead of answering half a sentence.
@@ -696,6 +698,7 @@ registerProcessor('vitaly-tap', VitalyTap);`;
 // "this text is final" also happens mid-sentence, so it gets a little longer.
 const SETTLE_STOPPED_MS = 400;
 const SETTLE_FINAL_MS = 700;
+const SETTLE_SENTENCE_MS = 150;   // ...unless it ends like a finished sentence
 
 async function startDeepgramEars() {
   let stream, ctx;
