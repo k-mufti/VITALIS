@@ -55,7 +55,7 @@ export function initFitbit() {
 
   const poll = () => api.fitbitStatus().then(s => { status = s; fetchedAt = Date.now(); paint(); }).catch(() => {});
   poll();
-  setInterval(poll, 8000);
+  setInterval(poll, 3000);      // the heart rate is replayed at the pace it was measured, so it changes often
   setInterval(paint, 1000);      // ages tick up between polls
   if (note) setTimeout(() => togglePop(true), 600);
 }
@@ -86,7 +86,8 @@ function paint() {
   else if (s.state === 'live') {
     label.textContent = s.device;
     value.textContent = `${Math.round(hr.value)} bpm`;
-    word.textContent = 'live';
+    // Replayed at the pace it was measured, a phone sync behind the watch (backend googlehealth.replay_hr).
+    word.textContent = hr.replay ? `replay · ${minutes(hr.behind_s)} behind` : 'live';
   } else {
     label.textContent = s.device;
     value.textContent = hr ? `last ${minutes(ageNow(hr))} ago` : 'waiting';
@@ -94,7 +95,9 @@ function paint() {
   }
   footer(s);
   // The age is one hover away, not on the chip.
-  btn.title = s.state === 'live' && hr ? `Latest heart-rate reading from the watch: ${minutes(ageNow(hr))} ago` : '';
+  btn.title = s.state === 'live' && hr ? (hr.replay
+    ? `Real readings from the watch, played back at the pace they were measured, ${minutes(hr.behind_s)} behind (the watch uploads through the phone in batches)`
+    : `Latest heart-rate reading from the watch: ${minutes(ageNow(hr))} ago`) : '';
   if (!$('#fbPop').hidden) paintPop();
 }
 

@@ -3,7 +3,7 @@
 Fitbit's own Web API was switched off on 2 November 2026; Google Health API
 (https://developers.google.com/health) replaced it. This module signs in as the owner of the watch
 (Google OAuth, authorization code with PKCE), keeps the tokens in backend/data/fitbit_tokens.json
-(git-ignored), and every 30 seconds fetches the newest readings. The device layer
+(git-ignored), and every 10 seconds fetches the newest readings. The device layer
 (devices/live.py) then uses them in place of the simulated smartwatch readings.
 
 What this is, honestly: near-live, not a live stream. The watch uploads through the phone app,
@@ -25,6 +25,7 @@ Gaps in Google's documentation that this code is written around (verify on the f
 """
 import asyncio
 import base64
+import bisect
 import datetime as dt
 import hashlib
 import json
@@ -47,7 +48,15 @@ SCOPES = [f"{SCOPE_PREFIX}.health_metrics_and_measurements.readonly", f"{SCOPE_P
           f"{SCOPE_PREFIX}.activity_and_fitness.readonly"]       # steps, exercise sessions (an older connection lacks it: connect again)
 
 TOKEN_FILE = Path(__file__).resolve().parents[2] / "data" / "fitbit_tokens.json"
-POLL_S = 30
+POLL_S = 10
+
+# Replay: the watch uploads in batches (each phone sync), so the newest reading would sit still for minutes
+# and then jump. Instead the heart rate is played back at the pace it was measured, a sync-delay behind:
+# when a batch has played out it holds on the last sample, and the next batch carries on from there.
+# Every value shown is a real sample; the app says how far behind it is. Never further behind than still
+# counts as real (MAX_AGE_S below), so a long gap falls back to the simulation as before.
+REPLAY_START_S = 8 * 60            # a fresh start begins this far before the newest sample (about one sync gap)
+REPLAY_MAX_BEHIND_S = 18 * 60      # skip ahead rather than fall further behind than this
 
 # How old a reading may be and still count as "real, now". Heart rate comes all day; the others
 # are measured during sleep, so they describe last night and stay valid for a day and a half.
@@ -67,7 +76,7 @@ STEPS_PAGE = 1500                  # step intervals, newest first (about a day a
 EXERCISE_PAGE = 25                 # Google's maximum for exercise sessions
 BASELINE_KEEP_S = 12 * 3600        # how long observed samples are kept for that
 RESTING_MAX_AGE_S = 4 * 86400      # the watch's own daily resting heart rate may be this old
-_s = {"latest": {}, "recent_hr": [], "hr_seen": {}, "resting": None, "last_ok": None, "last_try": None, "error": None, "errors": {},
+_s = {"latest": {}, "recent_hr": [], "hr_seen": {}, "hr_rows": [], "play": {"lag": None, "held_at": None}, "resting": None, "last_ok": None, "last_try": None, "error": None, "errors": {},
       "needs_reconnect": False, "device": None}
 
 
@@ -112,7 +121,7 @@ def disconnect():
         TOKEN_FILE.unlink()
     except OSError:
         pass
-    _s.update(latest={}, recent_hr=[], hr_seen={}, resting=None, last_ok=None, error=None, errors={}, needs_reconnect=False, device=None)
+    _s.update(latest={}, recent_hr=[], hr_seen={}, hr_rows=[], play={"lag": None, "held_at": None}, resting=None, last_ok=None, error=None, errors={}, needs_reconnect=False, device=None)
 
 
 def login_url():
@@ -393,6 +402,14 @@ async def poll_once(client=None):
             latest[metric] = {"value": round(found[0], 1), "ts": found[1], "kind": kind, "fetched": now}
 
     rows, device = parse_heart_rate(got["hr"], keep=HISTORY_PAGE)
+    seen_before = max(_s["hr_seen"], default=None)
+    if rows and not catching_up and seen_before and rows[0][0] > seen_before:
+        # A sync uploaded more than the newest 30 cover: fetch the whole batch so the replay has no hole.
+        try:
+            more, _ = parse_heart_rate(await list_points(token, "heart-rate", HISTORY_PAGE, client), keep=HISTORY_PAGE)
+            rows = sorted(set(rows) | {r for r in more if r[0] > seen_before}) or rows
+        except Exception:
+            pass
     if catching_up and rows:
         _s["history_at"] = time.time()
     if rows:
@@ -402,6 +419,7 @@ async def poll_once(client=None):
             _s["hr_seen"][ts] = bpm
         for ts in [t for t in _s["hr_seen"] if now - t > BASELINE_KEEP_S]:
             del _s["hr_seen"][ts]
+        _s["hr_rows"] = sorted((t, v) for t, v in _s["hr_seen"].items() if now - t <= MAX_AGE_S["heart_rate"] + 600)
     resting = parse_daily(got["rhr"], "dailyRestingHeartRate", "beatsPerMinute")
     if resting:
         _s["resting"] = {"value": resting[0], "ts": resting[1]}
@@ -450,8 +468,46 @@ async def loop():
 
 # ---------- what the rest of the app sees ----------
 
+def replay_hr(now=None):
+    """The heart-rate sample to show now: (sample time, bpm), played back at the pace it was measured.
+    None if there are no samples. See REPLAY_START_S above."""
+    rows = _s["hr_rows"]
+    if not rows:
+        return None
+    now = now if now is not None else time.time()
+    p = _s["play"]
+    newest = rows[-1][0]
+    if p["lag"] is None:
+        p["lag"] = now - max(rows[0][0], newest - REPLAY_START_S)
+    target = now - p["lag"]
+    # The last batch had played out and a new one has arrived: carry on from where the old one stopped.
+    if p["held_at"] is not None and newest > p["held_at"] and target > p["held_at"]:
+        p["lag"], target = now - p["held_at"], p["held_at"]
+        p["held_at"] = None
+    if now - target > REPLAY_MAX_BEHIND_S:      # too far behind: skip ahead
+        p["lag"] = now - max(rows[0][0], newest - REPLAY_START_S)
+        target, p["held_at"] = now - p["lag"], None
+    if target >= newest:
+        p["held_at"] = newest
+    i = bisect.bisect_right(rows, (target, float("inf"))) - 1
+    return rows[max(0, i)]
+
+
+def _replaying(now):
+    """True when the replay has the samples behind the newest heart-rate reading (and that reading is real)."""
+    r = _s["latest"].get("heart_rate")
+    rows = _s["hr_rows"]
+    return bool(r and rows and rows[-1][0] == r["ts"] and now - r["ts"] <= MAX_AGE_S["heart_rate"])
+
+
 def fresh(metric, now=None):
-    """The newest real reading of this metric if it is recent enough to call real, else None."""
+    """The newest real reading of this metric if it is recent enough to call real, else None.
+    Heart rate is the replayed sample (replay_hr), so it moves at the pace it was measured."""
+    if metric == "heart_rate":
+        now = now if now is not None else time.time()
+        if _replaying(now):
+            ts, bpm = replay_hr(now)
+            return {**_s["latest"]["heart_rate"], "value": round(bpm, 1), "ts": ts, "kind": "replay"}
     r = _s["latest"].get(metric)
     if not r:
         return None
@@ -496,6 +552,10 @@ def report(now=None):
     for metric, r in _s["latest"].items():
         metrics[metric] = {"value": r["value"], "age_s": max(0, round(now - r["ts"])), "kind": r["kind"],
                            "fresh": fresh(metric, now) is not None, "window_s": MAX_AGE_S.get(metric)}
+    if "heart_rate" in metrics and _replaying(now):
+        ts, bpm = replay_hr(now)                 # what is on screen now, and how far behind the watch it is
+        metrics["heart_rate"].update(value=round(bpm, 1), replay=True, behind_s=max(0, round(now - ts)),
+                                     newest_age_s=metrics["heart_rate"]["age_s"], age_s=max(0, round(now - ts)))
     if not configured():
         state = "off"
     elif not connected():

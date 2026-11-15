@@ -140,7 +140,12 @@ async def main():
     assert set(sent) >= {"heart-rate", "heart-rate-variability", "oxygen-saturation", "daily-respiratory-rate", "sleep"}
     assert all(a.startswith("Bearer ACCESSVALUE") for a in sent.values()) and all(c[1] == {"pageSize": c[1]["pageSize"]} for c in calls["api"])
     r = gh.report()
-    assert r["state"] == "live" and r["metrics"]["heart_rate"]["value"] == 76.0 and r["metrics"]["heart_rate"]["fresh"]
+    # Heart rate is replayed at the pace it was measured: it starts at the older sample (70) and reaches the
+    # newest (76) a minute later, when that one was measured a minute after it.
+    hr = r["metrics"]["heart_rate"]
+    assert r["state"] == "live" and hr["value"] == 70.0 and hr["fresh"] and hr["replay"] and hr["behind_s"] >= 240, hr
+    assert gh.report(time.time() + 61)["metrics"]["heart_rate"]["value"] == 76.0
+    gh._s["play"] = {"lag": None, "held_at": None}
     assert r["metrics"]["sleep_hours"]["value"] == 6.9 and r["device"] == "Fitbit Versa 4"
     blob = json.dumps(r)
     assert not any(secret in blob for secret in ("TOPSECRETVALUE", "ACCESSVALUE", "REFRESHVALUE")), "report must never carry a secret"

@@ -171,6 +171,8 @@ ASSUMPTIONS = [
     {"value": "smartwatch", "what": "One consumer-class watch covers heart, oxygen, breathing, sleep, sound level and pulse timing",
      "why": "Watches like this exist and flew for research on short private missions; none is qualified for a Mars trip, "
             "and none reports pulse transit time today."},
+    {"value": "replayed", "what": "The real watch's heart rate is played back at the pace it was measured, a phone sync (minutes) behind",
+     "why": "The watch uploads in batches through the phone. Every value is a real sample; replaying them, labelled with how far behind, is our choice."},
     {"value": "30 s", "what": "How long after a hard knock on the watch Vitaly still asks if you're hurt",
      "why": "Watches detect falls and hard impacts with their motion sensor; the window for asking about it is our choice."},
     {"value": "said once", "what": "Slow risks (bone loss before landing, training too hard) are mentioned once, after the next question",
