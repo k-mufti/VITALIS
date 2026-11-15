@@ -5,7 +5,9 @@ from .engine.physiology import mission_state
 from .sources import donki
 from .state import MOD_LIMITS
 
-EVENTS = ["radiation_storm", "bad_sleep_week", "bp_spike", "skipped_exercise", "cabin_co2", "cabin_leak", "noisy_module", "reset"]
+EVENTS = ["radiation_storm", "bad_sleep_week", "bp_spike", "skipped_exercise", "cabin_co2", "cabin_leak", "noisy_module",
+          "slow_heart", "irregular_rhythm", "cardiac_arrest", "bp_crash",
+          "cabin_overpressure", "fire_smoke", "o2_high", "cabin_hot", "reset"]
 
 
 def trigger(sim, kind):
@@ -37,6 +39,22 @@ def trigger(sim, kind):
         m["pressure_drop_kpa"] += 10.0  # slow leak: pressure and oxygen fall together
     elif kind == "noisy_module":
         m["noise_offset"] += 14.0  # failing fan or pump
+    elif kind == "slow_heart":
+        m["cardiac"] = "brady"
+    elif kind == "irregular_rhythm":
+        m["cardiac"] = "arrhythmia"
+    elif kind == "cardiac_arrest":
+        m["cardiac"] = "arrest"
+    elif kind == "bp_crash":
+        m["bp_drop"] += 46.0
+    elif kind == "cabin_overpressure":
+        m["pressure_rise_kpa"] += 6.0
+    elif kind == "fire_smoke":
+        m["smoke"] = 1.0
+    elif kind == "o2_high":
+        m["o2_boost_kpa"] += 4.5
+    elif kind == "cabin_hot":
+        m["temp_offset_c"] += 8.0
     else:
         return {"ok": False, "error": f"unknown event, use one of {EVENTS}"}
     for key, limit in MOD_LIMITS.items():

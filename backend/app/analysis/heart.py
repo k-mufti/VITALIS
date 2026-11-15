@@ -18,10 +18,12 @@ come from the literature are named in constants.py.
 from .. import constants as C
 from .common import clamp, component, confidence, inputs, vs_baseline
 
-METRICS = ["heart_rate", "hrv", "pulse_transit_ms", "bp_sys", "bp_dia", "hr_recovery_bpm", "stroke_volume_ml"]
+METRICS = ["heart_rate", "hrv", "pulse_transit_ms", "bp_sys", "bp_dia", "hr_recovery_bpm", "stroke_volume_ml", "ecg_irregular"]
 
-WEIGHTS = {"resting_hr": 0.20, "hrv": 0.15, "blood_pressure": 0.20, "pulse_pressure": 0.05,
-           "arterial_stiffness": 0.10, "hr_recovery": 0.20, "cardiac_output": 0.10}
+WEIGHTS = {"resting_hr": 0.18, "hrv": 0.12, "blood_pressure": 0.20, "pulse_pressure": 0.05,
+           "arterial_stiffness": 0.10, "hr_recovery": 0.15, "cardiac_output": 0.10, "rhythm": 0.10}
+# Any of these at its worst is dangerous on its own, whatever the weighted sum says.
+CRITICAL = ("resting_hr", "blood_pressure", "cardiac_output", "rhythm")
 
 # Body-state knobs that push the heart, in plain words.
 DRIVERS = {
@@ -42,6 +44,7 @@ def analyze(reader):
     ptt = reader("pulse_transit_ms")
     hrr = reader("hr_recovery_bpm")
     sv = reader("stroke_volume_ml")
+    irregular = reader("ecg_irregular") >= 0.5
 
     pp = sys_ - dia
     pp_base = B["bp_sys"] - B["bp_dia"]
@@ -50,13 +53,17 @@ def analyze(reader):
     co_base = B["stroke_volume_ml"] * B["heart_rate"] / 1000
 
     parts = [
-        component("resting_hr", "Resting heart rate", hr, "bpm", (hr - B["heart_rate"] - 2) / 15,
-                  f"Resting heart rate {hr:.0f} bpm, {hr - B['heart_rate']:+.0f} from your normal.",
+        component("resting_hr", "Resting heart rate", hr, "bpm",
+                  max((hr - B["heart_rate"] - 2) / 15, (52 - hr) / 12),
+                  ("No heartbeat detected." if hr < 20 else
+                   f"Heart rate {hr:.0f} bpm: too slow." if hr < 45 else
+                   f"Resting heart rate {hr:.0f} bpm, {hr - B['heart_rate']:+.0f} from your normal."),
                   vs_baseline("heart_rate", hr)),
-        component("hrv", "Heart rate variability", hrv, "ms", (-hrv_b["pct"] - 5) / 40,
+        component("hrv", "Heart rate variability", hrv, "ms", 0.0 if irregular else (-hrv_b["pct"] - 5) / 40,
+                  "HRV unreliable during an irregular rhythm." if irregular else
                   f"HRV {hrv:.0f} ms, {hrv_b['pct']:+.0f}% from your normal. Lower means more strain.", hrv_b),
-        component("blood_pressure", "Blood pressure", sys_, "mmHg", (sys_ - 125) / 30,
-                  f"Blood pressure {sys_:.0f}/{dia:.0f}.", vs_baseline("bp_sys", sys_)),
+        component("blood_pressure", "Blood pressure", sys_, "mmHg", max((sys_ - 125) / 30, (100 - sys_) / 30),
+                  f"Blood pressure {sys_:.0f}/{dia:.0f}" + (": too low." if sys_ < 90 else "."), vs_baseline("bp_sys", sys_)),
         component("pulse_pressure", "Pulse pressure", pp, "mmHg", (pp - 50) / 25,
                   f"Pulse pressure {pp:.0f} mmHg (normal for you {pp_base}).",
                   {"baseline": pp_base, "delta": round(pp - pp_base, 1), "pct": round(100 * (pp - pp_base) / pp_base, 1)}),
@@ -68,11 +75,16 @@ def analyze(reader):
                   f"Heart rate drops {hrr:.0f} bpm in the first minute after a workout"
                   + (" (abnormal, 12 or less)." if hrr <= C.HRR_ABNORMAL_BPM else f" (your normal {B['hr_recovery_bpm']})."),
                   vs_baseline("hr_recovery_bpm", hrr)),
-        component("cardiac_output", "Cardiac output", co, "L/min", (-sv_b["pct"] - 5) / 20,
+        component("rhythm", "Heart rhythm", 1.0 if irregular else 0.0, "irregular", 0.7 if irregular else 0.0,
+                  "ECG shows an irregular rhythm (likely atrial fibrillation)." if irregular else "Regular rhythm on the ECG."),
+        component("cardiac_output", "Cardiac output", co, "L/min",
+                  max((-sv_b["pct"] - 5) / 20, (0.8 * co_base - co) / (0.5 * co_base)),
                   f"Heart pumps {sv:.0f} mL a beat ({sv_b['pct']:+.0f}% from preflight), {co:.1f} L a minute.",
                   {"baseline": round(co_base, 2), "delta": round(co - co_base, 2), "stroke_volume": sv_b}),
     ]
-    severity = clamp(sum(WEIGHTS[p["id"]] * p["severity"] for p in parts))
+    weighted = sum(WEIGHTS[p["id"]] * p["severity"] for p in parts)
+    worst_critical = max(p["severity"] for p in parts if p["id"] in CRITICAL)
+    severity = clamp(max(weighted, 0.85 * worst_critical))
     ins = inputs(reader, METRICS)
     conf, reasons = confidence(ins)
 

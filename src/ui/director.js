@@ -14,6 +14,14 @@ const EVENTS = [
   ['cabin_co2', 'Cabin CO2 rise (ship air)'],
   ['cabin_leak', 'Cabin pressure leak (less oxygen)'],
   ['noisy_module', 'Noisy module (failing fan)'],
+  ['slow_heart', 'Heart rate very slow'],
+  ['irregular_rhythm', 'Irregular heart rhythm (AF)'],
+  ['cardiac_arrest', 'Cardiac arrest'],
+  ['bp_crash', 'Blood pressure crash'],
+  ['cabin_overpressure', 'Cabin pressure too high'],
+  ['fire_smoke', 'Smoke / fire'],
+  ['o2_high', 'Cabin oxygen too high'],
+  ['cabin_hot', 'Cabin too hot'],
   ['reset', 'Reset the crew member'],
 ];
 

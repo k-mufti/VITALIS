@@ -7,10 +7,10 @@ export const API = 'http://localhost:8001';
 const WS_URL = 'ws://localhost:8001/ws';
 
 // Latest data from the backend. Views read from here (or from SYS, which is kept in sync).
-export const live = { online: false, state: null, risks: [], vitals: {}, triage: [], previewDay: null };
+export const live = { online: false, state: null, risks: [], vitals: {}, triage: [], incidents: [], previewDay: null };
 
 const listeners = [];
-// fn(type, live). type: 'online' | 'offline' | 'state' | 'vital' | 'triage'
+// fn(type, live). type: 'online' | 'offline' | 'state' | 'vital' | 'triage' | 'incidents'
 export function onData(fn) {
   listeners.push(fn);
 }
@@ -59,6 +59,12 @@ export const api = {
   vitals: () => request('/api/vitals'),
   sources: () => request('/api/sources'),
   provenance: () => request('/api/provenance'),
+  vitalyStatus: () => request('/api/vitaly/status'),
+  vitalyIncidents: () => request('/api/vitaly/incidents'),
+  vitalyAck: id => post(`/api/vitaly/incidents/${id}/ack`, {}),
+  vitalyTailor: id => post(`/api/vitaly/incidents/${id}/tailor`, {}, 12000),
+  vitalyAsk: (question, focus) => post('/api/vitaly/ask', { question, focus }, 15000),
+  vitalyAction: action => post('/api/vitaly/action', action, 15000),
 };
 
 /* One organ, merged from live data and the mock fallback, in the shape the views use.
@@ -183,6 +189,7 @@ function connectSocket() {
     const msg = JSON.parse(e.data);
     if (msg.type === 'state' && live.previewDay === null) applyState(msg.state);
     if (msg.type === 'vital' && live.previewDay === null) applyVital(msg);
+    if (msg.type === 'incidents') { live.incidents = msg.incidents; emit('incidents'); }
   };
   ws.onclose = () => {
     let wait = 30000;
@@ -212,6 +219,7 @@ export async function initData() {
   live.online = true;
   emit('online');
   applyState(await api.state());
+  try { live.incidents = await api.vitalyIncidents(); emit('incidents'); } catch (err) { /* older backend */ }
   connectSocket();
   pollTriage();
   setInterval(pollTriage, 2000);

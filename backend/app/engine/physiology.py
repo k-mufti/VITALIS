@@ -88,6 +88,8 @@ COUNTERMEASURES = {
          "mods": {"missed_exercise_days": -3}, "relief": {"bones": 0.08, "muscles": 0.05}},
     ],
     "heart": [
+        {"id": "stabilise", "label": "Medical officer treats and stabilises the heart", "minutes": 20,
+         "mods": {"cardiac": "", "bp_drop": -60.0}, "relief": {}},
         {"id": "lbnp_30", "label": "30 min lower body negative pressure", "minutes": 30, "mods": {}, "relief": {"heart": 0.12}},
         {"id": "cardio_45", "label": "45 min cycling", "minutes": 45, "research": "Zero T2",
          "mods": {"missed_exercise_days": -1}, "relief": {"heart": 0.06}},
@@ -117,6 +119,10 @@ COUNTERMEASURES = {
     "lungs": [
         {"id": "air_check", "label": "Cabin air check + scrubber reset", "minutes": 15,
          "mods": {"co2_offset": -2.0}, "relief": {"lungs": 0.05}},
+        {"id": "fire_response", "label": "Put out the fire and clear the smoke", "minutes": 20,
+         "mods": {"smoke": -1.0, "temp_offset_c": -15.0}, "relief": {}},
+        {"id": "atmosphere_trim", "label": "Bring cabin pressure, oxygen and temperature back to normal", "minutes": 15,
+         "mods": {"pressure_rise_kpa": -10.0, "o2_boost_kpa": -6.0, "temp_offset_c": -15.0}, "relief": {}},
     ],
 }
 
@@ -272,6 +278,9 @@ def drivers_for(organ, mission_id, day, mods, dose_frac):
 
 def apply_change(mods, relief, cm):
     for key, delta in cm.get("mods", {}).items():
+        if isinstance(delta, str):  # states like the heart rhythm are set, not added
+            mods[key] = delta
+            continue
         mods[key] = max(0.0, mods[key] + delta)
     for key, delta in cm.get("relief", {}).items():
         relief[key] = relief[key] + delta

@@ -1,0 +1,210 @@
+"""Vitaly's watchdog: fixed rules, run every second on the latest good readings.
+
+Three kinds of problem:
+  limit   a reading crosses a safe limit (with per-person limits from the medical profile)
+  spike   a sharp change: heart rate moving 25+ bpm within a minute
+  drift   far from this person's normal: resting heart rate 15+ above baseline
+
+Rules decide; the AI never does. Each detected problem becomes an incident with a preloaded
+checklist (protocols.py). Emergencies call the help crew at once; warnings ask the crew member
+to answer and call help if there is no answer in 15 s. Every call for help also sends a note to
+the flight surgeon on Earth, which arrives after the real comms delay.
+"""
+import time
+
+from .. import constants as C
+from .. import missions as M
+from . import crew, profile, protocols
+
+ESCALATE_AFTER_S = 15
+MANUAL = {"help_requested"}  # opened by voice, closed by voice (not by the rules)
+KEEP_RESOLVED_S = 60
+SPIKE_BPM, SPIKE_WINDOW_S = 25, 60
+DRIFT_BPM = 15
+
+LIMITS = {
+    "hr_arrest": 20, "hr_low": 45, "hr_high": 130,
+    "spo2_low": 90, "bp_low": 90, "bp_high": 150,
+    "pressure_low": 95.0, "pressure_high": 104.5,
+    "o2_low": C.PPO2_RANGE_KPA[0], "o2_high": 23.5,
+    "co2_high": C.CO2_WATCH_MMHG, "smoke": 0.3,
+    "temp_high": 28.0, "temp_low": 17.0, "noise_high": 75.0,
+}
+
+# A more serious problem hides the smaller ones it causes (an arrest also drops blood pressure).
+SUPPRESSES = {
+    "cardiac_arrest": {"slow_heart", "fast_heart", "irregular_rhythm", "heart_spike", "heart_drift", "bp_crash",
+                       "bp_high", "low_oxygen_blood"},
+    "slow_heart": {"heart_spike", "heart_drift"},
+    "irregular_rhythm": {"fast_heart", "heart_spike", "heart_drift"},
+    "bp_crash": {"fast_heart", "heart_spike", "heart_drift"},
+    "fast_heart": {"heart_drift", "heart_spike"},
+    "pressure_low": {"o2_low"},
+    "fire": {"temp_high"},
+}
+
+
+def detect(sim, now):
+    """Problems present right now: {kind: value text}."""
+    r = sim.recent
+    lim = {**LIMITS, **profile.profile(crew.PATIENT_ID).get("limits", {})}
+    found = {}
+
+    hr = r("heart_rate")
+    if hr is not None:
+        sim.hr_trace.append((now, hr))
+        if hr < lim["hr_arrest"]:
+            found["cardiac_arrest"] = "0"
+        elif hr < lim["hr_low"]:
+            found["slow_heart"] = f"{hr:.0f}"
+        elif hr > lim["hr_high"] and (r("ecg_irregular") or 0) < 0.5:
+            found["fast_heart"] = f"{hr:.0f}"
+        recent = [v for t, v in sim.hr_trace if now - t <= SPIKE_WINDOW_S]
+        if len(recent) >= 3 and max(recent) - min(recent) >= SPIKE_BPM:
+            found["heart_spike"] = f"{max(recent) - min(recent):.0f}"
+        if hr - C.BASELINE["heart_rate"] >= DRIFT_BPM:
+            found["heart_drift"] = f"{hr - C.BASELINE['heart_rate']:.0f} beats"
+    if (r("ecg_irregular") or 0) >= 0.5:
+        found["irregular_rhythm"] = f"{hr:.0f}" if hr else "?"
+    spo2 = r("spo2")
+    if spo2 is not None and spo2 < lim["spo2_low"]:
+        found["low_oxygen_blood"] = f"{spo2:.0f}"
+    sys_, dia = r("bp_sys"), r("bp_dia")
+    if sys_ is not None:
+        if sys_ < lim["bp_low"]:
+            found["bp_crash"] = f"{sys_:.0f} over {dia:.0f}"
+        elif sys_ >= lim["bp_high"]:
+            found["bp_high"] = f"{sys_:.0f} over {dia:.0f}"
+
+    p, o2, co2 = r("cabin_pressure_kpa"), r("ppo2_kpa"), r("co2_mmhg")
+    if p is not None:
+        if p < lim["pressure_low"]:
+            found["pressure_low"] = f"{p:.0f}"
+        elif p > lim["pressure_high"]:
+            found["pressure_high"] = f"{p:.0f}"
+    if o2 is not None:
+        if o2 < lim["o2_low"]:
+            found["o2_low"] = f"{o2:.1f}"
+        elif o2 > lim["o2_high"]:
+            found["o2_high"] = f"{o2:.1f}"
+    if co2 is not None and co2 > lim["co2_high"]:
+        found["co2_high"] = f"{co2:.1f}"
+    if (r("smoke_index") or 0) > lim["smoke"]:
+        found["fire"] = "smoke"
+    t = r("cabin_temp_c")
+    if t is not None:
+        if t > lim["temp_high"]:
+            found["temp_high"] = f"{t:.0f}"
+        elif t < lim["temp_low"]:
+            found["temp_low"] = f"{t:.0f}"
+    noise = r("noise_dba")
+    if noise is not None and noise > lim["noise_high"]:
+        found["noise_high"] = f"{noise:.0f}"
+    if sim.storm:
+        found["radiation_storm"] = "storm"
+
+    hidden = set()
+    for kind in found:
+        hidden |= SUPPRESSES.get(kind, set())
+    return {k: v for k, v in found.items() if k not in hidden}
+
+
+def severity_for(kind):
+    return profile.profile(crew.PATIENT_ID).get("escalate", {}).get(kind, protocols.PROTOCOLS[kind]["severity"])
+
+
+def tick(sim, now=None):
+    """Run the rules once. Returns True if the incident list changed (so the server pushes it)."""
+    now = now or time.time()
+    found = detect(sim, now)
+    changed = False
+    open_by_kind = {i["kind"]: i for i in sim.incidents if i["state"] == "open"}
+
+    for kind, value in found.items():
+        if kind in open_by_kind:
+            if open_by_kind[kind]["value"] != value:
+                open_by_kind[kind]["value"] = value
+            continue
+        sim.incidents.append(new_incident(sim, kind, value, now))
+        changed = True
+
+    for kind, inc in open_by_kind.items():
+        if kind not in found and kind not in MANUAL:
+            inc["state"], inc["resolved_at"] = "resolved", now
+            changed = True
+
+    for inc in sim.incidents:
+        if (inc["state"] == "open" and inc["escalate_at"] and not inc["acked"] and not inc["help"]
+                and now >= inc["escalate_at"]):
+            call_help(sim, inc, now, reason="no answer in 15 s")
+            changed = True
+
+    before = len(sim.incidents)
+    sim.incidents = [i for i in sim.incidents if i["state"] == "open" or now - i["resolved_at"] < KEEP_RESOLVED_S]
+    return changed or len(sim.incidents) != before
+
+
+def new_incident(sim, kind, value, now):
+    p = protocols.PROTOCOLS[kind]
+    sim.incident_seq += 1
+    sev = severity_for(kind)
+    who = profile.profile(crew.PATIENT_ID)["name"]
+    inc = {
+        "id": sim.incident_seq, "kind": kind, "title": p["title"], "severity": sev, "value": value,
+        "say": protocols.spoken(kind, value, who), "steps": p["steps"],
+        "created": now, "state": "open", "resolved_at": None,
+        "acked": False, "escalate_at": None, "help": None, "earth": None, "tailored": None,
+    }
+    help_now = p["help"] == "now" or (sev == "emergency" and p["help"] == "if_no_answer")
+    if help_now:
+        call_help(sim, inc, now, reason="emergency")
+    elif p["help"] == "if_no_answer":
+        inc["escalate_at"] = now + ESCALATE_AFTER_S
+    return inc
+
+
+def call_help(sim, inc, now, reason):
+    team = crew.dispatch(need_commander=protocols.PROTOCOLS[inc["kind"]]["ship"])
+    inc["help"] = {**team, "called_at": now, "reason": reason}
+    send_to_earth(sim, inc, now, f"{inc['title']} for Crew {crew.PATIENT_ID}: {inc['value']}. Help crew called ({reason}).")
+
+
+def send_to_earth(sim, inc, now, text):
+    delay_min = M.environment(sim.mission, sim.day)["comms_delay_min"]
+    inc["earth"] = {"text": text, "sent_at": now, "delay_min": round(delay_min, 1), "arrives_at": now + delay_min * 60}
+
+
+def acknowledge(sim, incident_id):
+    """The crew member said "I'm OK": stop the 15 s countdown."""
+    inc = find(sim, incident_id)
+    if inc:
+        inc["acked"] = True
+        inc["escalate_at"] = None
+    return inc
+
+
+def cancel_help(sim, incident_id):
+    inc = find(sim, incident_id)
+    if inc and inc["help"]:
+        inc["help"]["cancelled"] = True
+        inc["acked"] = True
+    if inc and inc["kind"] in MANUAL:
+        inc["state"], inc["resolved_at"] = "resolved", time.time()
+    return inc
+
+
+def request_help(sim, now=None):
+    """The crew member asked for help by voice."""
+    now = now or time.time()
+    inc = new_incident(sim, "help_requested", "by voice", now)
+    sim.incidents.append(inc)
+    return inc
+
+
+def find(sim, incident_id):
+    return next((i for i in sim.incidents if i["id"] == incident_id), None)
+
+
+def active(sim):
+    order = {"emergency": 0, "warning": 1}
+    return sorted(sim.incidents, key=lambda i: (i["state"] != "open", order.get(i["severity"], 2), -i["created"]))

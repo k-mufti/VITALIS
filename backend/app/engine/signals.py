@@ -45,13 +45,28 @@ def value(metric, mods, relief, mission_id, day, storm=False):
     rest_hr = (B["heart_rate"] + 5 * m["sleep_debt"] + 0.25 * m["bp_offset"] + 4 * m["stress"]
                + 3.0 * hypoxia + 1.5 * high_co2)
 
+    cardiac = m.get("cardiac", "")
     if metric == "heart_rate":
-        return rest_hr
+        if cardiac == "arrest":
+            return 0.0
+        if cardiac == "brady":
+            return 38.0
+        if cardiac == "arrhythmia":
+            return 118.0  # atrial fibrillation with a fast, irregular rate
+        return rest_hr + 0.3 * m.get("bp_drop", 0.0)  # heart speeds up to hold pressure
+    if metric == "ecg_irregular":
+        return 1.0 if cardiac == "arrhythmia" else 0.0
     if metric == "hrv":
+        if cardiac == "arrest":
+            return 0.0
+        if cardiac == "arrhythmia":
+            return 140.0  # irregular beats make beat-to-beat variation huge (not a good sign here)
         return B["hrv"] - 6 * m["sleep_debt"] - 5 * m["stress"]
     if metric == "spo2":
+        if cardiac == "arrest":
+            return 70.0  # no circulation: the fingertip sensor reads falling, unreliable oxygen
         # ASSUMPTION: blood oxygen falls about 1.5 points per kPa of oxygen below the safe floor.
-        return B["spo2"] - 0.2 * high_co2 - 1.5 * hypoxia
+        return B["spo2"] - 0.2 * high_co2 - 1.5 * hypoxia - 6.0 * m.get("smoke", 0.0)
     if metric == "resp_rate":
         return B["resp_rate"] + 0.05 * m["bp_offset"] + m["stress"] + 0.6 * high_co2 + 0.5 * hypoxia
     if metric == "skin_temp":
@@ -64,9 +79,13 @@ def value(metric, mods, relief, mission_id, day, storm=False):
     if metric == "glucose":
         return B["glucose"] + 8 * m["stress"]
     if metric == "bp_sys":
-        return B["bp_sys"] + m["bp_offset"]
+        if cardiac == "arrest":
+            return 0.0
+        return B["bp_sys"] + m["bp_offset"] - m.get("bp_drop", 0.0)
     if metric == "bp_dia":
-        return B["bp_dia"] + 0.5 * m["bp_offset"]
+        if cardiac == "arrest":
+            return 0.0
+        return B["bp_dia"] + 0.5 * m["bp_offset"] - 0.6 * m.get("bp_drop", 0.0)
     if metric == "onsd_mm":
         return onsd_mm(mission_id, day, relief)
     if metric == "stroke_volume_ml":
@@ -97,6 +116,10 @@ def value(metric, mods, relief, mission_id, day, storm=False):
         return cabin_pressure(m)
     if metric == "ppo2_kpa":
         return ppo2(m)
+    if metric == "cabin_temp_c":
+        return C.CABIN_TEMP_C + m.get("temp_offset_c", 0.0) + 4.0 * m.get("smoke", 0.0)
+    if metric == "smoke_index":
+        return m.get("smoke", 0.0)
     if metric == "noise_dba":
         return C.NOISE_BASELINE_DBA + m.get("noise_offset", 0.0)
     if metric == "hearing_shift_db":
@@ -123,12 +146,12 @@ def cabin_co2(mods):
 
 
 def cabin_pressure(mods):
-    return C.CABIN_PRESSURE_KPA - mods.get("pressure_drop_kpa", 0.0)
+    return C.CABIN_PRESSURE_KPA - mods.get("pressure_drop_kpa", 0.0) + mods.get("pressure_rise_kpa", 0.0)
 
 
 def ppo2(mods):
     """Oxygen partial pressure: what the lungs actually get. Falls with cabin pressure."""
-    return cabin_pressure(mods) * C.O2_FRACTION
+    return cabin_pressure(mods) * C.O2_FRACTION + mods.get("o2_boost_kpa", 0.0)
 
 
 def session_minutes(missed):
