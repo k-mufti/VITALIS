@@ -55,7 +55,8 @@ POLL_S = 10
 # when a batch has played out it holds on the last sample, and the next batch carries on from there.
 # Every value shown is a real sample; the app says how far behind it is. Never further behind than still
 # counts as real (MAX_AGE_S below), so a long gap falls back to the simulation as before.
-REPLAY_START_S = 8 * 60            # a fresh start begins this far before the newest sample (about one sync gap)
+REPLAY_START_S = 3 * 60            # a fresh start begins this far before the newest sample
+REPLAY_BUFFER_S = 3 * 60           # never play more than this far behind the newest sample: skip ahead instead
 REPLAY_MAX_BEHIND_S = 18 * 60      # skip ahead rather than fall further behind than this
 
 # How old a reading may be and still count as "real, now". Heart rate comes all day; the others
@@ -484,7 +485,9 @@ def replay_hr(now=None):
     if p["held_at"] is not None and newest > p["held_at"] and target > p["held_at"]:
         p["lag"], target = now - p["held_at"], p["held_at"]
         p["held_at"] = None
-    if now - target > REPLAY_MAX_BEHIND_S:      # too far behind: skip ahead
+    # Waiting out long sync gaps adds up; once the playback trails the newest sample by more than the
+    # buffer, skip ahead, so it is only ever about one phone sync behind the watch.
+    if newest - target > REPLAY_BUFFER_S or now - target > REPLAY_MAX_BEHIND_S:
         p["lag"] = now - max(rows[0][0], newest - REPLAY_START_S)
         target, p["held_at"] = now - p["lag"], None
     if target >= newest:

@@ -87,7 +87,7 @@ function paint() {
     label.textContent = s.device;
     value.textContent = `${Math.round(hr.value)} bpm`;
     // Replayed at the pace it was measured, a phone sync behind the watch (backend googlehealth.replay_hr).
-    word.textContent = hr.replay ? `replay · ${minutes(hr.behind_s)} behind` : 'live';
+    word.textContent = hr.replay ? '' : 'live';   // replayed readings: how far behind is in the hover text, not on the chip
   } else {
     label.textContent = s.device;
     value.textContent = hr ? `last ${minutes(ageNow(hr))} ago` : 'waiting';
