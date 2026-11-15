@@ -74,12 +74,26 @@ cases = [
     ("I cut my arm and it's bleeding", "bleeding", "self"),
     ("I feel dizzy", "fainting", "self"),
     ("he hit his head", "head_injury", "other"),
+    ("my crewmate Amir is foaming at the mouth", "seizure", "other"),
+    ("my crewmate is bleeding from a deep cut in the arm", "bleeding", "other"),
+    ("her face is swelling and her throat is closing", "allergy", "other"),
+    ("his face is drooping and his speech is slurred", "stroke", "other"),
+    ("she swallowed some coolant", "poisoning", "other"),
+    ("I think I broke my wrist", "fracture", "self"),
+    ("he got something in his eye", "eye", "other"),
+    ("she keeps throwing up", "vomiting", "other"),
+    ("I'm having a panic attack", "panic", "self"),
+    ("something is wrong with Kenji", "assess", "other"),
 ]
 for text, gid, person in cases:
     g = guides.match(text)
     assert g and g["id"] == gid and g["who"] == person, (text, g and (g["id"], g["who"]))
     assert len(g["steps"]) >= 4 and g["say"]
 assert guides.match("how is my heart") is None
+for benign in ("what is wrong with my heart", "am I healthy enough to land", "why do I feel so tired", "I can't see my readings",
+               "is the cabin air okay", "how much radiation have I had", "what should I do", "is anything wrong",
+               "I did sixty minutes on the treadmill, log it", "tell earth that I feel fine", "next", "repeat that"):
+    assert guides.match(benign) is None, (benign, guides.match(benign)["id"])
 assert guides.match("I don't have any pain") is None
 
 # ask(): a symptom returns the whole guide at once (the browser then steps through it with no server calls)

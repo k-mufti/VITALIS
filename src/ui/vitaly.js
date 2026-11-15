@@ -284,7 +284,14 @@ async function heard(text) {
 
   if (mode === 'confirm' && pending) {
     if (YES.test(text)) return runAction(pending);
-    if (NO.test(text)) { pending = null; $('#vConfirm').hidden = true; mode = 'listening'; await say('Okay, I won\'t.'); return closeSoon(); }
+    if (NO.test(text)) {
+      pending = null;
+      $('#vConfirm').hidden = true;
+      mode = 'listening';
+      await say('Okay, I won\'t.');
+      if (guide) { mode = 'alert'; return paintGuide(); }
+      return closeSoon();
+    }
   }
   // In a guide, short replies drive the steps. A new symptom or a real question still gets through.
   if (guide && text.split(/\s+/).length <= 5 && (STOP.test(text) || REPEAT.test(text) || BACK.test(text) || NEXT.test(text))) {
@@ -304,6 +311,7 @@ async function heard(text) {
     pending = r.action;
     mode = 'confirm';
     $('#vConfirm').hidden = false;
+    $('#vBar').hidden = true;
     status('Say yes or no');
     await say(r.say);
     return;
@@ -334,6 +342,7 @@ async function runAction(action) {
   } catch (err) {
     await say('That didn\'t go through. Try again.');
   }
+  if (guide) { mode = 'alert'; return paintGuide(); }   // back to the guide in progress
   mode = 'listening';
   status(ears ? 'Listening' : 'Type your question');
   closeSoon();
@@ -367,6 +376,8 @@ let speakToken = 0;           // newer speech cancels older
 
 // Stop whatever Vitaly is saying.
 let stopPlaying = null;      // ends the line being played, so whoever awaits it carries on
+let playSeq = 0;             // which line owns the audio element
+let lastSaid = '';           // recent speech, to recognise our own voice in the microphone
 
 function hush() {
   speakToken++;
@@ -410,16 +421,35 @@ function playDeepgram(text, token) {
       } catch (err) { analyser = null; }
     }
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    // Each line owns the audio element only while it is the newest. A line that was interrupted
+    // must not touch the handlers of the line that replaced it (its late cleanup used to wipe the
+    // new line's "started" marker, so 4 s later Chrome's voice re-read the line).
+    const id = ++playSeq;
     let started = false;
-    const done = ok => { audioEl.onended = audioEl.onerror = audioEl.onplaying = null; clearTimeout(stall); stopPlaying = null; resolve(ok && token === speakToken); };
+    let finished = false;
+    const done = ok => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(stall);
+      if (playSeq === id) {
+        audioEl.onended = audioEl.onerror = audioEl.onplaying = null;
+        stopPlaying = null;
+      }
+      resolve(ok && token === speakToken);
+    };
     stopPlaying = () => done(false);
-    // If nothing plays within 4 s (network, Deepgram down), give up and use Chrome's voice.
-    const stall = setTimeout(() => { if (!started) { audioEl.pause(); done(false); } }, 4000);
+    // If nothing plays within 5 s (network, Deepgram down), give up and use Chrome's voice.
+    const stall = setTimeout(() => {
+      if (started || (playSeq === id && audioEl.currentTime > 0)) return;
+      if (playSeq === id) audioEl.pause();
+      done(false);
+    }, 5000);
     audioEl.onplaying = () => { started = true; };
     audioEl.onended = () => done(true);
     audioEl.onerror = () => done(started);
     audioEl.src = `${API}/api/vitaly/tts?text=${encodeURIComponent(text)}`;
-    audioEl.play().catch(() => done(false));  // autoplay blocked before the first click: fall back
+    // play() rejects if autoplay is blocked (fall back) or if a newer line replaced this one (ignore).
+    audioEl.play().catch(() => { if (playSeq === id) done(false); });
   });
 }
 
@@ -443,6 +473,7 @@ function browserSay(text, token) {
 async function say(text) {
   if (!text) return;
   $('#vSay').textContent = text;
+  lastSaid = (lastSaid + ' ' + text).slice(-600);
   const token = ++speakToken;
   speechSynthesis.cancel();          // a new line replaces whatever was being said
   if (stopPlaying) stopPlaying();
@@ -454,7 +485,10 @@ async function say(text) {
   if (!played && token === speakToken) await browserSay(text, token);
   if (token !== speakToken) return;  // something newer took over
   speaking = false;
-  ignoreUntil = Date.now() + 500;
+  // The recogniser lags about a second behind the room, so it is still chewing on Vitaly's own
+  // voice. Throw that away: restart it, and stay deaf for a moment.
+  ignoreUntil = Date.now() + 900;
+  if (ears) { try { ears.abort(); } catch (err) { /* restarts itself */ } }
   if (mode === 'speaking') mode = prev === 'speaking' ? 'listening' : prev;
   setTimeout(checkIncidents, 0);
 }
@@ -475,27 +509,36 @@ function startEars() {
   let handled = -1;          // index of the last result already acted on
   let endTimer = null;
   let yesTimer = null;
+  const words = t => t.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+  // True if what the mic picked up is Vitaly's own recent speech (4+ words found in order).
+  const isEcho = text => {
+    const w = words(text);
+    return w.length >= 4 && words(lastSaid).join(' ').includes(w.join(' '));
+  };
   const finish = (index, text) => {
     clearTimeout(endTimer);
     if (index <= handled) return;
     handled = index;
     const q = text.replace(WAKE, '').trim();
-    if (q.length > 1) { clearTimeout(yesTimer); heard(q); }
+    if (q.length > 1 && !isEcho(q)) { clearTimeout(yesTimer); heard(q); }
   };
+  rec.onstart = () => { handled = -1; };   // result numbering restarts with every session
   rec.onresult = e => {
     if (speaking || Date.now() < ignoreUntil) return;
     const index = e.results.length - 1;
     if (index <= handled) return;
     const res = e.results[index];
     const text = res[0].transcript.trim();
-    if (!text) return;
+    if (!text || isEcho(text)) return;
+    const rest = text.replace(WAKE, '').trim();
     if (!open || mode === 'idle') {
       if (!WAKE.test(text)) return;
       summon();
-      // "Hey Vitaly" alone: answer "Yes?" unless a question follows right away.
+      // "Hey Vitaly" alone: answer "Yes?" after a pause. Any further words cancel it (below).
       clearTimeout(yesTimer);
-      yesTimer = setTimeout(() => { if (mode === 'listening' && !speaking) say('Yes?'); }, 700);
+      yesTimer = setTimeout(() => { if (mode === 'listening' && !speaking) say('Yes?'); }, 1100);
     }
+    if (rest.length > 1) clearTimeout(yesTimer);   // they're still talking: don't interrupt
     $('#vHeard').textContent = `“${text}”`;
     if (res.isFinal) return finish(index, text);
     clearTimeout(endTimer);
