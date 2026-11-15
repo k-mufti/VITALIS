@@ -1194,3 +1194,24 @@ function startOrb() {
   };
   requestAnimationFrame(frame);
 }
+
+// ---------- public TTS helper ----------
+// Speaks text using Vitaly's voice stack (Deepgram → Chrome fallback) without touching any
+// Vitaly panel state. Safe to call from any module that needs the AI voice (e.g. injury alerts).
+export async function speakText(text) {
+  if (!text) return;
+  const token = ++speakToken;
+  speechSynthesis.cancel();
+  if (stopPlaying) stopPlaying();
+  let played = false;
+  if (await deepgramReady() && token === speakToken) {
+    played = await playDeepgram(text, token);
+    if (!played && token === speakToken) {
+      await pause(800);
+      if (token === speakToken) played = await playDeepgram(text, token);
+    }
+  }
+  if (!played && token === speakToken) {
+    await browserSay(text, token);
+  }
+}

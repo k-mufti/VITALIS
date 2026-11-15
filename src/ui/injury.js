@@ -2,6 +2,7 @@ import { $, $$ } from '../util.js';
 import { showInjury, clearInjury } from '../three/api.js';
 import { organ, commsDelayMin, missionInfo } from '../data/client.js';
 import { BODY, GENERAL, COMMON, matchInjury } from './injury-library.js';
+import { speakText } from './vitaly.js';
 
 /* Injury drill. The judges name an injury; we pick where it is on a hidden panel and type
    the name. The body then zooms in step by step (area, part, spot), lights only that spot,
@@ -229,10 +230,8 @@ function openAlert(path, name, inj, opts = {}) {
     b.innerHTML = `Sent to ground${delay ? `<small>Reply in about ${delay * 2} min</small>` : ''}`;
   });
   $('#injSay').addEventListener('click', () => {
-    if (!('speechSynthesis' in window)) return;
-    speechSynthesis.cancel();
     const text = [`${title}. ${placeName(path)}.`, ...inj.steps.map((s, i) => `Step ${i + 1}. ${s}`)].join(' ');
-    speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+    speakText(text);
   });
   $('#injDone').addEventListener('click', () => closeAlert());
 
