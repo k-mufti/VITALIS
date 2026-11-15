@@ -85,6 +85,10 @@ NOISE_BASELINE_DBA = 64
 # Hearing test: a 10 dB average worsening at 2, 3 and 4 kHz is a "standard threshold shift" (OSHA).
 HEARING_SHIFT_DB = 10
 
+# Cabin temperature. ISS keeps the cabin roughly 18-27 C (approx.).
+CABIN_TEMP_C = 22.5
+CABIN_TEMP_RANGE_C = (18.0, 27.0)
+
 # ASSUMPTION: during a solar particle event the unshielded dose rate is ~50x background, and the
 # storm shelter (water and supplies packed around the crew) cuts that to about a quarter.
 STORM_RATE_X_BACKGROUND = 50
@@ -113,4 +117,7 @@ BASELINE = {
     "noise_dba": NOISE_BASELINE_DBA,
     "hearing_shift_db": 0,
     "motion_sickness_0to10": 0,
+    "ecg_irregular": 0,
+    "cabin_temp_c": CABIN_TEMP_C,
+    "smoke_index": 0,
 }

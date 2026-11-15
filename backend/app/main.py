@@ -11,6 +11,7 @@ Run from backend/:  uvicorn app.main:app --reload --port 8001
 """
 import asyncio
 import contextlib
+import time
 
 from dotenv import load_dotenv
 
@@ -28,6 +29,7 @@ from .analysis import radiation as radiation_analysis  # noqa: E402
 from .analysis import training as training_analysis  # noqa: E402
 from .analysis.common import Reader  # noqa: E402
 from .devices import catalog  # noqa: E402
+from .vitaly import brain, watchdog  # noqa: E402
 from .devices.simulated import DEVICES  # noqa: E402
 from .engine.physiology import COUNTERMEASURES, apply_change, mission_state  # noqa: E402
 from .sources import donki, horizons, noaa  # noqa: E402
@@ -74,6 +76,8 @@ async def sim_loop():
                 sim.record(v)
                 vitals.append(v)
         sim.measure_now = False
+        if watchdog.tick(sim) and clients:
+            await broadcast({"type": "incidents", "incidents": watchdog.active(sim)})
         if clients:
             for v in vitals:
                 if v["quality"] == "good":  # flagged readings are counted, not shown
@@ -177,7 +181,9 @@ async def post_countermeasure(body: CountermeasureIn):
             sim.fresh_readings(DEVICES)
             state = mission_state(sim)
             triage.update(sim, state)
+            watchdog.tick(sim)
             await broadcast({"type": "state", "state": state})
+            await push_incidents()
             return {"ok": True, "before": before, "after": state["organs"][body.organ]}
     raise HTTPException(status_code=404, detail="unknown organ or countermeasure id")
 
@@ -198,11 +204,13 @@ async def post_director_event(body: EventIn):
     result = director.trigger(sim, body.type)
     if not result["ok"]:
         raise HTTPException(status_code=400, detail=result["error"])
-    # Unscheduled check on every device, then push the new state right away.
+    # Unscheduled check on every device, then push the new state and alerts right away.
     sim.fresh_readings(DEVICES)
     state = mission_state(sim)
     triage.update(sim, state)
+    watchdog.tick(sim)
     await broadcast({"type": "state", "state": state})
+    await push_incidents()
     return result
 
 
@@ -282,6 +290,93 @@ def get_analysis():
 @app.get("/api/analysis/{system}")
 def get_analysis_system(system: str):
     return _analysis(system)
+
+
+# ---------- Vitaly: watchdog incidents, AI answers, voice actions ----------
+
+class VitalyAsk(BaseModel):
+    question: str
+    focus: str | None = None
+
+
+class VitalyAction(BaseModel):
+    type: str
+    incident_id: int | None = None
+    organ: str | None = None
+    id: str | None = None
+    text: str | None = None
+
+
+async def push_incidents():
+    await broadcast({"type": "incidents", "incidents": watchdog.active(sim)})
+
+
+@app.get("/api/vitaly/status")
+def vitaly_status():
+    return brain.status()
+
+
+@app.get("/api/vitaly/incidents")
+def vitaly_incidents():
+    return watchdog.active(sim)
+
+
+@app.post("/api/vitaly/incidents/{incident_id}/ack")
+async def vitaly_ack(incident_id: int):
+    """"I'm OK": stops the 15 s countdown before help is called."""
+    inc = watchdog.acknowledge(sim, incident_id)
+    if not inc:
+        raise HTTPException(status_code=404, detail="no such incident")
+    await push_incidents()
+    return inc
+
+
+@app.post("/api/vitaly/incidents/{incident_id}/tailor")
+async def vitaly_tailor(incident_id: int):
+    """One personal line from the AI to follow the preloaded checklist (cached per incident)."""
+    inc = watchdog.find(sim, incident_id)
+    if not inc:
+        raise HTTPException(status_code=404, detail="no such incident")
+    if not inc["tailored"]:
+        inc["tailored"] = await brain.tailor(inc, mission_state(sim), sim)
+    return inc["tailored"]
+
+
+@app.post("/api/vitaly/ask")
+async def vitaly_ask(body: VitalyAsk):
+    return await brain.ask(body.question[:500], mission_state(sim), sim, body.focus)
+
+
+@app.post("/api/vitaly/action")
+async def vitaly_action(body: VitalyAction):
+    """Runs an action the crew member confirmed by voice."""
+    if body.type == "call_help":
+        inc = watchdog.find(sim, body.incident_id) if body.incident_id else None
+        if inc and not inc["help"]:
+            watchdog.call_help(sim, inc, time.time(), reason="asked by voice")
+        elif not inc:
+            inc = watchdog.request_help(sim)
+        await push_incidents()
+        return {"ok": True, "incident": inc}
+    if body.type == "cancel_help":
+        open_with_help = [i for i in sim.incidents if i["state"] == "open" and i["help"]]
+        inc = watchdog.find(sim, body.incident_id) if body.incident_id else (open_with_help[-1] if open_with_help else None)
+        if not inc:
+            raise HTTPException(status_code=404, detail="no help call to cancel")
+        watchdog.cancel_help(sim, inc["id"])
+        await push_incidents()
+        return {"ok": True, "incident": inc}
+    if body.type == "log_countermeasure":
+        return await post_countermeasure(CountermeasureIn(organ=body.organ or "", id=body.id or ""))
+    if body.type == "note_earth":
+        text = (body.text or "").strip()[:500]
+        if not text:
+            raise HTTPException(status_code=400, detail="empty note")
+        delay = M.environment(sim.mission, sim.day)["comms_delay_min"]
+        note = {"text": text, "delay_min": round(delay, 1), "sent_at": time.time()}
+        sim.events.insert(0, "note_earth")
+        return {"ok": True, "note": note}
+    raise HTTPException(status_code=400, detail=f"unknown action, use one of {list(brain.ACTIONS)}")
 
 
 @app.get("/api/hrp")

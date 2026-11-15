@@ -40,7 +40,7 @@ assert training.analyze(reader())["recovery"] < 50
 sim.reset()
 h = heart.analyze(reader())
 ids = {p["id"] for p in h["derived"]}
-assert ids == {"resting_hr", "hrv", "blood_pressure", "pulse_pressure", "arterial_stiffness", "hr_recovery", "cardiac_output"}
+assert ids == {"resting_hr", "hrv", "blood_pressure", "pulse_pressure", "arterial_stiffness", "hr_recovery", "cardiac_output", "rhythm"}
 assert abs(sum(heart.WEIGHTS.values()) - 1) < 1e-9
 assert h["value"] == 64 and h["chain"], h
 # A blood pressure spike raises the score and shows up as stiffer arteries (shorter pulse transit)
@@ -84,5 +84,9 @@ assert "cabin CO2" in lungs["note"] and any("CO2" in d for d in lungs["drivers"]
 apply_change(sim.mods, sim.relief, COUNTERMEASURES["lungs"][0])
 assert sim.mods["co2_offset"] == 0
 
+# Dangerously low values count too: a cardiac arrest is Act, not OK
+sim.reset()
+director.trigger(sim, "cardiac_arrest")
+assert heart.analyze(reader())["severity"] >= 0.66
 sim.reset()
 print("analysis checks passed")

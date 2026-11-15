@@ -105,11 +105,34 @@ Every organ state has `checks`, built by `analysis/checks.py`. Each check has:
 
 Sources include the AHA blood pressure guideline, Cole 1999 (heart-rate recovery), WHO pulse oximetry, NIOSH and OSHA (noise, hearing), the ISS atmosphere spec, AASM (sleep) and Gabbett 2016 (training load). Where no universal norm exists (HRV, muscle thickness), the reference is the crew member's own preflight value. Ranges marked `approx` (CO2 target, ISS pressure and O2 band, stroke volume, nerve sheath cutoff) should be checked against the primary source before quoting.
 
-## 8. API
+## 8. Vitaly (voice assistant, `app/vitaly/`)
+
+- **Summon:** say "Hey Vitaly" (Chrome speech recognition) or press **T**. The screen switches to a pulsing orb: teal calm, amber warning, red emergency.
+- **Watchdog** (`watchdog.py`): fixed rules, every second, on the latest good readings. It catches:
+  - limit crossings: heart rate, blood oxygen, blood pressure, cabin pressure, O2, CO2, temperature, smoke, noise, solar storm
+  - sharp spikes: heart rate changing 25+ bpm within 60 s
+  - drift: resting heart rate 15+ above baseline
+
+  A serious problem hides the side effects it causes (an arrest doesn't also raise "low blood pressure").
+- **Medical profile** (`profile.py`): Crew 03 has a history of paroxysmal AF, so an irregular rhythm is an emergency and the fast-heart-rate limit is 120.
+- **Checklists** (`protocols.py`): preloaded and spoken the instant an alert fires.
+  - **Emergencies** call the help crew at once.
+  - **Warnings** wait 15 s for "I'm OK", then call help.
+  - Every help call notifies the Earth flight surgeon with the real comms delay.
+- **Crew** (`crew.py`): five simulated crew with roles and locations. Help means the medical officer, the nearest crew member, and the commander for ship emergencies, with ETAs.
+- **AI** (`brain.py`): one cheap OpenRouter model (default Mistral Nemo, Llama 3.1 8B as backup, about $0.00003 per answer).
+  - It writes one tailored line per alert and answers follow-up questions from a compact live-data snapshot.
+  - Voice commands (log, call or cancel help, note to Earth) are matched by rules first, and run only after a spoken "yes".
+  - AI lines that claim help is coming when it isn't, or that skip a known heart condition on a heart alert, are rejected and replaced by a rule-written line.
+  - Without a key or network, everything falls back to rules.
+- `eval_vitaly.py` compares models on real questions. `test_vitaly.py` covers the rules.
+
+## 9. API
 
 - `GET /api/analysis`: all three pipelines, layer by layer.
 - `GET /api/analysis/{heart|muscles|radiation}`: one pipeline.
 - `GET /api/vitals`: latest good readings, the device list and what cannot be measured in flight.
 - `GET /api/state`: the full mission state; heart and muscles include their `analysis` block.
+- `GET /api/vitaly/incidents`, `POST /api/vitaly/incidents/{id}/ack`, `POST /api/vitaly/incidents/{id}/tailor`, `POST /api/vitaly/ask`, `POST /api/vitaly/action`, `GET /api/vitaly/status`: the Vitaly assistant.
 
 Tests: `test_analysis.py`, `test_devices.py`, `test_engine.py`.

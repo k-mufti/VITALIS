@@ -1,0 +1,502 @@
+import { $ } from '../util.js';
+import { api, live, onData } from '../data/client.js';
+import { state } from '../state.js';
+
+/* Vitaly: the voice assistant.
+
+   Summon: say "Hey Vitaly" (Chrome speech recognition), or press T if the wake word misses.
+   The screen switches to a pulsing orb with the body dimmed behind it; the orb is teal when
+   calm, amber for a warning, red for an emergency, and pulses with Vitaly's voice.
+
+   Alerts come from the backend watchdog (fixed rules), not the AI. When one fires, Vitaly takes
+   over on its own: it speaks the preloaded checklist at once, then one tailored line from the AI.
+   Warnings wait 15 s for "I'm OK" before help is called. Follow-up questions go to the AI with
+   all live data; actions (call or cancel help, log a countermeasure, note to Earth) need a "yes".
+
+   Voice: Chrome's built-in speech for now. Mic and voice need Chrome; typing always works. */
+
+const WAKE = /\b(?:hey|hi|ok|okay)?\s*(?:vitaly|vitali|vitalie|vitaley|vitality|vitally|vitale|vital e)\b[,.!?]?\s*/i;
+const YES = /\b(yes|yeah|yep|confirm|do it|go ahead|please do|affirmative|correct)\b/i;
+const NO = /\b(no|nope|cancel that|don't|do not|stop|never ?mind|negative)\b/i;
+const OK_WORDS = /\b(i'?m (ok|okay|fine|good|alright)|all good|false alarm)\b/i;
+const REPEAT = /\b(repeat|say (that|it) again|what\?)\b/i;
+const CLOSE_AFTER_MS = 5000;
+const COLORS = { calm: [63, 214, 198], warning: [227, 155, 45], emergency: [224, 68, 46] };
+
+let mode = 'idle';            // idle | listening | thinking | speaking | confirm | alert
+let open = false;
+let level = 'calm';
+let pending = null;           // action waiting for "yes"
+let current = null;           // incident being handled
+let closeTimer = null;
+let speaking = false;
+let ignoreUntil = 0;          // don't hear our own voice
+const announced = new Set();
+const queue = [];
+
+// ---------- set up ----------
+
+export function initVitaly() {
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="vitaly" id="vitaly" data-level="calm" aria-live="assertive" hidden>
+      <canvas class="v-orb" id="vOrb" aria-hidden="true"></canvas>
+      <div class="v-text">
+        <p class="v-status" id="vStatus">Listening</p>
+        <p class="v-say" id="vSay"></p>
+        <p class="v-heard" id="vHeard"></p>
+      </div>
+      <div class="v-help" id="vHelp"></div>
+      <div class="v-confirm" id="vConfirm" hidden>
+        <button data-answer="yes">Yes</button><button data-answer="no">No</button>
+      </div>
+      <form class="v-type" id="vType" autocomplete="off">
+        <input id="vInput" placeholder="Or type to Vitaly…" aria-label="Type to Vitaly" />
+      </form>
+      <button class="v-close" id="vClose" aria-label="Close Vitaly">Esc</button>
+    </div>
+    <button class="v-launch" id="vLaunch" title="Talk to Vitaly (say &quot;Hey Vitaly&quot; or press T)">
+      <i></i><span>Vitaly</span><em id="vMic">T</em>
+    </button>`);
+
+  $('#vLaunch').addEventListener('click', () => summon());
+  $('#vClose').addEventListener('click', () => close());
+  $('#vType').addEventListener('submit', e => {
+    e.preventDefault();
+    const text = $('#vInput').value.trim();
+    $('#vInput').value = '';
+    if (text) heard(text);
+  });
+  $('#vConfirm').addEventListener('click', e => {
+    const a = e.target.dataset.answer;
+    if (a) heard(a);
+  });
+  addEventListener('keydown', e => {
+    const typing = /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName);
+    if (e.key === 'Escape' && open) close();
+    if ((e.key === 't' || e.key === 'T') && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      summon();
+    }
+  });
+
+  onData(type => {
+    if (type === 'incidents') checkIncidents();
+  });
+  startOrb();
+  // Browsers only allow the mic after the user has interacted with the page.
+  const firstGesture = () => { startEars(); removeEventListener('pointerdown', firstGesture); removeEventListener('keydown', firstGesture); };
+  addEventListener('pointerdown', firstGesture);
+  addEventListener('keydown', firstGesture);
+  setInterval(paintHelp, 500);
+}
+
+// ---------- opening and closing ----------
+
+function show(lv = 'calm') {
+  clearTimeout(closeTimer);
+  level = lv;
+  $('#vitaly').dataset.level = lv;
+  if (!open) {
+    open = true;
+    $('#vitaly').hidden = false;
+    requestAnimationFrame(() => $('#vitaly').classList.add('on'));
+  }
+}
+
+function close() {
+  clearTimeout(closeTimer);
+  speechSynthesis.cancel();
+  speaking = false;
+  open = false;
+  mode = 'idle';
+  pending = null;
+  current = null;
+  $('#vitaly').classList.remove('on');
+  setTimeout(() => { if (!open) $('#vitaly').hidden = true; }, 400);
+  $('#vConfirm').hidden = true;
+  setText('', '');
+}
+
+// Back to the body 5 s after Vitaly stops, unless an emergency still needs attention.
+function closeSoon() {
+  clearTimeout(closeTimer);
+  closeTimer = setTimeout(() => {
+    if (speaking || mode === 'confirm' || mode === 'thinking') return;
+    if (openEmergency()) return;
+    close();
+  }, CLOSE_AFTER_MS);
+}
+
+function openEmergency() {
+  return (live.incidents || []).some(i => i.state === 'open' && i.severity === 'emergency' && !i.acked);
+}
+
+export function summon() {
+  show(openEmergency() ? 'emergency' : 'calm');
+  mode = 'listening';
+  status(ears ? 'Listening' : 'Type your question');
+  setText('', '');
+  if (!ears) $('#vInput').focus();
+  closeSoon();
+}
+
+// ---------- alerts from the watchdog ----------
+
+const cleared = [];  // titles of handled alerts that resolved, waiting for an "All clear"
+
+function checkIncidents() {
+  for (const inc of live.incidents || []) {
+    // Numbers restart after a crew reset, so an alert is known by its number and start time.
+    const key = `${inc.id}:${inc.created}`;
+    if (inc.state === 'open' && (inc.severity === 'emergency' || inc.severity === 'warning') && !announced.has(key)) {
+      announced.add(key);
+      queue.push(inc.id);
+    }
+    if (current && inc.id === current.id) current = inc;
+  }
+  // Drop queued alerts that resolved before their turn.
+  for (let i = queue.length - 1; i >= 0; i--) {
+    const inc = find(queue[i]);
+    if (!inc || inc.state !== 'open') queue.splice(i, 1);
+  }
+  if (current && (current.state === 'resolved' || !find(current.id))) {
+    cleared.push(current.title);
+    current = null;
+  }
+  queue.sort((a, b) => sevRank(find(a)) - sevRank(find(b)));
+  if (queue.length && (!current || sevRank(find(queue[0])) < sevRank(current))) {
+    cleared.length = 0;
+    announce(find(queue.shift()));
+    return;
+  }
+  if (!current && cleared.length && !speaking) {
+    const titles = cleared.splice(0);
+    show(openEmergency() ? 'emergency' : 'calm');
+    mode = 'listening';
+    say(`All clear. ${titles.join(' and ')} resolved.`).then(closeSoon);
+  }
+}
+
+const find = id => (live.incidents || []).find(i => i.id === id);
+const sevRank = inc => (!inc ? 9 : inc.severity === 'emergency' ? 0 : 1);
+
+async function announce(inc) {
+  if (!inc) return;
+  current = inc;
+  pending = null;
+  show(inc.severity === 'emergency' ? 'emergency' : 'warning');
+  mode = 'alert';
+  status(inc.title);
+  speechSynthesis.cancel();
+  // The checklist is preloaded: speak it at once, no waiting on the AI.
+  const tailored = api.vitalyTailor(inc.id).catch(() => null);
+  await say(inc.say);
+  if (!current || current.id !== inc.id) return;  // a more urgent alert took over
+  const t = await tailored;
+  if (t && t.line && current && current.id === inc.id) await say(t.line);
+  if (current && current.id === inc.id) {
+    mode = 'alert';
+    status(inc.escalate_at && !inc.acked ? 'Say "I\'m OK" if you\'re fine' : inc.title);
+  }
+  closeSoon();
+}
+
+// Help crew, Earth note and the 15 s countdown, refreshed twice a second.
+function paintHelp() {
+  const box = $('#vHelp');
+  if (!open || !current) { box.innerHTML = ''; return; }
+  const inc = find(current.id) || current;
+  const now = Date.now() / 1000;
+  const rows = [];
+  if (inc.escalate_at && !inc.acked && !inc.help) {
+    rows.push(`<p class="v-count">Calling help in <b>${Math.max(0, Math.ceil(inc.escalate_at - now))} s</b> unless you say "I'm OK"</p>`);
+  }
+  if (inc.help && !inc.help.cancelled) {
+    const team = inc.help.team.map(t => {
+      const left = Math.max(0, Math.ceil(inc.help.called_at + t.eta_s - now));
+      return `<li><b>${t.name}</b> <span>${t.role}</span> <em>${left ? `${left} s` : 'arrived'}</em></li>`;
+    }).join('');
+    rows.push(`<p class="v-h">Help on the way to ${inc.help.to}</p><ul>${team}</ul>`);
+  }
+  if (inc.help && inc.help.cancelled) rows.push('<p class="v-h">Help call cancelled</p>');
+  if (inc.earth) {
+    const left = Math.max(0, Math.ceil(inc.earth.arrives_at - now));
+    rows.push(`<p class="v-earth">Flight surgeon on Earth: ${left ? `note arrives in ${fmtTime(left)}` : 'note received'} <span>(${inc.earth.delay_min} min signal delay)</span></p>`);
+  }
+  box.innerHTML = rows.join('');
+}
+
+function fmtTime(s) {
+  return s >= 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s} s`;
+}
+
+// ---------- what the crew member said ----------
+
+async function heard(text) {
+  if (!open) show(openEmergency() ? 'emergency' : 'calm');
+  clearTimeout(closeTimer);
+  $('#vHeard').textContent = `“${text}”`;
+
+  if (mode === 'confirm' && pending) {
+    if (YES.test(text)) return runAction(pending);
+    if (NO.test(text)) { pending = null; $('#vConfirm').hidden = true; mode = 'listening'; await say('Okay, I won\'t.'); return closeSoon(); }
+  }
+  if (current && OK_WORDS.test(text) && current.escalate_at && !current.acked && !current.help) {
+    await api.vitalyAck(current.id).catch(() => {});
+    current.acked = true;
+    await say('Okay. I\'ll keep watching your readings.');
+    return closeSoon();
+  }
+  if (current && REPEAT.test(text)) { await say(current.say); return closeSoon(); }
+
+  mode = 'thinking';
+  status('Thinking');
+  let r;
+  try {
+    r = await api.vitalyAsk(text, state.current);
+  } catch (err) {
+    r = { say: 'I can\'t reach the medical system right now. Your alerts still work.' };
+  }
+  if (r.action) {
+    pending = r.action;
+    mode = 'confirm';
+    $('#vConfirm').hidden = false;
+    status('Say yes or no');
+    await say(r.say);
+    return;
+  }
+  mode = 'listening';
+  await say(r.say);
+  status(ears ? 'Listening' : 'Type your question');
+  closeSoon();
+}
+
+async function runAction(action) {
+  pending = null;
+  $('#vConfirm').hidden = true;
+  mode = 'thinking';
+  status('On it');
+  try {
+    const r = await api.vitalyAction({ ...action, incident_id: current ? current.id : undefined });
+    if (action.type === 'call_help') {
+      const inc = r.incident;
+      current = inc;
+      const first = inc && inc.help && inc.help.team[0];
+      await say(first ? `${first.name} is on the way. About ${first.eta_s} seconds.` : 'Help is on the way.');
+    } else if (action.type === 'cancel_help') {
+      await say('Help call cancelled. I\'ll keep watching.');
+    } else if (action.type === 'log_countermeasure') {
+      await say('Logged. Your plan is updated.');
+    } else if (action.type === 'note_earth') {
+      await say(`Sent. It reaches the flight surgeon in about ${Math.round(r.note.delay_min)} minutes.`);
+    }
+  } catch (err) {
+    await say('That didn\'t go through. Try again.');
+  }
+  mode = 'listening';
+  status(ears ? 'Listening' : 'Type your question');
+  closeSoon();
+}
+
+// ---------- voice out (Chrome speech) ----------
+
+let voice = null;
+function pickVoice() {
+  const voices = speechSynthesis.getVoices();
+  if (!voices.length) return null;
+  const score = v => {
+    let s = 0;
+    if (/en-GB/i.test(v.lang)) s += 4;
+    else if (/^en/i.test(v.lang)) s += 2;
+    if (/premium|enhanced|neural|natural/i.test(v.name)) s += 5;
+    if (/daniel|arthur|oliver|google uk english male|serena|jamie/i.test(v.name)) s += 3;
+    if (/novelty|whisper|bells|bubbles|cellos|zarvox|trinoids|bad news|good news|organ|superstar|jester|wobble/i.test(v.name)) s -= 20;
+    return s;
+  };
+  return voices.slice().sort((a, b) => score(b) - score(a))[0];
+}
+speechSynthesis.onvoiceschanged = () => { voice = pickVoice(); };
+
+function say(text) {
+  return new Promise(resolve => {
+    if (!text) return resolve();
+    $('#vSay').textContent = text;
+    voice = voice || pickVoice();
+    const u = new SpeechSynthesisUtterance(text);
+    if (voice) u.voice = voice;
+    u.rate = 1.0;
+    u.pitch = 0.95;
+    speaking = true;
+    const prev = mode;
+    if (mode !== 'alert' && mode !== 'confirm') mode = 'speaking';
+    u.onboundary = () => { pulse = Math.min(1, pulse + 0.55); };
+    const done = () => {
+      speaking = false;
+      ignoreUntil = Date.now() + 500;
+      if (mode === 'speaking') mode = prev === 'speaking' ? 'listening' : prev;
+      resolve();
+      setTimeout(checkIncidents, 0);
+    };
+    u.onend = done;
+    u.onerror = done;
+    speechSynthesis.speak(u);
+    // Safety net: some voices never fire onend.
+    setTimeout(() => { if (speaking) done(); }, 2500 + text.length * 90);
+  });
+}
+
+// ---------- ears (Chrome speech recognition) ----------
+
+let ears = null;
+function startEars() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR || ears) { if (!SR) $('#vMic').textContent = 'T'; return; }
+  const rec = new SR();
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.lang = 'en-US';
+  let denied = false;
+  rec.onresult = e => {
+    if (speaking || Date.now() < ignoreUntil) return;
+    const res = e.results[e.results.length - 1];
+    const text = res[0].transcript.trim();
+    if (open) $('#vHeard').textContent = text ? `“${text}”` : '';
+    if (!res.isFinal || !text) return;
+    if (!open || mode === 'idle') {
+      if (!WAKE.test(text)) return;
+      const rest = text.replace(WAKE, '').trim();
+      summon();
+      if (rest.length > 2) heard(rest);
+      else say('Yes?');
+      return;
+    }
+    heard(text.replace(WAKE, '').trim() || text);
+  };
+  rec.onerror = e => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      denied = true;
+      ears = null;
+      $('#vMic').textContent = 'T';
+      $('#vLaunch').title = 'Microphone blocked: press T and type to Vitaly';
+    }
+  };
+  rec.onend = () => { if (!denied) setTimeout(() => { try { rec.start(); } catch (err) { /* already running */ } }, 300); };
+  try {
+    rec.start();
+    ears = rec;
+    $('#vMic').textContent = 'Hey';
+    $('#vLaunch').classList.add('listening');
+  } catch (err) {
+    ears = null;
+  }
+}
+
+// ---------- text on screen ----------
+
+function status(text) { $('#vStatus').textContent = text; }
+function setText(sayText, heardText) { $('#vSay').textContent = sayText; $('#vHeard').textContent = heardText; }
+
+// ---------- the orb ----------
+/* A geodesic sphere of dots inside two wavy particle rings. Everything breathes slowly; Vitaly's
+   voice (word boundaries) kicks the rings outward, and the colour follows severity. */
+
+let pulse = 0;
+let rgb = COLORS.calm.slice();
+const SPHERE = fibonacciSphere(220);
+const LINKS = nearestLinks(SPHERE, 3);
+const DUST = Array.from({ length: 90 }, () => ({ a: Math.random() * Math.PI * 2, r: 1.15 + Math.random() * 0.6, s: 0.2 + Math.random() * 0.8 }));
+
+function startOrb() {
+  const canvas = $('#vOrb');
+  const ctx = canvas.getContext('2d');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const frame = now => {
+    requestAnimationFrame(frame);
+    if (!open) return;
+    const dpr = Math.min(2, devicePixelRatio || 1);
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (canvas.width !== Math.round(w * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    const t = reduce ? 0 : now / 1000;
+    const target = COLORS[level] || COLORS.calm;
+    rgb = rgb.map((c, i) => c + (target[i] - c) * 0.06);
+    const col = a => `rgba(${rgb.map(Math.round).join(',')},${a})`;
+
+    // Voice energy: decays; while speaking it never drops below a murmur.
+    const live = speaking ? 0.25 + 0.15 * Math.sin(t * 9) : mode === 'thinking' ? 0.15 + 0.1 * Math.sin(t * 4) : 0.05;
+    pulse = Math.max(live, pulse * 0.92);
+    const cx = w / 2, cy = h * 0.42, R = Math.min(w, h) * 0.24;
+
+    // Outer rings of particles, deformed by the voice.
+    for (let ring = 0; ring < 2; ring++) {
+      const base = R * (1.0 + ring * 0.12);
+      const amp = R * (0.03 + pulse * (0.10 + ring * 0.05));
+      const n = 520;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const wob = Math.sin(3 * a + t * (0.8 + ring * 0.3)) + 0.6 * Math.sin(5 * a - t * 1.3 + ring) + 0.3 * Math.sin(9 * a + t * 2.1);
+        const r = base + amp * wob + (Math.random() - 0.5) * R * 0.02;
+        ctx.fillStyle = col(0.25 + 0.5 * Math.random());
+        ctx.fillRect(cx + Math.cos(a) * r, cy + Math.sin(a) * r, 1.3, 1.3);
+      }
+    }
+    // Inner thin ring.
+    ctx.strokeStyle = col(0.35);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i <= 200; i++) {
+      const a = (i / 200) * Math.PI * 2;
+      const r = R * 0.62 * (1 + 0.02 * Math.sin(6 * a + t * 2) * (1 + pulse * 3));
+      const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+      if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    }
+    ctx.stroke();
+    // Dust drifting around the rings.
+    for (const d of DUST) {
+      const a = d.a + t * 0.05 * d.s;
+      const r = R * (d.r + 0.05 * Math.sin(t * d.s + d.a));
+      ctx.fillStyle = col(0.15 + 0.3 * d.s);
+      ctx.fillRect(cx + Math.cos(a) * r, cy + Math.sin(a) * r, 1.2, 1.2);
+    }
+    // Geodesic sphere: rotating dots with links to their nearest neighbours.
+    const sr = R * 0.36 * (1 + pulse * 0.12);
+    const rot = t * 0.35, ca = Math.cos(rot), sa = Math.sin(rot), tilt = 0.35, ct = Math.cos(tilt), st = Math.sin(tilt);
+    const proj = SPHERE.map(([x, y, z]) => {
+      const x1 = x * ca + z * sa, z1 = -x * sa + z * ca;
+      const y2 = y * ct - z1 * st, z2 = y * st + z1 * ct;
+      return [cx + x1 * sr, cy + y2 * sr, z2];
+    });
+    ctx.lineWidth = 0.6;
+    for (const [i, j] of LINKS) {
+      const a = proj[i], b = proj[j];
+      const depth = (a[2] + b[2]) / 2;
+      ctx.strokeStyle = col(0.08 + 0.32 * (depth + 1) / 2);
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    }
+    for (const p of proj) {
+      ctx.fillStyle = col(0.2 + 0.7 * (p[2] + 1) / 2);
+      ctx.fillRect(p[0] - 1, p[1] - 1, 2, 2);
+    }
+  };
+  requestAnimationFrame(frame);
+}
+
+function fibonacciSphere(n) {
+  const pts = [], g = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < n; i++) {
+    const y = 1 - (i / (n - 1)) * 2, r = Math.sqrt(1 - y * y), a = g * i;
+    pts.push([Math.cos(a) * r, y, Math.sin(a) * r]);
+  }
+  return pts;
+}
+
+function nearestLinks(pts, k) {
+  const links = new Set();
+  pts.forEach((p, i) => {
+    pts.map((q, j) => [j, (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2])
+      .filter(([j]) => j !== i).sort((a, b) => a[1] - b[1]).slice(0, k)
+      .forEach(([j]) => links.add(i < j ? `${i}-${j}` : `${j}-${i}`));
+  });
+  return [...links].map(s => s.split('-').map(Number));
+}

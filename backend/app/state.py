@@ -9,7 +9,8 @@ ORGANS = ["heart", "bones", "sleep", "eyes", "lungs", "muscles", "ears"]
 RECENT_WINDOW = 5
 
 # Upper limits for the body-state knobs, so repeated director clicks stay physiologically sane.
-MOD_LIMITS = {"sleep_debt": 4.0, "missed_exercise_days": 14, "bp_offset": 42.0, "stress": 2.0, "co2_offset": 3.0, "pressure_drop_kpa": 12.0, "noise_offset": 20.0}
+MOD_LIMITS = {"sleep_debt": 4.0, "missed_exercise_days": 14, "bp_offset": 42.0, "stress": 2.0, "co2_offset": 3.0, "pressure_drop_kpa": 12.0, "noise_offset": 20.0,
+              "bp_drop": 60.0, "pressure_rise_kpa": 10.0, "o2_boost_kpa": 6.0, "smoke": 1.0, "temp_offset_c": 15.0}
 
 # How many recent quality flags to keep per metric (for the confidence score).
 QUALITY_WINDOW = 120
@@ -33,6 +34,12 @@ class Sim:
             "co2_offset": 0.0,           # mmHg of cabin CO2 above normal (ship, not body)
             "pressure_drop_kpa": 0.0,    # cabin pressure below normal (leak), takes oxygen down with it
             "noise_offset": 0.0,         # dBA above the usual module noise (failing fan, pump)
+            "cardiac": "",               # heart emergency: "", "brady", "arrhythmia", "arrest"
+            "bp_drop": 0.0,              # mmHg below normal systolic (blood pressure crash)
+            "pressure_rise_kpa": 0.0,    # cabin over-pressure
+            "o2_boost_kpa": 0.0,         # extra oxygen partial pressure (fire risk)
+            "smoke": 0.0,                # 0..1 smoke in the module
+            "temp_offset_c": 0.0,        # cabin temperature above normal
         }
         self.relief = {k: 0.0 for k in ORGANS}  # severity removed by countermeasures
         self.history = defaultdict(lambda: deque(maxlen=30))
@@ -44,6 +51,9 @@ class Sim:
         self.measure_now = True  # take every reading once at start, then follow each device schedule
         self.alerts = []
         self.alert_seq = 0
+        self.incidents = []      # Vitaly watchdog incidents (vitaly/watchdog.py)
+        self.incident_seq = 0
+        self.hr_trace = deque(maxlen=180)  # (time, heart rate) for spike detection
 
     def record(self, vital):
         """Keep every quality flag, but only good readings feed the values the engine uses."""

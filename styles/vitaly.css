@@ -1,0 +1,50 @@
+/* Vitaly: full-screen orb over the dimmed body, and the small launcher in the corner. */
+
+.vitaly { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: rgba(3, 12, 14, .86); backdrop-filter: blur(3px); opacity: 0; transition: opacity .35s var(--ease); color: #d8f5f1; --v: 63, 214, 198; }
+.vitaly.on { opacity: 1; }
+.vitaly[data-level="warning"] { --v: 227, 155, 45; background: rgba(18, 12, 3, .86); }
+.vitaly[data-level="emergency"] { --v: 224, 68, 46; background: rgba(20, 5, 3, .88); }
+.v-orb { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+.v-text { position: absolute; left: 50%; top: 70%; transform: translateX(-50%); width: min(720px, calc(100vw - 32px)); text-align: center; }
+.v-status { font: 600 13px var(--cond); letter-spacing: .3em; text-transform: uppercase; color: rgb(var(--v)); }
+.v-say { margin-top: 12px; font: 400 22px/1.4 var(--sans); color: #fff; min-height: 1.4em; }
+.v-heard { margin-top: 10px; font: 400 15px/1.4 var(--sans); color: rgba(255, 255, 255, .5); font-style: italic; min-height: 1.4em; }
+
+.v-help { position: absolute; right: 32px; top: 32px; width: 300px; font: 400 13px/1.45 var(--sans); color: rgba(255, 255, 255, .85); }
+.v-help:empty { display: none; }
+.v-help .v-h { font: 600 12px var(--cond); letter-spacing: .2em; text-transform: uppercase; color: rgb(var(--v)); margin: 0 0 6px; }
+.v-help ul { list-style: none; margin: 0 0 14px; padding: 0; }
+.v-help li { display: grid; grid-template-columns: 1fr auto; padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, .1); }
+.v-help li span { grid-column: 1; font-size: 11px; color: rgba(255, 255, 255, .5); }
+.v-help li em { grid-row: 1 / 3; grid-column: 2; align-self: center; font: 500 18px var(--cond); font-style: normal; color: #fff; font-variant-numeric: tabular-nums; }
+.v-count { padding: 10px 12px; margin-bottom: 14px; border: 1px solid rgb(var(--v)); color: #fff; }
+.v-count b { font: 600 18px var(--cond); color: rgb(var(--v)); }
+.v-earth { font-size: 12px; color: rgba(255, 255, 255, .7); }
+.v-earth span { color: rgba(255, 255, 255, .45); }
+
+.v-confirm { position: absolute; left: 50%; top: calc(70% + 150px); transform: translateX(-50%); display: flex; gap: 12px; }
+.v-confirm button { font: 600 14px var(--cond); letter-spacing: .16em; text-transform: uppercase; padding: 10px 26px; border: 1px solid rgb(var(--v)); color: #fff; background: transparent; cursor: pointer; }
+.v-confirm button:first-child { background: rgb(var(--v)); color: #071214; }
+
+.v-type { position: absolute; left: 50%; bottom: 36px; transform: translateX(-50%); width: min(460px, calc(100vw - 32px)); }
+.v-type input { width: 100%; padding: 12px 16px; font: 400 15px var(--sans); color: #fff; background: rgba(255, 255, 255, .06); border: 1px solid rgba(var(--v), .4); outline: none; }
+.v-type input:focus { border-color: rgb(var(--v)); }
+.v-type input::placeholder { color: rgba(255, 255, 255, .4); }
+.v-close { position: absolute; left: 32px; top: 28px; font: 600 12px var(--cond); letter-spacing: .2em; color: rgba(255, 255, 255, .6); background: none; border: 1px solid rgba(255, 255, 255, .25); padding: 6px 12px; cursor: pointer; }
+
+/* Launcher: bottom-left pill, glows when the wake word is listening. */
+.v-launch { position: fixed; left: 24px; bottom: 18px; z-index: 25; display: flex; align-items: center; gap: 8px; padding: 7px 12px 7px 10px; font: 600 12px var(--cond); letter-spacing: .18em; text-transform: uppercase; color: #d8f5f1; background: #071214; border: 1px solid rgba(63, 214, 198, .5); cursor: pointer; }
+.v-launch i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #3fd6c6; }
+.v-launch.listening i { background: #3fd6c6; animation: v-breathe 2.4s ease-in-out infinite; }
+.v-launch em { font-style: normal; font-weight: 500; color: rgba(255, 255, 255, .5); border: 1px solid rgba(255, 255, 255, .25); padding: 0 5px; }
+@keyframes v-breathe { 50% { opacity: .35; transform: scale(.8); } }
+
+@media (max-width: 900px) {
+  .v-help { left: 16px; right: 16px; top: 64px; width: auto; }
+  .v-say { font-size: 18px; }
+}
+@media (prefers-reduced-motion: reduce) { .v-launch.listening i { animation: none; } }
+
+/* `hidden` must win over the display rules above, or the closed overlay would still block clicks. */
+.vitaly[hidden], .v-confirm[hidden] { display: none; }

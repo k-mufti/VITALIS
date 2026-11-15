@@ -13,7 +13,7 @@ NOISE = {
     "sleep_hours": 0.1, "glucose": 3.0, "bp_sys": 2.0, "bp_dia": 1.5,
     "onsd_mm": 0.02, "stroke_volume_ml": 2.0, "quad_thickness_mm": 0.4,
     "reaction_ms": 6.0, "resistive_load_pct": 0.5, "co2_mmhg": 0.05,
-    "cabin_pressure_kpa": 0.05, "ppo2_kpa": 0.03, "noise_dba": 0.8, "hearing_shift_db": 0.5,
+    "cabin_pressure_kpa": 0.05, "ppo2_kpa": 0.03, "noise_dba": 0.8, "hearing_shift_db": 0.5, "cabin_temp_c": 0.1,
 }
 
 
@@ -29,6 +29,10 @@ class SimulatedDevice(DeviceAdapter):
                 v = signals.value(metric, sim.mods, sim.relief, sim.mission, sim.day, storm)
                 if metric == "dose_rate_usv_h":
                     return v * (1 + noise(0.03))
+                if metric in ("ecg_irregular", "smoke_index") or (metric in ("heart_rate", "bp_sys", "bp_dia") and v == 0):
+                    return v  # flags and flatlines are exact
+                if metric == "heart_rate" and sim.mods.get("cardiac") == "arrhythmia":
+                    return v + noise(15.0)  # irregular rhythm: beat-to-beat rate jumps around
                 return v + noise(NOISE.get(metric, 0.0))
             return read
 
@@ -39,7 +43,8 @@ class Biomonitor(SimulatedDevice):
     """Smart shirt worn all day: ECG heart rate and HRV, breathing, blood oxygen, skin temperature,
     pulse transit time (ECG beat to fingertip pulse), and heart rate during and after each workout."""
     name, label = "wearable", "Biomonitor shirt"
-    reads = ("heart_rate", "hrv", "spo2", "resp_rate", "skin_temp", "pulse_transit_ms", "session_hr_avg", "hr_recovery_bpm")
+    reads = ("heart_rate", "hrv", "spo2", "resp_rate", "skin_temp", "pulse_transit_ms", "session_hr_avg", "hr_recovery_bpm",
+             "ecg_irregular")
 
 
 class SleepBand(SimulatedDevice):
@@ -79,7 +84,7 @@ class CabinAir(SimulatedDevice):
     """Ship life-support sensors, not worn: CO2, oxygen and total pressure. Lets the engine tell a
     cabin air problem from a body problem."""
     name, label = "cabin_air", "Cabin air monitor"
-    reads = ("co2_mmhg", "ppo2_kpa", "cabin_pressure_kpa")
+    reads = ("co2_mmhg", "ppo2_kpa", "cabin_pressure_kpa", "cabin_temp_c", "smoke_index")
 
 
 class NoiseDosimeter(SimulatedDevice):
