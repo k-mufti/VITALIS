@@ -19,6 +19,7 @@ load_dotenv()
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.responses import Response, StreamingResponse  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
 from . import director, history, hrp, officer, provenance, triage  # noqa: E402
@@ -29,7 +30,7 @@ from .analysis import radiation as radiation_analysis  # noqa: E402
 from .analysis import training as training_analysis  # noqa: E402
 from .analysis.common import Reader  # noqa: E402
 from .devices import catalog  # noqa: E402
-from .vitaly import brain, watchdog  # noqa: E402
+from .vitaly import brain, voice, watchdog  # noqa: E402
 from .devices.simulated import DEVICES  # noqa: E402
 from .engine.physiology import COUNTERMEASURES, apply_change, mission_state  # noqa: E402
 from .sources import donki, horizons, noaa  # noqa: E402
@@ -76,8 +77,10 @@ async def sim_loop():
                 sim.record(v)
                 vitals.append(v)
         sim.measure_now = False
-        if watchdog.tick(sim) and clients:
-            await broadcast({"type": "incidents", "incidents": watchdog.active(sim)})
+        if watchdog.tick(sim):
+            prewarm_new_alerts()
+            if clients:
+                await broadcast({"type": "incidents", "incidents": watchdog.active(sim)})
         if clients:
             for v in vitals:
                 if v["quality"] == "good":  # flagged readings are counted, not shown
@@ -93,6 +96,7 @@ async def sim_loop():
 
 @contextlib.asynccontextmanager
 async def lifespan(app):
+    voice.prewarm(*voice.COMMON)
     tasks = [asyncio.create_task(refresh_loop()), asyncio.create_task(sim_loop())]
     yield
     for t in tasks:
@@ -307,13 +311,62 @@ class VitalyAction(BaseModel):
     text: str | None = None
 
 
+_prewarmed = set()
+
+
+def prewarm_new_alerts():
+    """Start Vitaly's voice for new alerts on the server right away: checklist audio, then the
+    tailored line (AI text, then its audio), so the browser waits as little as possible."""
+    for inc in sim.incidents:
+        key = (inc["id"], inc["created"])
+        if inc["state"] != "open" or key in _prewarmed:
+            continue
+        _prewarmed.add(key)
+        voice.prewarm(inc["say"])
+        asyncio.ensure_future(_prewarm_tailor(inc))
+
+
+async def _prewarm_tailor(inc):
+    if not inc["tailored"]:
+        inc["tailored"] = await brain.tailor(inc, mission_state(sim), sim)
+    voice.prewarm(inc["tailored"]["line"])
+
+
 async def push_incidents():
+    prewarm_new_alerts()
     await broadcast({"type": "incidents", "incidents": watchdog.active(sim)})
+
+
+class VitalySpeak(BaseModel):
+    text: str
 
 
 @app.get("/api/vitaly/status")
 def vitaly_status():
-    return brain.status()
+    return {**brain.status(), **voice.status()}
+
+
+@app.get("/api/vitaly/tts")
+async def vitaly_tts_stream(text: str):
+    """Vitaly's voice as streamed MP3 (Deepgram Aura): the browser's audio element plays it while it
+    arrives, so speech starts in about 0.2 s. 503 means: use the browser voice instead."""
+    got = voice.start(text)
+    if got is None:
+        raise HTTPException(status_code=503, detail="Deepgram voice not available; use the browser voice")
+    if isinstance(got, bytes):
+        return Response(content=got, media_type="audio/mpeg", headers={"Cache-Control": "no-store"})
+    if not await voice.first_chunk_ok(got):
+        raise HTTPException(status_code=503, detail="Deepgram did not answer; use the browser voice")
+    return StreamingResponse(got.follow(), media_type="audio/mpeg", headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/vitaly/tts")
+async def vitaly_tts(body: VitalySpeak):
+    """Whole MP3 in one response (for tools and tests). 503 means: use the browser voice instead."""
+    audio = await voice.speak(body.text)
+    if audio is None:
+        raise HTTPException(status_code=503, detail="Deepgram voice not available; use the browser voice")
+    return Response(content=audio, media_type="audio/mpeg")
 
 
 @app.get("/api/vitaly/incidents")
@@ -337,6 +390,10 @@ async def vitaly_tailor(incident_id: int):
     inc = watchdog.find(sim, incident_id)
     if not inc:
         raise HTTPException(status_code=404, detail="no such incident")
+    for _ in range(40):  # the server may already be writing it (prewarm); wait up to 4 s
+        if inc["tailored"]:
+            break
+        await asyncio.sleep(0.1)
     if not inc["tailored"]:
         inc["tailored"] = await brain.tailor(inc, mission_state(sim), sim)
     return inc["tailored"]
