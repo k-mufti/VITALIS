@@ -109,7 +109,7 @@ Sources include the AHA blood pressure guideline, Cole 1999 (heart-rate recovery
 
 Standalone by design: Vitaly guides the crew member directly. It never dispatches anyone and never waits on Earth.
 
-- **Summon:** say "Hey Vitaly" (Chrome speech recognition) or press **T**. The screen switches to a pulsing orb: teal calm, amber warning, red emergency.
+- **Summon:** say "Hey Vitaly" or press **T**. The screen switches to a pulsing orb: teal calm, amber warning, red emergency.
 - **Watchdog** (`watchdog.py`): fixed rules, every second, on the latest good readings. It catches:
   - limit crossings: heart rate, blood oxygen, blood pressure, cabin pressure, O2, CO2, temperature, smoke, noise, solar storm
   - sharp spikes: heart rate changing 25+ bpm within 60 s
@@ -122,6 +122,7 @@ Standalone by design: Vitaly guides the crew member directly. It never dispatche
 - **Medical profile** (`profile.py`): Crew 03 has a history of paroxysmal AF, so an irregular rhythm is an emergency and the fast-heart-rate limit is 120.
 - **Everyday questions** (`quick.py`): answered from live data in about 3 ms, no AI.
 - **AI** (`brain.py`): one cheap OpenRouter model (default Mistral Nemo) only for unusual questions; replies are cached for 2 minutes. Voice commands (log a countermeasure, note to Earth) are matched by rules and run after a spoken "yes". Without a key or network, rules answer.
+- **Ears** (`ears.py`): Deepgram Nova-3 live speech-to-text. The browser streams the microphone (16 kHz, echo-cancelled) to the backend, which relays it to Deepgram and sends the words back as they are spoken; the key stays on the backend. Deepgram is told to expect the word "Vitaly". The browser decides when you've finished: Deepgram's end-of-phrase signal, plus the microphone level so a pause mid-sentence doesn't cut you off. Chrome's recogniser is the fallback.
 - **Voice** (`voice.py`): Deepgram Aura, streamed (first audio in about 0.2 s). No guide line contains live numbers, so all of them are voiced once in advance and kept on disk (`data/voice_cache/`, git-ignored); they start in under 50 ms. Chrome's voice is the fallback.
 - The steps are standard first aid in plain words, written for the demo. They are not a reviewed medical procedure.
 - `eval_vitaly.py` compares models on real questions. `test_vitaly.py` covers the rules and guides.

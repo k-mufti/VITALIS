@@ -30,7 +30,7 @@ from .analysis import radiation as radiation_analysis  # noqa: E402
 from .analysis import training as training_analysis  # noqa: E402
 from .analysis.common import Reader  # noqa: E402
 from .devices import catalog  # noqa: E402
-from .vitaly import brain, crew, guides, profile, protocols, voice, watchdog  # noqa: E402
+from .vitaly import brain, crew, ears, guides, profile, protocols, voice, watchdog  # noqa: E402
 from .devices.simulated import DEVICES  # noqa: E402
 from .engine.physiology import COUNTERMEASURES, apply_change, mission_state  # noqa: E402
 from .sources import donki, horizons, noaa  # noqa: E402
@@ -336,7 +336,14 @@ class VitalySpeak(BaseModel):
 
 @app.get("/api/vitaly/status")
 def vitaly_status():
-    return {**brain.status(), **voice.status()}
+    return {**brain.status(), **voice.status(), **ears.status()}
+
+
+@app.websocket("/api/vitaly/listen")
+async def vitaly_listen(websocket: WebSocket):
+    """Live speech-to-text: microphone audio in, words out (Deepgram, key stays here)."""
+    await websocket.accept()
+    await ears.relay(websocket)
 
 
 @app.get("/api/vitaly/tts")

@@ -4,7 +4,7 @@ from app import director
 from app.devices.simulated import DEVICES
 from app.engine.physiology import mission_state
 from app.state import sim
-from app.vitaly import brain, guides, profile, protocols, quick, watchdog
+from app.vitaly import brain, ears, guides, profile, protocols, quick, watchdog
 
 
 def fire(event):
@@ -120,6 +120,16 @@ for q, word in (("How's my heart?", "Heart rate"), ("What's my oxygen?", "Blood 
     assert a and word in a, (q, a)
 assert quick.answer("Tell me a fun fact about Mars", state, sim) is None
 assert brain.first_sentences("Stay calm, Dr. Chen wrote the plan. Stay still. More.", 2).endswith("Stay still.")
+
+# Ears: Deepgram's messages are cut down to what the browser needs; the key is never in the URL
+import json  # noqa: E402
+res = lambda text, final, stop: json.dumps({"type": "Results", "is_final": final, "speech_final": stop, "channel": {"alternatives": [{"transcript": text}]}})
+assert ears.slim(res("hey Vitaly", False, False)) == {"type": "words", "text": "hey Vitaly", "final": False, "stopped": False}
+assert ears.slim(res("", True, True)) == {"type": "words", "text": "", "final": True, "stopped": True}
+assert ears.slim(res("", False, False)) is None
+assert ears.slim(json.dumps({"type": "UtteranceEnd", "channel": [0, 1]})) == {"type": "stopped"}
+assert ears.slim(json.dumps({"type": "SpeechStarted", "channel": [0, 1]})) is None and ears.slim("not json") is None
+assert "keyterm=Vitaly" in ears.url("nova-3") and "keyterm" not in ears.url("nova-2") and "token" not in ears.url("nova-3").lower()
 
 sim.reset()
 print("vitaly checks passed")
