@@ -89,7 +89,7 @@ export function resetView(instant) {
 // model = the system to show with the spot lit on it ('bones', 'muscles', 'heart'...), or null for skin only.
 // Call again with a smaller spot to zoom further in. False if the body has not loaded yet.
 const RED = new THREE.Color('#e0442e');
-let restColor = null;
+let restColor = null, injuryCount = 0;
 export function showInjury(spot, model = null) {
   if (twin.layer !== 'skin') setLayer('skin');   // the glow is drawn on the skin
   twin.rotTarget = 0; twin.rot = 0; pivot.rotation.y = 0;
@@ -97,6 +97,8 @@ export function showInjury(spot, model = null) {
   if (!twin.injury) restColor = uni.uCyan.value.clone();
   twin.injury = true;
   twin.injuryModel = has3dOrgan(model) ? model : null;
+  // Where the hurt is, for injury-parts.js to turn that bone, muscle or organ red. center = body space.
+  twin.injurySpot = { id: ++injuryCount, x: spot.x, v: spot.v, back: !!spot.back, radius: spot.radius, center: pivot.worldToLocal(pt('injury')) };
   if (twin.injuryModel && !organs[model]) loadOrgan(model);
   uni.uCyan.value.copy(RED);
   twin.focus = 'injury';
