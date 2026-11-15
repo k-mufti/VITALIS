@@ -191,53 +191,17 @@ async def ask(question, state, sim, focus=None, current=None):
         return {"say": cmd[0], "action": cmd[1], "engine": "command"}
     fast = quick.answer(question, state, sim) if instant_allowed(question, current) else None
     if fast:
-        return {"say": fast, "action": None, "engine": "instant", "heads_up": heads_up(state, sim)}
+        return {"say": fast, "action": None, "engine": "instant"}
     key = cache_key(question, state, sim, focus, current)
     hit = _replies.get(key)
     if hit and time.time() - hit[0] < REPLY_TTL_S:
-        return {**hit[1], "engine": hit[1]["engine"] + " (cached)", "heads_up": heads_up(state, sim)}
+        return {**hit[1], "engine": hit[1]["engine"] + " (cached)"}
     reply = await ask_model(question, state, sim, focus, current)
     if reply["engine"] != "rules":
         _replies[key] = (time.time(), reply)
         if len(_replies) > 300:
             _replies.pop(next(iter(_replies)))
-    return {**reply, "heads_up": heads_up(state, sim)}
-
-
-# ---------- heads-up: slow risks, said once ----------
-# Three levels decide when Vitaly speaks up:
-#   urgent   the watchdog's alerts (watchdog.py): spoken at once, can interrupt
-#   heads-up slow risks that matter today (below): said once, after the next question, never interrupting
-#   info     slow trends: never spoken, only shown on the health screens
-# Each heads-up is said once per crew session (sim.heads_up_said) and only while the backend's own level
-# for it is above low, so nothing here sets a new threshold.
-
-def heads_up(state, sim):
-    """One sentence about a slow risk not mentioned yet, or None."""
-    for key, line in heads_up_lines(state):
-        if key not in sim.heads_up_said:
-            sim.heads_up_said.add(key)
-            return line
-    return None
-
-
-def heads_up_lines(state):
-    organs = state["organs"]
-    out = []
-    m = organs.get("muscles") or {}
-    a = m.get("analysis") or {}
-    if a.get("status") in ("overreaching", "under-recovered"):
-        out.append(("muscles", "One more thing: you've been training hard and your recovery is low, "
-                               "so a pulled muscle is more likely. Take it easier today."))
-    b = organs.get("bones") or {}
-    if b.get("level") in ("mild", "extreme") and isinstance(b.get("value"), (int, float)) and b["value"] < 100:
-        lost = round(100 - b["value"], 1)
-        land = state.get("arrival_day")
-        when = (f"when you land on day {land}" if state.get("phase") == "cruise" and land and land > state["day"]
-                else "under load")
-        out.append(("bones", f"One more thing: your bones are an estimated {lost} percent thinner than at launch, "
-                             f"so a break is more likely {when}. Keep up the resistive exercise."))
-    return out
+    return {**reply}
 
 
 def readings_line(guide, sim, state=None):

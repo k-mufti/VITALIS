@@ -433,8 +433,6 @@ async function heard(text) {
     return;
   }
   await say(r.say);
-  // A slow risk not mentioned yet (bone loss before landing, training too hard): once, after the answer.
-  if (r.heads_up && !guide) await say(r.heads_up);
   if (guide) {              // answered a question mid-guide: back to the current step
     mode = 'alert';
     paintGuide();
