@@ -1,6 +1,7 @@
 import { $ } from '../util.js';
 import { API, api, live, onData } from '../data/client.js';
 import { state } from '../state.js';
+import { bodyForGuide, bodyForAlert, releaseBody } from './vitaly-body.js';
 
 /* Vitaly: the voice assistant. Standalone: it guides you, it never calls anyone.
 
@@ -138,6 +139,8 @@ function show(lv = 'calm') {
 function close() {
   clearTimeout(closeTimer);
   hush();
+  releaseBody();
+  dock(false);
   open = false;
   mode = 'idle';
   pending = null;
@@ -148,6 +151,11 @@ function close() {
   setTimeout(() => { if (!open) $('#vitaly').hidden = true; }, 400);
   $('#vConfirm').hidden = true;
   setText('', '');
+}
+
+// Docked: Vitaly moves to a side panel so the body can zoom to the problem (vitaly-body.js).
+function dock(on) {
+  $('#vitaly').classList.toggle('docked', on);
 }
 
 // Back to the body 5 s after Vitaly stops, unless an emergency still needs attention.
@@ -222,6 +230,7 @@ async function announce(inc) {
   pending = null;
   hush();
   alarm(inc.severity);
+  if (bodyForAlert(inc.kind)) dock(true);
   await startGuide({ title: inc.title, severity: inc.severity, say: inc.say, steps: inc.guide, value: inc.value, incidentId: inc.id });
 }
 
@@ -388,7 +397,10 @@ async function heard(text) {
   } catch (err) {
     r = { say: 'I can\'t reach the medical system right now. Your alerts still work.' };
   }
-  if (r.guide) return startGuide(r.guide);
+  if (r.guide) {
+    if (bodyForGuide(r.guide, text)) dock(true);
+    return startGuide(r.guide);
+  }
   if (r.action) {
     pending = r.action;
     mode = 'confirm';
@@ -399,6 +411,8 @@ async function heard(text) {
     return;
   }
   await say(r.say);
+  // A slow risk not mentioned yet (bone loss before landing, training too hard): once, after the answer.
+  if (r.heads_up && !guide) await say(r.heads_up);
   if (guide) {              // answered a question mid-guide: back to the current step
     mode = 'alert';
     paintGuide();

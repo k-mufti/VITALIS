@@ -1,4 +1,6 @@
 """Demo events triggered from the director panel (key D) or the API."""
+import time
+
 from . import constants as C
 from . import triage
 from .engine.physiology import mission_state
@@ -7,7 +9,7 @@ from .state import MOD_LIMITS
 
 EVENTS = ["radiation_storm", "bad_sleep_week", "bp_spike", "skipped_exercise", "cabin_co2", "cabin_leak", "noisy_module",
           "slow_heart", "irregular_rhythm", "cardiac_arrest", "bp_crash",
-          "cabin_overpressure", "fire_smoke", "o2_high", "cabin_hot", "reset"]
+          "cabin_overpressure", "fire_smoke", "o2_high", "cabin_hot", "impact", "reset"]
 
 
 def trigger(sim, kind):
@@ -55,6 +57,8 @@ def trigger(sim, kind):
         m["o2_boost_kpa"] += 4.5
     elif kind == "cabin_hot":
         m["temp_offset_c"] += 8.0
+    elif kind == "impact":
+        sim.impact_at = time.time()  # a hard knock on the watch's motion sensor (vitaly/watchdog.py)
     else:
         return {"ok": False, "error": f"unknown event, use one of {EVENTS}"}
     for key, limit in MOD_LIMITS.items():

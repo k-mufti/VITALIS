@@ -74,3 +74,39 @@
 .v-earth-demo { margin-top: 8px; font: 500 11px var(--cond); letter-spacing: .14em; text-transform: uppercase; color: rgba(255, 255, 255, .35); }
 .v-earth[data-stage="replied"] .v-track i { width: 100% !important; opacity: .35; }
 @media (max-width: 900px) { .v-earth { display: none; } }
+
+/* Docked: Vitaly moves to a panel on the left so the body can zoom to what's wrong (vitaly-body.js).
+   Same pieces as the full-screen view, stacked top to bottom: orb, what was said, steps, buttons. */
+.vitaly.docked, .vitaly.docked[data-level] {
+  inset: 88px auto 52px 24px; width: 380px; display: flex; flex-direction: column; place-items: initial;
+  padding: 0 18px 16px; overflow: hidden; backdrop-filter: none;
+  background: rgba(3, 12, 14, .94); border: 1px solid rgba(var(--v), .45);
+}
+.vitaly.docked .v-orb { position: relative; inset: auto; flex: none; height: 120px; }
+.vitaly.docked .v-text { position: static; transform: none; width: auto; text-align: left; }
+.vitaly.docked .v-say { margin-top: 8px; font-size: 17px; }
+.vitaly.docked .v-heard { font-size: 14px; }
+.vitaly.docked .v-guide { position: static; flex: 1; min-height: 0; width: auto; margin-top: 12px; }
+.vitaly.docked .v-guide:empty { display: block; }
+.vitaly.docked .v-earth { position: static; width: auto; margin-top: 12px; padding: 12px; }
+.vitaly.docked .v-earth[hidden] { display: none; }
+.vitaly.docked .v-earth-head { font-size: 17px; }
+.vitaly.docked .v-bar, .vitaly.docked .v-confirm, .vitaly.docked .v-type { position: static; transform: none; margin-top: 12px; }
+.vitaly.docked .v-bar[hidden], .vitaly.docked .v-confirm[hidden] { display: none; }
+.vitaly.docked .v-bar button { padding: 8px 12px; letter-spacing: .1em; }
+.vitaly.docked .v-bar button.main { padding: 8px 20px; }
+.vitaly.docked .v-type { width: auto; }
+.vitaly.docked .v-close { left: auto; right: 12px; top: 12px; }
+@media (max-width: 900px) {
+  .vitaly.docked, .vitaly.docked[data-level] { inset: auto 8px 8px 8px; width: auto; max-height: 52vh; }
+  .vitaly.docked .v-orb { height: 70px; }
+  .vitaly.docked .v-earth { display: none; }
+}
+/* The solar storm banner sits across the top: keep the docked panel below it. */
+body:has(.storm-alert.in) .vitaly.docked { top: 276px; }
+@media (max-width: 900px) { body:has(.storm-alert.in) .vitaly.docked { top: auto; } }
+body:has(.storm-alert.in) .vitaly.docked .v-orb { display: none; }
+.vitaly.docked .v-text { padding-top: 14px; }
+.vitaly.docked .v-guide { min-height: 120px; }
+.vitaly.docked .v-earth-note, .vitaly.docked .v-earth-demo { display: none; }
+.vitaly.docked .v-status { padding-right: 64px; }

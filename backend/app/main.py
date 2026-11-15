@@ -439,6 +439,8 @@ async def vitaly_ask(body: VitalyAsk):
     g = reply.get("guide")
     if g and g.get("readings"):   # the live readings line is new each time: start voicing it with step 1 now
         voice.prewarm(f"{g['readings']} {g['steps'][0]}", background=False)
+    if reply.get("heads_up"):     # played right after the answer: voice it while the answer plays
+        voice.prewarm(reply["heads_up"])
     return reply
 
 

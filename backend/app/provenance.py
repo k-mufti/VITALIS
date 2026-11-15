@@ -171,6 +171,10 @@ ASSUMPTIONS = [
     {"value": "smartwatch", "what": "One consumer-class watch covers heart, oxygen, breathing, sleep, sound level and pulse timing",
      "why": "Watches like this exist and flew for research on short private missions; none is qualified for a Mars trip, "
             "and none reports pulse transit time today."},
+    {"value": "30 s", "what": "How long after a hard knock on the watch Vitaly still asks if you're hurt",
+     "why": "Watches detect falls and hard impacts with their motion sensor; the window for asking about it is our choice."},
+    {"value": "said once", "what": "Slow risks (bone loss before landing, training too hard) are mentioned once, after the next question",
+     "why": "Our choice so Vitaly informs without nagging. Only urgent alerts interrupt; when a heads-up applies comes from the backend's own risk level."},
     {"value": "7-day trend lines", "what": "The past week behind each reading in the health panel",
      "why": "The demo stores no past days, so the week is rebuilt from today's body state. Today's point is the live reading."},
 ]

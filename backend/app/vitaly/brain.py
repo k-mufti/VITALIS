@@ -161,30 +161,68 @@ async def ask(question, state, sim, focus=None):
     guide = guides.match(question)
     if guide:
         return {"say": guide["say"], "action": None, "engine": "guide",
-                "guide": {**guide, "readings": readings_line(guide, sim)}}
+                "guide": {**guide, "readings": readings_line(guide, sim, state)}}
     cmd = command(question, state, sim)
     if cmd:
         return {"say": cmd[0], "action": cmd[1], "engine": "command"}
     fast = quick.answer(question, state, sim)
     if fast:
-        return {"say": fast, "action": None, "engine": "instant"}
+        return {"say": fast, "action": None, "engine": "instant", "heads_up": heads_up(state, sim)}
     key = cache_key(question, state, sim, focus)
     hit = _replies.get(key)
     if hit and time.time() - hit[0] < REPLY_TTL_S:
-        return {**hit[1], "engine": hit[1]["engine"] + " (cached)"}
+        return {**hit[1], "engine": hit[1]["engine"] + " (cached)", "heads_up": heads_up(state, sim)}
     reply = await ask_model(question, state, sim, focus)
     if reply["engine"] != "rules":
         _replies[key] = (time.time(), reply)
         if len(_replies) > 300:
             _replies.pop(next(iter(_replies)))
-    return reply
+    return {**reply, "heads_up": heads_up(state, sim)}
 
 
-def readings_line(guide, sim):
+# ---------- heads-up: slow risks, said once ----------
+# Three levels decide when Vitaly speaks up:
+#   urgent   the watchdog's alerts (watchdog.py): spoken at once, can interrupt
+#   heads-up slow risks that matter today (below): said once, after the next question, never interrupting
+#   info     slow trends: never spoken, only shown on the health screens
+# Each heads-up is said once per crew session (sim.heads_up_said) and only while the backend's own level
+# for it is above low, so nothing here sets a new threshold.
+
+def heads_up(state, sim):
+    """One sentence about a slow risk not mentioned yet, or None."""
+    for key, line in heads_up_lines(state):
+        if key not in sim.heads_up_said:
+            sim.heads_up_said.add(key)
+            return line
+    return None
+
+
+def heads_up_lines(state):
+    organs = state["organs"]
+    out = []
+    m = organs.get("muscles") or {}
+    a = m.get("analysis") or {}
+    if a.get("status") in ("overreaching", "under-recovered"):
+        out.append(("muscles", "One more thing: you've been training hard and your recovery is low, "
+                               "so a pulled muscle is more likely. Take it easier today."))
+    b = organs.get("bones") or {}
+    if b.get("level") in ("mild", "extreme") and isinstance(b.get("value"), (int, float)) and b["value"] < 100:
+        lost = round(100 - b["value"], 1)
+        land = state.get("arrival_day")
+        when = (f"when you land on day {land}" if state.get("phase") == "cruise" and land and land > state["day"]
+                else "under load")
+        out.append(("bones", f"One more thing: your bones are an estimated {lost} percent thinner than at launch, "
+                             f"so a break is more likely {when}. Keep up the resistive exercise."))
+    return out
+
+
+def readings_line(guide, sim, state=None):
     """What the sensors show right now, said once at the start of a guide about the crew member
     themselves. Vitaly can't see anyone else's body, so there is no line for "other"."""
     if guide["who"] != "self":
         return None
+    if state and guide["id"] in ("fracture", "strain", "cramp"):
+        return injury_line(guide["id"], state)
     hr, spo2 = quick.val(sim, "heart_rate"), quick.val(sim, "spo2")
     irregular = quick.val(sim, "ecg_irregular") >= 0.5
     p = profile.profile(crew.PATIENT_ID)
@@ -198,6 +236,30 @@ def readings_line(guide, sim):
     if guide["id"] == "breathing":
         return f"Your blood oxygen is {quick.about(min(spo2, 100), 1)} percent and cabin oxygen is {quick.val(sim, 'ppo2_kpa'):.0f} kilopascals."
     return None
+
+
+def injury_line(gid, state):
+    """The crew member says what hurts; their own data says whether it fits. Never a diagnosis:
+    a break needs a scan, so the line points to the med bay ultrasound."""
+    if gid == "fracture":
+        b = state["organs"].get("bones") or {}
+        v = b.get("value")
+        if not isinstance(v, (int, float)) or v >= 100:
+            return "Treat it as a break until it's checked. The med bay ultrasound can show a crack in the bone."
+        return (f"Your bones are an estimated {round(100 - v, 1)} percent thinner than at launch, so treat it as a break "
+                "until it's checked. The med bay ultrasound can show a crack in the bone.")
+    a = (state["organs"].get("muscles") or {}).get("analysis") or {}
+    status, acwr, rec = a.get("status"), a.get("acwr"), a.get("recovery")
+    if status is None or acwr is None or rec is None:
+        return None
+    pct = abs(round(100 * (acwr - 1)))
+    if status in ("overreaching", "high load"):
+        return f"That fits your data: your training load this week is {pct} percent above your four-week normal, and recovery is {rec:.0f} out of 100."
+    if status == "under-recovered":
+        return f"That fits your data: you've kept training hard while your recovery is low, {rec:.0f} out of 100."
+    if status == "undertrained":
+        return f"Your training load is {pct} percent below your four-week normal. Muscles that do less get weaker and strain more easily."
+    return "Your training load has been normal this week, so this looks like a one-off, not overuse."
 
 
 # AI replies are reused for the same question while the situation is the same.

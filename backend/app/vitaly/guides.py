@@ -327,6 +327,52 @@ GUIDES = {
             ],
         },
     },
+    # A cramp and a pulled muscle feel alike at first; a cramp lets go within minutes, a strain doesn't.
+    "cramp": {
+        "title": "Muscle cramp", "severity": "warning",
+        "match": r"\bcramp|charley horse|muscle (is )?(locked|knotted|seized)|spasm",
+        "say": {"self": "Okay. Cramps let go within a few minutes. Let's ease it.",
+                "other": "Okay. I'll talk you through easing their cramp."},
+        "steps": {
+            "self": [
+                "Hook your feet or hand under a rail so you can stretch against it.",
+                "Stretch the muscle slowly the other way and hold it there for thirty seconds. For a calf, pull your toes toward you.",
+                "Rub the muscle firmly with your hand while it lets go.",
+                "Drink some water, a few mouthfuls.",
+                "If it's still tight after ten minutes, or it's swollen, say pulled muscle and we'll treat it as a strain.",
+            ],
+            "other": [
+                "Anchor them to a rail so they don't drift while you work.",
+                "Stretch the muscle slowly the other way and hold it for thirty seconds. For a calf, pull their toes toward them.",
+                "Rub the muscle firmly while it lets go.",
+                "Give them some water to drink.",
+                "If it's still tight after ten minutes, or swollen, say pulled muscle and I'll guide you through a strain.",
+            ],
+        },
+    },
+    "strain": {
+        "title": "Pulled muscle", "severity": "warning",
+        "match": r"pull(ed)? (a |my |his |her |their |the )?(muscle|hamstring|groin|calf|quad|thigh|back|shoulder|neck)|hamstring|"
+                 r"\bstrain|tweak(ed)?|torn (a |my )?muscle|tore (a |my )?muscle|muscle (tear|pull)|pulled muscle",
+        "say": {"self": "Okay. Let's rest it and keep the swelling down.",
+                "other": "Okay. I'll talk you through looking after the muscle."},
+        "steps": {
+            "self": [
+                "Stop exercising and don't stretch it hard. Let it rest.",
+                "Wrap a cold pack in cloth and hold it on the sore spot for fifteen minutes.",
+                "Wrap it with an elastic bandage, firm but not tight.",
+                "Check past it: your skin should stay warm and pink, with normal feeling.",
+                "No heavy exercise with it for three days.",
+            ],
+            "other": [
+                "Have them stop exercising and keep the muscle still.",
+                "Wrap a cold pack in cloth and hold it on the sore spot for fifteen minutes.",
+                "Wrap it with an elastic bandage, firm but not tight.",
+                "Check past it: the skin should stay warm and pink, with normal feeling.",
+                "No heavy exercise with it for three days.",
+            ],
+        },
+    },
     "panic": {
         "title": "Panic", "severity": "warning",
         "match": r"panic|hyperventilat|freaking out|can'?t calm down|anxiety attack",

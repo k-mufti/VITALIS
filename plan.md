@@ -237,7 +237,7 @@ Organs open from BOTH the risk panel and the body spots; both call `openSystem(i
 | POST   | `/api/countermeasure`     | body `{ organ, id }` -> updated OrganState           |
 | GET    | `/api/history`            | medical history: mission milestones, events, countermeasures, escalations, preflight baselines |
 | GET    | `/api/triage`             | list of alerts with level + Earth delay countdown    |
-| POST   | `/api/director/event`     | body `{ type }`: `radiation_storm`, `bad_sleep_week`, `bp_spike`, `skipped_exercise`, `reset` |
+| POST   | `/api/director/event`     | body `{ type }`: `radiation_storm`, `bad_sleep_week`, `bp_spike`, `skipped_exercise`, `impact` (the watch feels a hard knock; Vitaly asks if you're hurt), `reset` |
 | POST   | `/api/ask`                | body `{ question }` -> `{ answer, sources, engine }` (Claude/OpenAI if key set, else rules) |
 | POST   | `/api/mission`            | body `{ mission }`: `mars`, `moon`, `iss` (switch the live mission) |
 | GET    | `/api/organs/{id}`        | one OrganState                                        |
