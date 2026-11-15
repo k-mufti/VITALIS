@@ -81,7 +81,7 @@ PROTOCOLS = {
         "guide": [
             "Stop exercising and sit still.",
             "Breathe slowly: in for four seconds, out for six. Keep going for two minutes.",
-            "Recheck with the cuff in five minutes.",
+            "In five minutes, check your blood pressure again.",
         ],
     },
     "low_oxygen_blood": {
@@ -196,9 +196,9 @@ PROTOCOLS = {
         "title": "Solar storm", "severity": "emergency",
         "say": "Solar storm. Radiation is rising. Do this now.",
         "guide": [
-            "Take your dosimeter and go to the storm shelter.",
+            "Take your radiation badge and go to the storm shelter.",
             "Close the shelter hatch and pack the water bags around you.",
-            "Stay inside. I'm tracking your dose and I'll tell you when it's safe to come out.",
+            "Stay inside. I'm watching your radiation and I'll tell you when it's safe to come out.",
         ],
     },
     # ---------- something happened that only the person can describe ----------

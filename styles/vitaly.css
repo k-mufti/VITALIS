@@ -14,14 +14,12 @@
 /* Guide: the steps, with the current one lit */
 .v-guide { position: absolute; right: 32px; top: 32px; bottom: 120px; width: 340px; overflow-y: auto; scrollbar-width: thin; font: 400 14px/1.45 var(--sans); color: rgba(255, 255, 255, .55); }
 .v-guide:empty { display: none; }
-.v-guide .v-h { font: 600 12px var(--cond); letter-spacing: .2em; text-transform: uppercase; color: rgb(var(--v)); margin: 0 0 10px; }
 .v-guide ol { list-style: none; counter-reset: step; margin: 0; padding: 0; }
 .v-guide li { counter-increment: step; position: relative; padding: 9px 10px 9px 38px; border-left: 2px solid rgba(255, 255, 255, .12); }
 .v-guide li::before { content: counter(step); position: absolute; left: 12px; top: 9px; font: 600 14px var(--cond); color: rgba(255, 255, 255, .4); }
 .v-guide li.done { color: rgba(255, 255, 255, .3); text-decoration: line-through; text-decoration-color: rgba(255, 255, 255, .2); }
 .v-guide li.now { color: #fff; border-left-color: rgb(var(--v)); background: rgba(var(--v), .12); }
 .v-guide li.now::before { color: rgb(var(--v)); }
-.v-hint { margin-top: 12px; font: 500 11px var(--cond); letter-spacing: .14em; text-transform: uppercase; color: rgba(255, 255, 255, .4); }
 .v-bar { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); display: flex; gap: 10px; }
 .v-bar button { font: 600 13px var(--cond); letter-spacing: .16em; text-transform: uppercase; padding: 9px 18px; border: 1px solid rgba(255, 255, 255, .3); color: #fff; background: transparent; cursor: pointer; }
 .v-bar button.main { background: rgb(var(--v)); border-color: rgb(var(--v)); color: #071214; padding: 9px 34px; }
@@ -53,13 +51,8 @@
 .vitaly[hidden], .v-confirm[hidden], .v-bar[hidden] { display: none; }
 
 /* Shown only when a line had to use Chrome's voice (Deepgram unreachable). */
-.vitaly[data-voice="backup"] .v-status::after { content: ' · backup voice'; opacity: .6; }
 
 /* Alert: questions to ask Vitaly, under the steps. */
-.v-ask { margin-top: 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.v-ask span { flex-basis: 100%; font: 600 11px var(--cond); letter-spacing: .2em; text-transform: uppercase; color: rgb(var(--v)); }
-.v-ask button { padding: 7px 12px; font: 500 14px var(--sans); color: #fff; background: rgba(255, 255, 255, .06); border: 1px solid rgba(var(--v), .5); cursor: pointer; transition: background .2s; }
-.v-ask button:hover { background: rgba(var(--v), .25); }
 
 /* Alert: the copy of the readings on its way to Earth, and the reply coming back. */
 .v-earth { position: absolute; left: 32px; top: 96px; width: 300px; padding: 16px; border: 1px solid rgba(255, 255, 255, .16); background: rgba(0, 0, 0, .28); font: 400 14px/1.45 var(--sans); color: rgba(255, 255, 255, .6); }

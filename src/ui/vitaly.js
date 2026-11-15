@@ -76,7 +76,7 @@ export function initVitaly() {
       <div class="v-guide" id="vGuide"></div>
       <div class="v-earth" id="vEarth" hidden></div>
       <div class="v-bar" id="vBar" hidden>
-        <button data-say="back">Back</button><button data-say="repeat">Repeat</button><button data-say="next" class="main">Next</button><button data-say="stop">End</button>
+        <button data-say="back">Back</button><button data-say="next" class="main">Next</button>
       </div>
       <div class="v-confirm" id="vConfirm" hidden>
         <button data-answer="yes">Yes</button><button data-answer="no">No</button>
@@ -84,7 +84,7 @@ export function initVitaly() {
       <form class="v-type" id="vType" autocomplete="off">
         <input id="vInput" placeholder="Or type to Vitaly…" aria-label="Type to Vitaly" />
       </form>
-      <button class="v-close" id="vClose" aria-label="Close Vitaly">Esc</button>
+      <button class="v-close" id="vClose" aria-label="Close Vitaly">Close</button>
     </div>
     <button class="v-launch" id="vLaunch" title="Talk to Vitaly (say &quot;Hey Vitaly&quot; or press T)">
       <i></i><span>Vitaly</span><em id="vMic">T</em>
@@ -102,11 +102,6 @@ export function initVitaly() {
   $('#vConfirm').addEventListener('click', e => {
     const a = e.target.dataset.answer;
     if (a) heard(a);
-  });
-  // "Ask Vitaly" buttons under the steps of an alert.
-  $('#vGuide').addEventListener('click', e => {
-    const q = e.target.dataset.ask;
-    if (q) heard(q);
   });
   setInterval(paintEarth, 500);
   $('#vBar').addEventListener('click', e => {
@@ -320,19 +315,15 @@ function paintGuide() {
   const box = $('#vGuide');
   $('#vBar').hidden = !guide;
   if (!guide) { box.innerHTML = ''; return; }
-  const reading = guide.value && /\d/.test(guide.value) ? ` · ${guide.value}` : '';
-  status(`${guide.title}${reading} · step ${guide.i + 1} of ${guide.steps.length}`);
-  box.innerHTML = `<p class="v-h">${guide.title}</p><ol>${guide.steps.map((t, i) =>
-    `<li class="${i < guide.i ? 'done' : i === guide.i ? 'now' : ''}">${t}</li>`).join('')}</ol>
-    <p class="v-hint">Say “next”, “repeat”, “back” or “stop”</p>
-    <div class="v-ask"><span>Ask Vitaly</span>${ASK.map(q => `<button data-ask="${q}">${q}</button>`).join('')}</div>`;
+  // Kept plain on purpose: the problem's name, what Vitaly is saying, and the steps. (Voice commands
+  // "next", "back", "repeat" and "stop" still work; the buttons cover the same.)
+  status(guide.title);
+  box.innerHTML = `<ol>${guide.steps.map((t, i) =>
+    `<li class="${i < guide.i ? 'done' : i === guide.i ? 'now' : ''}">${t}</li>`).join('')}</ol>`;
   const now = box.querySelector('li.now');
   if (now) now.scrollIntoView({ block: 'nearest' });
   paintEarth();
 }
-
-// Questions offered during an alert. Each is answered at once from live data.
-const ASK = ['How am I doing?', 'When will Earth answer?'];
 
 // ---------- the copy sent to Earth ----------
 
@@ -1071,7 +1062,7 @@ function startOrb() {
     orb.mx = x; orb.my = y;
   });
   addEventListener('pointerdown', e => {
-    if (!open || e.target.closest('button, a, input, [data-say], [data-ask]')) return;
+    if (!open || e.target.closest('button, a, input, [data-say]')) return;
     orb.kick = Math.min(1, orb.kick + 0.5);
     orb.splash = 1;
   });
