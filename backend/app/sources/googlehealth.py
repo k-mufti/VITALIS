@@ -43,14 +43,18 @@ AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 API = "https://health.googleapis.com/v4/users/me/dataTypes"
 SCOPE_PREFIX = "https://www.googleapis.com/auth/googlehealth"
-SCOPES = [f"{SCOPE_PREFIX}.health_metrics_and_measurements.readonly", f"{SCOPE_PREFIX}.sleep.readonly"]
+SCOPES = [f"{SCOPE_PREFIX}.health_metrics_and_measurements.readonly", f"{SCOPE_PREFIX}.sleep.readonly",
+          f"{SCOPE_PREFIX}.activity_and_fitness.readonly"]       # steps, exercise sessions (an older connection lacks it: connect again)
 
 TOKEN_FILE = Path(__file__).resolve().parents[2] / "data" / "fitbit_tokens.json"
 POLL_S = 30
 
 # How old a reading may be and still count as "real, now". Heart rate comes all day; the others
 # are measured during sleep, so they describe last night and stay valid for a day and a half.
-MAX_AGE_S = {"heart_rate": 20 * 60, "hrv": 36 * 3600, "spo2": 36 * 3600, "resp_rate": 36 * 3600, "sleep_hours": 36 * 3600}
+MAX_AGE_S = {"heart_rate": 20 * 60, "hrv": 36 * 3600, "spo2": 36 * 3600, "resp_rate": 36 * 3600, "sleep_hours": 36 * 3600,
+             "skin_temp": 36 * 3600,
+             "steps": 2 * 3600, "exercise_min": 2 * 3600,       # today's totals, as of the last phone sync
+             "session_hr_avg": 48 * 3600}                        # the latest workout
 
 # What each Google data type feeds. (data type id, page size, parser)
 _pending = {}        # OAuth state -> (PKCE verifier, created)
@@ -58,6 +62,9 @@ BASELINE_MIN_SAMPLES = 10          # heart-rate samples needed before their low 
 BASELINE_MIN_SPAN_S = 20 * 60      # ...and they must cover at least this long (a minute of readings is not a resting rate)
 HISTORY_PAGE = 2000                # samples to fetch when catching up (newest first, about an hour at 1 to 3 s apart)
 HISTORY_EVERY_S = 600              # catch up this often; the other polls only fetch the newest 30
+SLOW_EVERY_S = 300                 # today's steps and exercise change slowly and are bigger to fetch
+STEPS_PAGE = 1500                  # step intervals, newest first (about a day at one a minute)
+EXERCISE_PAGE = 25                 # Google's maximum for exercise sessions
 BASELINE_KEEP_S = 12 * 3600        # how long observed samples are kept for that
 RESTING_MAX_AGE_S = 4 * 86400      # the watch's own daily resting heart rate may be this old
 _s = {"latest": {}, "recent_hr": [], "hr_seen": {}, "resting": None, "last_ok": None, "last_try": None, "error": None, "errors": {},
@@ -252,6 +259,52 @@ def parse_daily(points, key, field):
     return best
 
 
+def _duration_s(text):
+    """'1800s' or '1800.5s' -> seconds."""
+    try:
+        return float(str(text).strip().rstrip("s"))
+    except ValueError:
+        return None
+
+
+def parse_steps(points, since):
+    """Steps counted since `since` (epoch seconds, local midnight): (total, intervals counted), or None if none today."""
+    total, n = 0, 0
+    for p in points or []:
+        try:
+            start = parse_time(p["steps"]["interval"]["startTime"])
+            count = int(p["steps"]["count"])
+        except (KeyError, ValueError, TypeError):
+            continue
+        if start >= since:
+            total += count
+            n += 1
+    return (total, n) if n else None
+
+
+def parse_exercise(points, since):
+    """Exercise sessions: (minutes of exercise since `since`, sessions today, (average heart rate, ended at) of the newest
+    session that has one, or None)."""
+    minutes, today, newest = 0.0, 0, None
+    for p in points or []:
+        e = p.get("exercise") or {}
+        try:
+            start, end = parse_time(e["interval"]["startTime"]), parse_time(e["interval"]["endTime"])
+        except (KeyError, ValueError, TypeError):
+            continue
+        if start >= since:
+            secs = _duration_s(e.get("activeDuration")) if e.get("activeDuration") else None
+            minutes += (secs if secs is not None else end - start) / 60
+            today += 1
+        try:
+            hr = float((e.get("metricsSummary") or {})["averageHeartRateBeatsPerMinute"])
+        except (KeyError, ValueError, TypeError):
+            continue
+        if 1 <= hr <= 300 and (newest is None or end > newest[1]):
+            newest = (hr, end)
+    return round(minutes, 1), today, newest
+
+
 def parse_sleep(points):
     """Hours asleep in the most recent sleep session -> (hours, ts of waking)."""
     best = None
@@ -313,8 +366,12 @@ async def poll_once(client=None):
     catching_up = time.time() - _s.get("history_at", 0) > HISTORY_EVERY_S
     wanted = {"hr": ("heart-rate", HISTORY_PAGE if catching_up else 30), "hrv": ("heart-rate-variability", 5), "dhrv": ("daily-heart-rate-variability", 3),
               "spo2": ("oxygen-saturation", 5), "dspo2": ("daily-oxygen-saturation", 3),
-              "rhr": ("daily-resting-heart-rate", 3),
+              "rhr": ("daily-resting-heart-rate", 3), "temp": ("daily-sleep-temperature-derivations", 3),
               "resp": ("daily-respiratory-rate", 3), "sleep": ("sleep", 3)}
+    slow = time.time() - _s.get("slow_at", 0) > SLOW_EVERY_S
+    if slow:
+        _s["slow_at"] = time.time()
+        wanted.update(steps=("steps", STEPS_PAGE), exercise=("exercise", EXERCISE_PAGE))
     results = await asyncio.gather(*[list_points(token, t, n, client) for t, n in wanted.values()], return_exceptions=True)
     got, errors = dict(zip(wanted, results)), {}
     for k, r in got.items():
@@ -325,6 +382,8 @@ async def poll_once(client=None):
         if isinstance(r, Exception):
             errors[k] = str(r) or type(r).__name__
             got[k] = []
+    if not slow:   # a type that was not asked for this time keeps its last error (the activity permission, say)
+        errors.update({k: v for k, v in _s["errors"].items() if k in ("steps", "exercise") and k not in errors})
     _s["errors"] = errors
 
     now, latest = time.time(), {}
@@ -352,6 +411,20 @@ async def poll_once(client=None):
         or parse_daily(got["dspo2"], "dailyOxygenSaturation", "averagePercentage"), "night")
     put("resp_rate", parse_daily(got["resp"], "dailyRespiratoryRate", "breathsPerMinute"), "night")
     put("sleep_hours", parse_sleep(got["sleep"]), "night")
+    put("skin_temp", parse_daily(got["temp"], "dailySleepTemperatureDerivations", "nightlyTemperatureCelsius"), "night")
+    if slow:
+        # Today's totals are as fresh as the last phone sync, and the newest heart-rate sample is the best sign of that.
+        since = dt.datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+        sync = (latest.get("heart_rate") or _s["latest"].get("heart_rate") or {}).get("ts", 0)
+        steps = parse_steps(got.get("steps"), since) if "steps" not in errors else None
+        minutes, sessions, last = parse_exercise(got.get("exercise"), since) if "exercise" not in errors else (0, 0, None)
+        if steps and sync >= since:
+            put("steps", (steps[0], sync), "day")
+        # "No exercise today" only counts as a real zero if the watch has synced today (steps or heart rate show it).
+        if "exercise" not in errors and sync >= since and (sessions or steps):
+            put("exercise_min", (minutes, sync), "day")
+        if last:
+            put("session_hr_avg", last, "session")
     _s["latest"].update(latest)
     if device:
         _s["device"] = device
@@ -439,4 +512,6 @@ def report(now=None):
             "poll_every_s": POLL_S, "error": _s["error"], "errors": _s["errors"],
             "needs_reconnect": _s["needs_reconnect"], "redirect_uri": s["redirect_uri"],
             "baseline_hr": baseline_hr(now),
+            # steps and exercise need the activity permission; an older connection does not have it
+            "needs_activity_scope": any("HTTP 403" in (_s["errors"].get(k) or "") for k in ("steps", "exercise")),
             "heart_rate_window_min": MAX_AGE_S["heart_rate"] // 60}

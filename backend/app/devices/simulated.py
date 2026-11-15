@@ -46,7 +46,7 @@ class Watch(SimulatedDevice):
     watch reports it today, though its ECG and optical sensors are what the measurement needs."""
     name, label = "wearable", "Smartwatch"
     reads = ("heart_rate", "hrv", "spo2", "resp_rate", "skin_temp", "pulse_transit_ms", "session_hr_avg", "hr_recovery_bpm",
-             "ecg_irregular", "sleep_hours", "noise_dba", "exercise_min")
+             "ecg_irregular", "sleep_hours", "noise_dba", "exercise_min", "steps")
 
 
 class GlucosePatch(SimulatedDevice):

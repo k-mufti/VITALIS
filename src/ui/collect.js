@@ -13,7 +13,7 @@ const NAME = {
   heart_rate: 'Heart rate', hrv: 'Recovery (HRV)', spo2: 'Blood oxygen', resp_rate: 'Breathing rate',
   skin_temp: 'Wrist temperature', pulse_transit_ms: 'Pulse travel time', session_hr_avg: 'Workout heart rate',
   hr_recovery_bpm: 'Heart-rate recovery', ecg_irregular: 'Heart rhythm', sleep_hours: 'Sleep last night',
-  noise_dba: 'Sound level', exercise_min: 'Exercise today', glucose: 'Blood sugar',
+  noise_dba: 'Sound level', exercise_min: 'Exercise today', steps: 'Steps today', glucose: 'Blood sugar',
   bp_sys: 'Blood pressure, upper', bp_dia: 'Blood pressure, lower',
   onsd_mm: 'Optic nerve width', stroke_volume_ml: 'Blood pumped per beat', quad_thickness_mm: 'Thigh muscle thickness',
   dose_msv: 'Radiation dose so far', dose_rate_usv_h: 'Radiation right now',

@@ -152,8 +152,10 @@ everything else stays simulated and is labelled that way.
   (exactly). Put the client ID and secret in `backend/.env` (`GOOGLE_HEALTH_CLIENT_ID`, `GOOGLE_HEALTH_CLIENT_SECRET`). The
   watch's Google account must have a Google Health profile (sign in once in the Google Health app). Then click
   "Connect Fitbit" in the header. In Testing mode the connection expires after 7 days; connect again.
-- **What it reads** (`sources/googlehealth.py`, every 30 s): heart rate (newest samples), HRV, blood oxygen, breathing rate and
-  sleep. Tokens are kept in `backend/data/fitbit_tokens.json` (git-ignored, file mode 600). The secret never reaches the browser.
+- **What it reads** (`sources/googlehealth.py`, every 30 s): heart rate (newest samples), HRV, blood oxygen, breathing rate, sleep and
+  nightly skin temperature; every 5 min today's steps and exercise sessions (needs the `activity_and_fitness.readonly` permission: connect
+  again after it is added to the consent screen). Steps and minutes of exercise are today's totals as of the last phone sync; "exercise today"
+  is a real zero only if the watch has synced today. Workout heart rate is the average of the newest tracked workout (valid for 48 h). Tokens are kept in `backend/data/fitbit_tokens.json` (git-ignored, file mode 600). The secret never reaches the browser.
 - **Not a live stream:** the watch uploads through the phone app, so the newest heart-rate sample is usually minutes old (community
   reports: 5 to 20 min). Every reading carries its own sample time and the app shows its age. Heart rate counts as real for
   20 minutes; HRV, oxygen, breathing and sleep are measured overnight and count for 36 hours. Older than that, the simulated value
@@ -168,6 +170,8 @@ everything else stays simulated and is labelled that way.
 - **Unverified until the first live run** (Google's docs do not say): the heart-rate sampling interval, the exact sync delay, and the
   filter syntax for "last N minutes" (the code asks for the newest samples instead, so it does not depend on it). Sleep is listed with
   the default data-source family; Google says sleep listing normally uses its `reconcile` method, so it may need switching.
+- **Muscles:** real exercise minutes and workout heart rate feed the muscle training-load analysis (`analysis/training.py`), so a real day with no
+  workout reads as undertrained there. That is the system working on real data.
 - **Real readings never raise an alert by themselves** (`watchdog.real_plain`): a real heart rate or blood oxygen going up, down or odd does not make
   Vitaly speak; it is only used when you ask ("Hey Vitaly, how's my heart?"). A Director event layered on top of a real reading (tagged "Real + event") is
   detected like any other, so you can still trigger Vitaly on demand.
