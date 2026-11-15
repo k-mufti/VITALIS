@@ -19,6 +19,8 @@ from pathlib import Path
 
 import httpx
 
+from . import net
+
 URL = "https://api.deepgram.com/v1/speak"
 DEFAULT_MODEL = "aura-2-draco-en"
 MAX_CHARS = 2000          # Deepgram's per-request limit
@@ -100,16 +102,15 @@ class Job:
             for attempt in range(3):
                 try:
                     self.chunks.clear()
-                    async with httpx.AsyncClient(timeout=TIMEOUT_S) as client:
-                        async with client.stream("POST", URL, params={"model": s["model"], "encoding": "mp3"}, json={"text": text},
-                                                 headers={"Authorization": f"Token {s['key']}"}) as r:
-                            if r.status_code == 429 and attempt < 2:   # too many at once: wait and retry
-                                await asyncio.sleep(1.5 * (attempt + 1))
-                                continue
-                            r.raise_for_status()
-                            async for chunk in r.aiter_bytes():
-                                self.chunks.append(chunk)
-                                self.changed.set()
+                    async with net.client().stream("POST", URL, params={"model": s["model"], "encoding": "mp3"}, json={"text": text},
+                                                   headers={"Authorization": f"Token {s['key']}"}, timeout=TIMEOUT_S) as r:
+                        if r.status_code == 429 and attempt < 2:   # too many at once: wait and retry
+                            await asyncio.sleep(0.6 * (attempt + 1))
+                            continue
+                        r.raise_for_status()
+                        async for chunk in r.aiter_bytes():
+                            self.chunks.append(chunk)
+                            self.changed.set()
                     break
                 except httpx.HTTPStatusError:
                     raise

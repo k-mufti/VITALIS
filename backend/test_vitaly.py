@@ -4,7 +4,7 @@ from app import director
 from app.devices.simulated import DEVICES
 from app.engine.physiology import mission_state
 from app.state import sim
-from app.vitaly import brain, ears, guides, profile, protocols, quick, watchdog
+from app.vitaly import brain, ears, guides, net, profile, protocols, quick, watchdog
 
 
 def fire(event):
@@ -119,6 +119,10 @@ for q, word in (("How's my heart?", "Heart rate"), ("What's my oxygen?", "Blood 
     a = quick.answer(q, state, sim)
     assert a and word in a, (q, a)
 assert quick.answer("Tell me a fun fact about Mars", state, sim) is None
+# Words that only sound like a topic must not trigger an instant answer
+for q in ("What is the tallest mountain in the solar system?", "Can we see Earth from here?", "How do astronauts brush their teeth?"):
+    assert quick.answer(q, state, sim) is None, q
+assert "millisieverts" in quick.answer("Is there a solar storm coming?", state, sim)
 assert brain.first_sentences("Stay calm, Dr. Chen wrote the plan. Stay still. More.", 2).endswith("Stay still.")
 
 # Ears: Deepgram's messages are cut down to what the browser needs; the key is never in the URL
@@ -130,6 +134,12 @@ assert ears.slim(res("", False, False)) is None
 assert ears.slim(json.dumps({"type": "UtteranceEnd", "channel": [0, 1]})) == {"type": "stopped"}
 assert ears.slim(json.dumps({"type": "SpeechStarted", "channel": [0, 1]})) is None and ears.slim("not json") is None
 assert "keyterm=Vitaly" in ears.url("nova-3") and "keyterm" not in ears.url("nova-2") and "token" not in ears.url("nova-3").lower()
+
+# One shared, reused connection per event loop (no new TLS handshake per call)
+async def _same():
+    a = net.client()
+    return a is net.client() and not a.is_closed
+assert asyncio.run(_same()) and asyncio.run(_same())   # also fine across separate event loops
 
 sim.reset()
 print("vitaly checks passed")

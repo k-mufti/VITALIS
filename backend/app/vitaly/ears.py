@@ -45,7 +45,7 @@ def status():
 def url(model):
     params = [("model", model), ("language", "en"), ("encoding", "linear16"), ("sample_rate", SAMPLE_RATE),
               ("channels", 1), ("interim_results", "true"), ("smart_format", "true"),
-              ("endpointing", 300),          # ms of silence that ends a phrase
+              ("endpointing", 200),          # ms of silence that ends a phrase (the browser adds its own short settle)
               ("utterance_end_ms", 1000),    # backstop when background noise hides the silence
               ("vad_events", "true")]
     if model.startswith("nova-3"):
