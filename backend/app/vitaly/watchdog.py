@@ -7,12 +7,21 @@ Three kinds of problem:
 
 Rules decide; the AI never does. Each detected problem becomes an incident with an opening line
 and a step-by-step guide (protocols.py) that Vitaly walks the crew member through. Standalone:
-nothing is dispatched and nothing waits on another person or on Earth.
+the guide starts at once and never waits on another person or on Earth.
+
+An emergency also sends a copy of the readings to the flight surgeon on Earth. It travels at the
+real comms delay (sped up for the demo, like triage.py), so the screen can show it on its way
+while the crew member is already acting. The reply is an acknowledgement, never an instruction
+the guide depends on.
 """
 import time
 
 from .. import constants as C
+from .. import missions as M
+from ..triage import _scale as time_scale
 from . import crew, profile, protocols
+
+EARTH_REPLY = "Flight surgeon: we have your readings. Keep following the steps. We are standing by."
 
 KEEP_RESOLVED_S = 60
 SPIKE_BPM, SPIKE_WINDOW_S = 25, 60
@@ -156,11 +165,23 @@ def new_incident(sim, kind, value, now):
     p = protocols.PROTOCOLS[kind]
     sim.incident_seq += 1
     who = profile.profile(crew.PATIENT_ID)["name"]
+    severity = severity_for(kind)
     return {
-        "id": sim.incident_seq, "kind": kind, "title": p["title"], "severity": severity_for(kind), "value": value,
+        "id": sim.incident_seq, "kind": kind, "title": p["title"], "severity": severity, "value": value,
         "say": protocols.spoken(kind, who), "guide": p["guide"],
         "created": now, "state": "open", "resolved_at": None,
+        "earth": earth_copy(sim, now) if severity == "emergency" else None,
     }
+
+
+def earth_copy(sim, now):
+    """When the copy sent to Earth arrives and when the reply lands, at the real one-way delay
+    for today (JPL Horizons), divided by the demo time scale so it can be watched."""
+    delay_min = M.environment(sim.mission, sim.day)["comms_delay_min"]
+    scale = time_scale()
+    demo_s = delay_min * 60 / scale
+    return {"delay_min": round(delay_min, 2), "time_scale": scale, "sent_at": now,
+            "arrives_at": now + demo_s, "reply_at": now + 2 * demo_s, "reply": EARTH_REPLY}
 
 
 def find(sim, incident_id):

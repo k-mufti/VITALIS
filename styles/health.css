@@ -47,8 +47,10 @@ button.hp-row:hover, button.hp-row:focus-visible { outline: none; background: va
 .hp-row.high .hp-val b, .hp-row.low .hp-val b { color: var(--amber); }
 .hp-row.none .hp-val em { color: var(--soft); }
 
-/* General: one row per system, a word for how it is doing. */
-.hp-sys .hp-name { font-weight: 600; }
+/* General: the main vital signs, in tighter rows so all seven fit without scrolling. */
+.hp-key .hp-row { padding: 7px 0; }
+.hp-key .hp-val b { font-size: 22px; }
+.hp-key .hp-val em { margin-top: 2px; font-size: 11px; }
 
 /* The one thing to do next, for a system that needs a look. */
 .hp-next {

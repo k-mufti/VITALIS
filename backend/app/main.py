@@ -29,7 +29,7 @@ from .analysis import heart as heart_analysis  # noqa: E402
 from .analysis import radiation as radiation_analysis  # noqa: E402
 from .analysis import training as training_analysis  # noqa: E402
 from .analysis.common import Reader  # noqa: E402
-from .devices import catalog  # noqa: E402
+from .devices import catalog, native  # noqa: E402
 from .vitaly import brain, crew, ears, guides, net, profile, protocols, voice, watchdog  # noqa: E402
 from .devices.simulated import DEVICES  # noqa: E402
 from .engine.physiology import COUNTERMEASURES, apply_change, mission_state  # noqa: E402
@@ -169,11 +169,17 @@ def get_vitals():
     for d in DEVICES:
         metrics = [k for k, v in catalog.METRICS.items() if v["device"] == d.name]
         devices.append({"name": d.name, "label": d.label, "simulated": True,
-                        "real": catalog.DEVICES[d.name]["real"],
+                        "kind": catalog.DEVICES[d.name]["kind"], "real": catalog.DEVICES[d.name]["real"],
                         "metrics": [{"metric": k, **catalog.METRICS[k]} for k in metrics]})
     return {"latest": sim.latest, "devices": devices,
             "not_measurable_in_flight": {k: v["how"] for k, v in catalog.ORGAN_MEASUREMENT.items()
                                          if v["method"] == catalog.ESTIMATED}}
+
+
+@app.get("/api/vitals/raw")
+def get_vitals_raw():
+    """Latest readings in each device's own record format (HealthKit sample, Dexcom EGV)."""
+    return {"simulated": True, "devices": native.records(sim)}
 
 
 @app.get("/api/trends")

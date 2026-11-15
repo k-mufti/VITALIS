@@ -39,17 +39,14 @@ class SimulatedDevice(DeviceAdapter):
         return {metric: reader(metric) for metric in self.reads}
 
 
-class Biomonitor(SimulatedDevice):
-    """Smart shirt worn all day: ECG heart rate and HRV, breathing, blood oxygen, skin temperature,
-    pulse transit time (ECG beat to fingertip pulse), and heart rate during and after each workout."""
-    name, label = "wearable", "Biomonitor shirt"
+class Watch(SimulatedDevice):
+    """Smartwatch worn all day and night: heart rate, HRV, blood oxygen, breathing, wrist temperature,
+    heart rhythm, sleep, sound level, exercise minutes, and heart rate during and after each workout.
+    # ASSUMPTION: pulse transit time (heartbeat to wrist pulse) is read by the watch; no consumer
+    watch reports it today, though its ECG and optical sensors are what the measurement needs."""
+    name, label = "wearable", "Smartwatch"
     reads = ("heart_rate", "hrv", "spo2", "resp_rate", "skin_temp", "pulse_transit_ms", "session_hr_avg", "hr_recovery_bpm",
-             "ecg_irregular")
-
-
-class SleepBand(SimulatedDevice):
-    name, label = "actigraph", "Sleep wristband"
-    reads = ("sleep_hours",)
+             "ecg_irregular", "sleep_hours", "noise_dba", "exercise_min")
 
 
 class GlucosePatch(SimulatedDevice):
@@ -75,9 +72,9 @@ class CrewTablet(SimulatedDevice):
 
 
 class ExerciseMachines(SimulatedDevice):
-    """Treadmill and resistive machine logs: minutes and the load lifted."""
+    """Resistive machine log: the load lifted. Exercise minutes come from the watch."""
     name, label = "exercise", "Exercise machines"
-    reads = ("exercise_min", "resistive_load_pct")
+    reads = ("resistive_load_pct",)
 
 
 class CabinAir(SimulatedDevice):
@@ -87,17 +84,11 @@ class CabinAir(SimulatedDevice):
     reads = ("co2_mmhg", "ppo2_kpa", "cabin_pressure_kpa", "cabin_temp_c", "smoke_index")
 
 
-class NoiseDosimeter(SimulatedDevice):
-    """Worn on the collar: the crew member's own noise exposure, averaged over the day."""
-    name, label = "acoustic", "Noise dosimeter"
-    reads = ("noise_dba",)
-
-
 class Dosimeter(SimulatedDevice):
-    """Personal dosimeter: total dose so far and the current dose rate (higher in a storm, even sheltered)."""
-    name, label = "dosimeter", "Personal dosimeter"
+    """Radiation badge (personal dosimeter): total dose so far and the current dose rate (higher in a storm, even sheltered)."""
+    name, label = "dosimeter", "Radiation badge"
     reads = ("dose_msv", "dose_rate_usv_h")
 
 
-DEVICES = [Biomonitor(), SleepBand(), GlucosePatch(), BPCuff(), Ultrasound(), CrewTablet(),
-           ExerciseMachines(), CabinAir(), NoiseDosimeter(), Dosimeter()]
+# Two worn devices, one med bay kit (cuff, ultrasound, badge), and what the ship already logs.
+DEVICES = [Watch(), GlucosePatch(), BPCuff(), Ultrasound(), Dosimeter(), CrewTablet(), ExerciseMachines(), CabinAir()]

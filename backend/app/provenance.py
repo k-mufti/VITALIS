@@ -143,6 +143,9 @@ ASSUMPTIONS = [
      "why": "Our ranking model. The inputs are real; the weighting is ours."},
     {"value": "crew readings", "what": "Crew 03's vitals, routine, streak and ship time",
      "why": "Simulated. Real astronaut vitals are private medical data. The devices they flow through are a real interface."},
+    {"value": "smartwatch", "what": "One consumer-class watch covers heart, oxygen, breathing, sleep, sound level and pulse timing",
+     "why": "Watches like this exist and flew for research on short private missions; none is qualified for a Mars trip, "
+            "and none reports pulse transit time today."},
     {"value": "7-day trend lines", "what": "The past week behind each reading in the health panel",
      "why": "The demo stores no past days, so the week is rebuilt from today's body state. Today's point is the live reading."},
 ]
