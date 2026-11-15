@@ -51,3 +51,6 @@
 
 /* `hidden` must win over the display rules above, or the closed overlay would still block clicks. */
 .vitaly[hidden], .v-confirm[hidden], .v-bar[hidden] { display: none; }
+
+/* Shown only when a line had to use Chrome's voice (Deepgram unreachable). */
+.vitaly[data-voice="backup"] .v-status::after { content: ' · backup voice'; opacity: .6; }
