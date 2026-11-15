@@ -86,13 +86,15 @@ function paint() {
   else if (s.state === 'live') {
     label.textContent = s.device;
     value.textContent = `${Math.round(hr.value)} bpm`;
-    word.textContent = `real · ${minutes(ageNow(hr))} ago`;
+    word.textContent = 'live';
   } else {
     label.textContent = s.device;
     value.textContent = hr ? `last ${minutes(ageNow(hr))} ago` : 'waiting';
     word.textContent = 'using simulated';
   }
   footer(s);
+  // The age is one hover away, not on the chip.
+  btn.title = s.state === 'live' && hr ? `Latest heart-rate reading from the watch: ${minutes(ageNow(hr))} ago` : '';
   if (!$('#fbPop').hidden) paintPop();
 }
 

@@ -369,10 +369,32 @@ GUIDES = {
         ]},
     },
 }
+from . import injuries  # noqa: E402  (first-aid steps shared with the injury drill)
+
+
+def _merge(base, extra):
+    """The base guides in order, with each extra guide placed before the broader one it must beat."""
+    out = {}
+    for key, g in base.items():
+        for k, e in extra.items():
+            if e.get("before") == key:
+                out[k] = e
+        out[key] = g
+    for k, e in extra.items():
+        out.setdefault(k, e)
+    return out
+
+
+GUIDES = _merge(GUIDES, injuries.GUIDES)
 for g in GUIDES.values():
     g["pattern"] = re.compile(g["match"], re.I)
 
 # "I'm fine" style talk that happens to contain a keyword shouldn't start a guide.
+# "What is an ACL?" and "tell me about the ligament in the knee" are questions about a thing, not an injury.
+# They only count when something says it is about the speaker or someone else.
+GENERAL_QUESTION = re.compile(r"^\s*(what|how|why|when|where|which|who|does|do|is|are|can|could|tell me|explain|describe)\b", re.I)
+PERSONAL = re.compile(r"\b(i|i'm|i've|me|my|mine|we|us|you)\b", re.I)
+
 NEGATED = re.compile(r"\b(no|not|don'?t have|isn'?t|without|any)\b.{0,12}\b(pain|bleeding|burn|dizzy|choking)\b", re.I)
 
 
@@ -399,6 +421,10 @@ def match(text):
         if g.get("needs_person") and not someone:
             continue
         if g["pattern"].search(text):
+            if GENERAL_QUESTION.search(text):
+                rest = GENERAL_QUESTION.sub("", text, count=1)      # the opener itself ("tell me") must not count as personal
+                if not (PERSONAL.search(rest) or OTHER.search(rest) or NAMED.search(rest)):
+                    continue
             person = "other" if g.get("other_only") else who(text)
             return {"id": gid, "title": g["title"], "severity": g["severity"], "who": person,
                     "say": g["say"][person], "steps": g["steps"][person]}

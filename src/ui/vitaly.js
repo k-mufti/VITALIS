@@ -34,6 +34,9 @@ const FILLER = /^(?:hey|hi|hello|ok|okay|um+|uh+|hmm+|well|so)[\s.,!?]*$/i;
 // the short step commands, so "no, it's my teammate" is not taken as "next".
 const RETARGET = /\b(team ?mates?|crew ?mates?|someone|somebody|friend|buddy|partner|colleague|co-?worker|brother|sister|mom|dad|wife|husband|not (for )?(me|myself)|it'?s not me|for (him|her|them|me)|it'?s me)\b/i;
 const CLOSE_AFTER_MS = 5000;
+const CANCEL_DEAF_MS = 1200;   // after Esc: nothing is heard for a moment
+const SKIP_MAX_MS = 8000;      // give up waiting for Deepgram to end an utterance that was already acted on or cancelled
+const ECHO_TAIL_MS = 3000;     // after Vitaly stops talking: short fragments of its own last line are echo, not you
 // How long a pause ends what you're saying. Chrome's own "final" result usually arrives first;
 // these are the backstop. Short guide commands are quick; a sentence that stops on a word like
 // "and" or "my" is clearly unfinished, so it gets longer.
@@ -84,7 +87,7 @@ export function initVitaly() {
     </button>`);
 
   $('#vLaunch').addEventListener('click', () => summon());
-  $('#vClose').addEventListener('click', () => close());
+  $('#vClose').addEventListener('click', () => close(true));
   $('#vType').addEventListener('submit', e => {
     e.preventDefault();
     const text = $('#vInput').value.trim();
@@ -108,7 +111,7 @@ export function initVitaly() {
   });
   addEventListener('keydown', e => {
     const typing = /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName);
-    if (e.key === 'Escape' && open) close();
+    if (e.key === 'Escape' && open) close(true);
     if ((e.key === 't' || e.key === 'T') && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
       summon();
@@ -138,8 +141,15 @@ function show(lv = 'calm') {
   }
 }
 
-function close() {
+// cancelled: you pressed Esc or the close button. Whatever you had just said ("Hey Vitaly") is dropped, including
+// words still being transcribed, so it cannot reopen the screen a moment later.
+function close(cancelled = false) {
   clearTimeout(closeTimer);
+  clearTimeout(endTimer);
+  if (cancelled) {
+    ignoreUntil = Date.now() + CANCEL_DEAF_MS;
+    if (ears) { try { ears.abort(true); } catch (err) { /* restarts itself */ } }
+  }
   hush();
   open = false;
   mode = 'idle';
@@ -387,7 +397,7 @@ async function heard(text) {
   status('Thinking');
   let r;
   try {
-    r = await api.vitalyAsk(text, state.current, guide && guide.id ? { id: guide.id, who: guide.who } : null);
+    r = await api.vitalyAsk(text, state.current, guide && guide.id ? { id: guide.id, who: guide.who, step: guide.i } : null);
   } catch (err) {
     r = { say: 'I can\'t reach the medical system right now. Your alerts still work.' };
   }
@@ -463,8 +473,11 @@ let speakToken = 0;           // newer speech cancels older
 let stopPlaying = null;      // ends the line being played, so whoever awaits it carries on
 let playSeq = 0;             // which line owns the audio element
 let lastSaid = '';           // recent speech, to recognise our own voice in the microphone
+let lastLine = '';           // the last line Vitaly said
+let lastSpokeAt = 0;         // when Vitaly last stopped talking
 
 function hush() {
+  lastSpokeAt = Date.now();
   speakToken++;
   speechSynthesis.cancel();
   if (stopPlaying) stopPlaying();
@@ -565,6 +578,7 @@ async function say(text) {
   if (!text) return;
   $('#vSay').textContent = text;
   lastSaid = (lastSaid + ' ' + text).slice(-600);
+  lastLine = text;
   const token = ++speakToken;
   speechSynthesis.cancel();          // a new line replaces whatever was being said
   if (stopPlaying) stopPlaying();
@@ -590,6 +604,7 @@ async function say(text) {
   speaking = false;
   // The recogniser lags about a second behind the room, so it is still chewing on Vitaly's own
   // voice. Throw that away: restart it, and stay deaf for a moment.
+  lastSpokeAt = Date.now();
   ignoreUntil = Date.now() + 450;
   if (ears) { try { ears.abort(); } catch (err) { /* restarts itself */ } }
   if (mode === 'speaking') mode = prev === 'speaking' ? 'listening' : prev;
@@ -608,7 +623,11 @@ const words = t => t.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filt
 // True if what the mic picked up is Vitaly's own recent speech (4+ words found in order).
 const isEcho = text => {
   const w = words(text);
-  return w.length >= 4 && words(lastSaid).join(' ').includes(w.join(' '));
+  if (w.length >= 4) return words(lastSaid).join(' ').includes(w.join(' '));
+  // Deepgram runs about a second behind the room, so the end of Vitaly's own last line (its greeting, a step)
+  // can arrive as a fragment after it stops. Without this, "...help with?" was taken as your question.
+  if (!w.length || Date.now() - lastSpokeAt > ECHO_TAIL_MS || !words(lastLine).join(' ').includes(w.join(' '))) return false;
+  return w.length >= 2 || !(NEXT.test(text) || BACK.test(text) || REPEAT.test(text) || STOP.test(text) || YES.test(text) || NO.test(text));
 };
 // What was said to Vitaly: the words after "hey Vitaly" (or before it, if the name came last).
 function afterWake(text) {
@@ -629,6 +648,7 @@ function finishHearing(id, text, done) {
   if (id <= handled) return;
   handled = id;
   if (done) done();
+  if (Date.now() < ignoreUntil) return;       // you just cancelled: this was said before that
   const q = afterWake(text);
   if (isEcho(q)) return;
   if (q.length < 2 && WAKE.test(text)) return greet();     // "Hey Vitaly" on its own
@@ -756,10 +776,21 @@ async function startDeepgramEars() {
   let id = 0;
   let fails = 0;
   let stopped = false;
-  const clear = () => { parts = []; latest = ''; id++; };
+  // Deepgram keeps re-sending the same words for seconds, until it decides you have finished talking ("Hey Vitaly"
+  // arrived four times over four seconds). So an utterance that was acted on, or cancelled with Esc, is ignored until
+  // Deepgram says it has ended; otherwise its late repeats looked like a new "Hey Vitaly" and the screen popped up again.
+  let ended = false;          // Deepgram has said the current utterance is over
+  let skipping = false;       // ignoring the rest of an utterance that was already dealt with
+  let skipSince = 0;
+  const clear = () => { parts = []; latest = ''; id++; ended = false; };
+  const dealtWith = () => {   // an utterance was acted on: ignore the rest of it
+    const over = ended;
+    clear();
+    if (!over) { skipping = true; skipSince = Date.now(); }
+  };
   const update = (text, quiet, settle) => {
     latest = text;
-    const kept = hearing(id, text, quiet, settle, clear);
+    const kept = hearing(id, text, quiet, settle, dealtWith);
     if (!kept && quiet) clear();   // chatter that wasn't for Vitaly, or Vitaly's own voice: drop it
   };
   const connect = () => {
@@ -770,6 +801,14 @@ async function startDeepgramEars() {
       const m = JSON.parse(e.data);
       gotWords = true;
       fails = 0;
+      const over = m.type === 'stopped' || !!m.stopped;
+      if (skipping) {
+        if (over) { skipping = false; clear(); return; }                 // the old utterance has ended
+        if (Date.now() - skipSince < SKIP_MAX_MS) return;                // still the old one: ignore
+        skipping = false; clear();                                       // gave up waiting: this is new
+      }
+      if (over) ended = true;
+      else if (ended && m.type === 'words' && m.text) clear();           // words after an ended utterance: a new one
       if (m.type === 'stopped') { if (latest) update(latest, true, SETTLE_STOPPED_MS); return; }
       if (m.type !== 'words') return;
       if (m.final && m.text) parts.push(m.text);
@@ -801,8 +840,16 @@ async function startDeepgramEars() {
   // Chrome suspends audio in a tab it thinks is idle; wake it when the page is looked at again.
   document.addEventListener('visibilitychange', () => { if (!document.hidden && ctx.state === 'suspended') ctx.resume(); });
   connect();
-  // abort(): forget what was heard so far (called when Vitaly finishes talking).
-  ears = { abort() { clearTimeout(endTimer); clear(); } };
+  // abort(): forget what was heard so far (called when Vitaly finishes talking). With cancel (Esc), an utterance in
+  // progress is also ignored until it ends.
+  ears = {
+    abort(cancel) {
+      clearTimeout(endTimer);
+      const inProgress = !!latest && !ended;
+      clear();
+      if (cancel && inProgress) { skipping = true; skipSince = Date.now(); }
+    },
+  };
   earsOn('deepgram');
   return true;
 }

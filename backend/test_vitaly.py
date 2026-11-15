@@ -95,13 +95,27 @@ cases = [
     ("my roommate fainted", "fainting", "other"),
     ("I have a sharp pain in my chest", "chest_pain", "self"),
     ("my chest hurts and my teammate is here", "chest_pain", "self"),
+    # injuries from the injury drill's library: these used to fall through to the AI ("I think I tore my ACL" got a heart-rate answer)
+    ("I think I tore my ACL", "sprain", "self"),
+    ("my teammate tore his ACL", "sprain", "other"),
+    ("I pulled my hamstring", "sprain", "self"),
+    ("my ankle is swollen", "sprain", "self"),
+    ("sprained ankle", "sprain", "self"),
+    ("she has a nosebleed", "nosebleed", "other"),
+    ("nosebleed", "nosebleed", "self"),
+    ("he got an electric shock", "shock", "other"),
+    ("my back is killing me", "back", "self"),
+    ("I have a toothache", "tooth", "self"),
+    ("his shoulder popped out", "dislocation", "other"),
+    ("what do I do, I think I sprained my wrist", "sprain", "self"),
 ]
 for text, gid, person in cases:
     g = guides.match(text)
     assert g and g["id"] == gid and g["who"] == person, (text, g and (g["id"], g["who"]))
     assert len(g["steps"]) >= 4 and g["say"]
 assert guides.match("how is my heart") is None
-for benign in ("what is wrong with my heart", "am I healthy enough to land", "why do I feel so tired", "I can't see my readings",
+for benign in ("tell me about the ligament in the knee", "what is an ACL", "what is the tallest mountain in the solar system",
+               "how does a nosebleed happen", "explain a sprain", "what is wrong with my heart", "am I healthy enough to land", "why do I feel so tired", "I can't see my readings",
                "is the cabin air okay", "how much radiation have I had", "what should I do", "is anything wrong",
                "I did sixty minutes on the treadmill, log it", "tell earth that I feel fine", "next", "repeat that"):
     assert guides.match(benign) is None, (benign, guides.match(benign)["id"])
@@ -115,6 +129,23 @@ r = asyncio.run(brain.ask("sharp pain in my chest", state, sim))
 assert r["engine"] == "guide" and r["guide"]["id"] == "chest_pain" and "heart rate" in r["guide"]["readings"]
 r = asyncio.run(brain.ask("someone else has a sharp pain in their chest", state, sim))
 assert r["guide"]["who"] == "other" and r["guide"]["readings"] is None  # can't see someone else's body
+
+# The injury guides are spoken to a person, not read as a checklist: warm, complete sentences, nothing left over from the
+# templates, and nothing that waits on a call to Earth
+from app.vitaly import injuries  # noqa: E402
+for gid in injuries.MATCH:
+    g = guides.GUIDES[gid]
+    for who in ("self", "other"):
+        lines = [g["say"][who], *g["steps"][who]]
+        assert len(g["steps"][who]) >= 6, (gid, who)
+        for line in lines:
+            assert "{" not in line and "|" not in line and "}" not in line, (gid, who, line)
+            assert "call ground" not in line.lower() and "tell ground" not in line.lower(), (gid, who, line)
+            assert line[0].isupper() and line[-1] in ".?!" and len(line) <= 420, (gid, who, line)
+        assert "I'm" in g["say"][who] or "I'll" in g["say"][who], (gid, who)         # someone is there
+    assert g["steps"]["self"] != g["steps"]["other"] or gid in ("tooth", "rash", "bruise", "crush", "nail", "back"), gid
+sp_self, sp_other = guides.GUIDES["sprain"]["steps"]["self"], guides.GUIDES["sprain"]["steps"]["other"]
+assert "stop using it" in sp_self[0] and "have them stop using it" in sp_other[0] and "pop" in " ".join(sp_self)
 
 # Changing the patient part-way through a guide
 me, them = {"id": "chest_pain", "who": "self"}, {"id": "chest_pain", "who": "other"}
@@ -132,6 +163,11 @@ assert g["who"] == "self" and g["say"].startswith("Got it, it's you.") and g["re
 assert asyncio.run(brain.ask("my teammate is not breathing", state, sim, current=me))["guide"]["id"] == "unresponsive"   # a new emergency wins
 assert "guide" not in asyncio.run(brain.ask("how is my heart", state, sim, current=me))
 
+# While a guide is running, words like "cold pack" or "pressure on it" must not trigger the cabin-air report
+assert not brain.instant_allowed("what if the cold pack is not cold enough", me) and not brain.instant_allowed("should I press harder, the pressure hurts", me)
+assert brain.instant_allowed("what if the cold pack is not cold enough", None)          # outside a guide it is the cabin question
+assert brain.instant_allowed("how am I doing", me) and brain.instant_allowed("when will Earth answer", me) and brain.instant_allowed("how is my heart", me)
+
 # Voice commands are matched by rules, not the model
 say, action = brain.command("I did sixty minutes on the treadmill, log it", state, sim)
 assert action == {"type": "log_countermeasure", "organ": "heart", "id": "cardio_45"}, action
@@ -147,7 +183,7 @@ for q, word in (("How's my heart?", "Heart rate"), ("What's my oxygen?", "Blood 
     assert a and word in a, (q, a)
 assert quick.answer("Tell me a fun fact about Mars", state, sim) is None
 # Words that only sound like a topic must not trigger an instant answer
-for q in ("What is the tallest mountain in the solar system?", "Can we see Earth from here?", "How do astronauts brush their teeth?"):
+for q in ("What should I eat before a workout?", "how much water should I drink when I'm tired", "What is the tallest mountain in the solar system?", "Can we see Earth from here?", "How do astronauts brush their teeth?"):
     assert quick.answer(q, state, sim) is None, q
 assert "millisieverts" in quick.answer("Is there a solar storm coming?", state, sim)
 assert brain.first_sentences("Stay calm, Dr. Chen wrote the plan. Stay still. More.", 2).endswith("Stay still.")

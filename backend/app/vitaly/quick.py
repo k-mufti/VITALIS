@@ -35,7 +35,13 @@ INTENTS = [
 INTENTS = [(name, re.compile(p, re.I)) for name, p in INTENTS]
 
 
+# Food and drink questions mention words like "workout" or "tired" but are not about a reading: the AI answers those.
+NUTRITION = re.compile(r"\b(eat|eating|ate|food|foods|drink|drinking|meal|meals|snack|diet|nutrition|recipe|cook|coffee|caffeine|supplements?|vitamins?)\b", re.I)
+
+
 def intent(question):
+    if NUTRITION.search(question):
+        return None
     for name, pattern in INTENTS:
         if pattern.search(question):
             return name

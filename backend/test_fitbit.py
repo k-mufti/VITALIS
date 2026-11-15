@@ -263,6 +263,22 @@ async def main():
     live_hr(72)
     assert mission_state(sim)["organs"]["heart"]["checks"][0]["verdict"] == "ok"   # 72 vs 66: fine (was "watch" against 58)
 
+    # Everything the model and the screen are told about the heart uses the wearer's own number, never the simulated 58
+    gh._s["resting"] = {"value": 62.0, "ts": time.time() - 3600}
+    live_hr(99)
+    heart = mission_state(sim)["organs"]["heart"]
+    texts = " ".join([heart["note"], heart["usual"], *[c["healthy"] + " " + c["why"] for c in heart["checks"] if c["id"] == "resting_hr"]])
+    assert not any(old in texts for old in ("yours 58", "+41", "54-62")), texts   # 99 - 58 = 41 was what the model quoted
+    assert heart["usual"] == "58-66" and "+37" in " ".join(p["says"] for p in heart["analysis"]["derived"] if p["id"] == "resting_hr") and "+37" in heart["note"]
+    gh._s["resting"] = None
+    live_hr(99)
+    heart = mission_state(sim)["organs"]["heart"]
+    assert heart["usual"] == "60-100" and "from your normal" not in " ".join(p["says"] for p in heart["analysis"]["derived"] if p["id"] == "resting_hr")
+    assert "58" not in heart["note"] and "41" not in heart["note"] and next(c for c in heart["checks"] if c["id"] == "resting_hr")["healthy"] == "60-100 bpm"   # no baseline learned yet: no comparison
+    gh._s["resting"] = {"value": 62.0, "ts": time.time() - 3600}
+    sim.reset(); gh._s["latest"].pop("heart_rate", None); sim.fresh_readings(DEVICES)
+    assert mission_state(sim)["organs"]["heart"]["usual"] == "54-62"              # simulated again: the crew member's own
+
     # a Director event on top of the real heart is detected like any other (that is how you trigger Vitaly on demand)
     live_hr(80)
     director.trigger(sim, "cardiac_arrest"); sim.fresh_readings(DEVICES)
