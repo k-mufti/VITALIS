@@ -27,7 +27,13 @@ const NEXT = /\b(next|done|did (it|that)|okay|ok|got it|continue|go on|ready|wha
 const BACK = /\b(back|previous|before that)\b/i;
 const STOP = /\b(stop|exit|quit|end (the )?guide|cancel|i'?m (fine|okay|ok|good|alright) now|false alarm|never ?mind)\b/i;
 const CLOSE_AFTER_MS = 5000;
-const ENDPOINT_MS = 700;      // silence that ends a question
+// How long a pause ends what you're saying. Chrome's own "final" result usually arrives first;
+// these are the backstop. Short guide commands are quick; a sentence that stops on a word like
+// "and" or "my" is clearly unfinished, so it gets longer.
+const ENDPOINT_MS = 1600;
+const ENDPOINT_COMMAND_MS = 350;
+const ENDPOINT_UNFINISHED_MS = 2800;
+const UNFINISHED = /\b(and|or|but|so|because|is|are|was|has|have|my|his|her|their|the|a|an|in|on|at|of|to|with|from|for|about|that|which|who|if|when|i|he|she|they|it's|i'm|um|uh)$/i;
 const COLORS = { calm: [63, 214, 198], warning: [227, 155, 45], emergency: [224, 68, 46] };
 
 let mode = 'idle';            // idle | listening | thinking | speaking | confirm | alert
@@ -77,6 +83,7 @@ export function initVitaly() {
     $('#vInput').value = '';
     if (text) heard(text);
   });
+  $('#vInput').addEventListener('input', () => { if (open) closeSoon(); });   // typing: don't time out
   $('#vConfirm').addEventListener('click', e => {
     const a = e.target.dataset.answer;
     if (a) heard(a);
@@ -387,12 +394,18 @@ function hush() {
   speaking = false;
 }
 
+// Is Deepgram set up? A failed check (backend restarting) is retried after a few seconds instead
+// of switching the whole page to Chrome's voice.
+let deepgramCheckedAt = 0;
 async function deepgramReady() {
-  if (deepgram === null) {
-    try { deepgram = (await api.vitalyStatus()).voice === 'deepgram'; } catch (err) { deepgram = false; }
-  }
-  return deepgram;
+  if (deepgram === true) return true;
+  if (Date.now() - deepgramCheckedAt < 4000) return false;
+  deepgramCheckedAt = Date.now();
+  try { deepgram = (await api.vitalyStatus()).voice === 'deepgram'; } catch (err) { deepgram = null; }
+  return deepgram === true;
 }
+
+const pause = ms => new Promise(r => setTimeout(r, ms));
 
 // The orb follows the real loudness of Deepgram's audio.
 function audioLevel() {
@@ -480,14 +493,26 @@ async function say(text) {
   speaking = true;
   const prev = mode;
   if (mode !== 'alert' && mode !== 'confirm') mode = 'speaking';
+  // One voice: Deepgram. If a line fails (usually the backend restarting), try it once more before
+  // ever using Chrome's voice, which is the last resort so Vitaly is never silent.
   let played = false;
-  if (await deepgramReady() && token === speakToken) played = await playDeepgram(text, token);
-  if (!played && token === speakToken) await browserSay(text, token);
+  if (await deepgramReady() && token === speakToken) {
+    played = await playDeepgram(text, token);
+    if (!played && token === speakToken) {
+      await pause(800);
+      if (token === speakToken) played = await playDeepgram(text, token);
+    }
+  }
+  if (token === speakToken) $('#vitaly').dataset.voice = played ? 'deepgram' : 'backup';
+  if (!played && token === speakToken) {
+    console.info('Vitaly: Deepgram voice unavailable for this line, using the browser voice.');
+    await browserSay(text, token);
+  }
   if (token !== speakToken) return;  // something newer took over
   speaking = false;
   // The recogniser lags about a second behind the room, so it is still chewing on Vitaly's own
   // voice. Throw that away: restart it, and stay deaf for a moment.
-  ignoreUntil = Date.now() + 900;
+  ignoreUntil = Date.now() + 450;
   if (ears) { try { ears.abort(); } catch (err) { /* restarts itself */ } }
   if (mode === 'speaking') mode = prev === 'speaking' ? 'listening' : prev;
   setTimeout(checkIncidents, 0);
@@ -508,7 +533,6 @@ function startEars() {
   // The wake word counts the moment it appears; a question ends after 0.7 s with no new words.
   let handled = -1;          // index of the last result already acted on
   let endTimer = null;
-  let yesTimer = null;
   const words = t => t.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
   // True if what the mic picked up is Vitaly's own recent speech (4+ words found in order).
   const isEcho = text => {
@@ -520,7 +544,7 @@ function startEars() {
     if (index <= handled) return;
     handled = index;
     const q = text.replace(WAKE, '').trim();
-    if (q.length > 1 && !isEcho(q)) { clearTimeout(yesTimer); heard(q); }
+    if (q.length > 1 && !isEcho(q)) heard(q);
   };
   rec.onstart = () => { handled = -1; };   // result numbering restarts with every session
   rec.onresult = e => {
@@ -534,15 +558,17 @@ function startEars() {
     if (!open || mode === 'idle') {
       if (!WAKE.test(text)) return;
       summon();
-      // "Hey Vitaly" alone: answer "Yes?" after a pause. Any further words cancel it (below).
-      clearTimeout(yesTimer);
-      yesTimer = setTimeout(() => { if (mode === 'listening' && !speaking) say('Yes?'); }, 1100);
+      chime();   // instant "I'm listening" tone; no spoken "Yes?" to talk over the question
     }
-    if (rest.length > 1) clearTimeout(yesTimer);   // they're still talking: don't interrupt
+    closeSoon();   // still talking: don't let the screen time out mid-question
     $('#vHeard').textContent = `“${text}”`;
     if (res.isFinal) return finish(index, text);
     clearTimeout(endTimer);
-    endTimer = setTimeout(() => finish(index, text), ENDPOINT_MS);
+    let wait = ENDPOINT_MS;
+    const short = rest.split(/\s+/).length <= 2;
+    if (guide && short && (NEXT.test(rest) || REPEAT.test(rest) || BACK.test(rest) || STOP.test(rest))) wait = ENDPOINT_COMMAND_MS;
+    else if (UNFINISHED.test(rest) || rest.length < 2) wait = ENDPOINT_UNFINISHED_MS;
+    endTimer = setTimeout(() => finish(index, text), wait);
   };
   rec.onerror = e => {
     if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
@@ -552,7 +578,7 @@ function startEars() {
       $('#vLaunch').title = 'Microphone blocked: press T and type to Vitaly';
     }
   };
-  rec.onend = () => { if (!denied) setTimeout(() => { try { rec.start(); } catch (err) { /* already running */ } }, 300); };
+  rec.onend = () => { if (!denied) setTimeout(() => { try { rec.start(); } catch (err) { /* already running */ } }, 60); };
   try {
     rec.start();
     ears = rec;
@@ -586,6 +612,26 @@ function alarm(severity) {
       osc.stop(t + step);
     });
   } catch (err) { /* no audio: the screen still shows the alert */ }
+}
+
+// One soft rising note: "I'm listening". Instant, and unlike a spoken "Yes?" it can't talk over you.
+function chime() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const t = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(587, t);
+    osc.frequency.exponentialRampToValueAtTime(880, t + 0.12);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.12, t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + 0.25);
+  } catch (err) { /* no audio */ }
 }
 
 // ---------- text on screen ----------
