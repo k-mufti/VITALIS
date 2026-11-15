@@ -1,5 +1,5 @@
 {
-  "saved_at": 1794694793.362435,
+  "saved_at": 1794719524.806117,
   "data": [
     {
       "flrID": "2026-09-19T17:57:00-FLR-001",
@@ -598,6 +598,31 @@
       "linkedEvents": null,
       "sentNotifications": null,
       "submissionTime": "2026-11-11T21:33Z",
+      "versionId": 1
+    },
+    {
+      "flrID": "2026-11-14T21:16:00-FLR-001",
+      "catalog": "M2M_CATALOG",
+      "instruments": [
+        {
+          "displayName": "GOES-P: EXIS 1.0-8.0"
+        }
+      ],
+      "beginTime": "2026-11-14T21:16Z",
+      "peakTime": "2026-11-14T21:27Z",
+      "endTime": "2026-11-14T21:38Z",
+      "classType": "C2.8",
+      "sourceLocation": "N17E70",
+      "activeRegionNum": 14579,
+      "note": "Flare location is just off Active Region 14579.",
+      "link": "https://ccmc.gsfc.nasa.gov/DONKI/view/FLR/49559/-1",
+      "linkedEvents": [
+        {
+          "activityID": "2026-11-14T22:15:00-CME-001"
+        }
+      ],
+      "sentNotifications": null,
+      "submissionTime": "2026-11-15T00:36Z",
       "versionId": 1
     }
   ]

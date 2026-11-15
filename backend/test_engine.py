@@ -9,7 +9,7 @@ o = s["organs"]
 # Day 184 matches the agreed demo numbers (and the old fixture)
 assert o["bones"]["value"] == 95.9 and o["sleep"]["value"] == 6.2 and o["heart"]["value"] == 64 and o["eyes"]["value"] == 5.2, o
 assert s["radiation_msv"] == 338.6 and s["phase"] == "cruise"
-assert len(s["risk_ranking"]) == 6 and s["risk_ranking"][0] == "bones"
+assert len(s["risk_ranking"]) == 7 and s["risk_ranking"][0] == "bones"
 for organ in o.values():
     assert 0 <= organ["severity"] <= 1 and 0 <= organ["mission_risk"] <= 1
     assert organ["status"] in ("OK", "Watch", "Act") and organ["countermeasures"] and organ["what_could_go_wrong"]

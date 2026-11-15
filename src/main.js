@@ -11,6 +11,7 @@ import { initHistory } from './ui/history.js';
 import { initDirector } from './ui/director.js';
 import { initSources } from './ui/sources.js';
 import { initRadiation } from './ui/radiation.js';
+import { initVitaly } from './ui/vitaly.js';
 import { initInjury } from './ui/injury.js';
 import { initData } from './data/client.js';
 
@@ -30,6 +31,7 @@ initHistory();
 initDirector();
 initSources();
 initRadiation();
+initVitaly();
 initInjury();
 initData();
 

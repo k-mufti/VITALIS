@@ -1,0 +1,75 @@
+/* VITALIS type + logo. Loaded last, after every other stylesheet.
+   Tektur for labels, headings and numbers; Barlow stays for body text.
+   The logo is a black slab with a cyan corner tab. */
+
+:root {
+  --cond: 'Tektur', 'Barlow Condensed', sans-serif;
+  --head: 'Tektur', 'Barlow Condensed', sans-serif;
+}
+
+/* Tektur is wide. Small labels use its semi-condensed width so tabs, chips and
+   headings keep breathing room. Barlow has no width axis, so body text is unchanged. */
+body { font-stretch: 87.5%; }
+/* Big numbers and names keep the full width: that's where the font shows off. */
+.logo, .corner.tl, .day b, .badge span, .who h1, .dose-head b { font-stretch: 100%; }
+
+/* ---------- logo: slab ---------- */
+.logo, .corner.tl {
+  justify-self: start; display: inline-block;
+  background: var(--ink); color: var(--white);
+  font: 800 19px/1 var(--head); letter-spacing: .2em;
+  padding: 9px 9px 8px 13px;          /* right side is smaller: the last letter's tracking fills it */
+}
+.logo { position: relative; }
+.logo::after, .corner.tl::after {
+  content: ''; position: absolute; top: 0; right: 0;
+  border: 6px solid transparent; border-top-color: var(--cyan); border-right-color: var(--cyan);
+}
+.corner.tl { top: 28px; font-size: 14px; padding: 7px 7px 6px 10px; color: var(--white); }
+.corner.tl::after { border-width: 5px; }
+
+/* ---------- top bar ---------- */
+.bar-mid { letter-spacing: .12em; }
+.tab { letter-spacing: .12em; padding: 9px 22px; }
+
+/* ---------- sign in ---------- */
+.signin h1 { letter-spacing: .04em; }
+.who h1 { letter-spacing: .03em; }
+
+/* ---------- body view, left: "Your body" panel ---------- */
+.an-tab { font-size: 13px; letter-spacing: .06em; padding: 10px 0 9px; }
+.an-grid { gap: 8px; margin-top: 12px; }
+.an-tile { padding: 6px 4px 8px; gap: 2px; }
+.an-tile img { width: auto; height: 62px; aspect-ratio: auto; }
+.an-tile span { font-size: 14px; }
+
+/* the Day block sits under the panel; smaller so the two never touch */
+.day { font-size: 84px; line-height: .9; letter-spacing: 0; font-weight: 400; }
+.day span { font-size: 12px; margin-bottom: 6px; }
+.body-foot { bottom: 36px; }
+
+/* ---------- body view, right: "Your health" panel ---------- */
+.hp-tab { font-size: 12px; letter-spacing: .04em; }
+.risk-rail header h2 { letter-spacing: .18em; }
+.rail-btn { letter-spacing: .14em; }
+
+/* ---------- organ page ---------- */
+.d-plan h3 { letter-spacing: .14em; white-space: nowrap; }
+
+/* ---------- bottom line ---------- */
+.foot { font-size: 11px; letter-spacing: .08em; }
+.hint { font-size: 11px; letter-spacing: .14em; }
+
+/* ---------- logo: holographic card ----------
+   logo-holo.js tilts the slab toward the pointer and sets --gx/--gy;
+   a glare and a rainbow foil band follow it. */
+.logo, .corner.tl { overflow: hidden; transition: transform .25s ease-out; will-change: transform; }
+.logo::before, .corner.tl::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen;
+  background:
+    radial-gradient(circle at var(--gx, 50%) var(--gy, 50%), rgba(255,255,255,.45), transparent 45%),
+    linear-gradient(115deg, transparent 20%, rgba(127,246,255,.35) 35%, rgba(201,166,255,.35) 45%, rgba(255,154,213,.3) 55%, transparent 70%);
+  background-size: 100% 100%, 250% 100%;
+  background-position: 0 0, var(--gx, 50%) 0;
+}
+@media (prefers-reduced-motion: reduce) { .logo::before, .corner.tl::before { display: none; } }

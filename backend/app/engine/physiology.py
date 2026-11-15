@@ -10,19 +10,26 @@ import copy
 from .. import constants as C
 from .. import hrp
 from .. import missions as M
+from ..analysis import heart as heart_analysis
+from ..analysis import training as training_analysis
+from ..analysis import checks as organ_checks
+from ..analysis.common import Reader
 from ..devices.catalog import ORGAN_MEASUREMENT, describe
+from . import signals
+from .signals import bone_density_pct, onsd_mm  # noqa: F401  (re-exported for older imports)
 from ..state import ORGANS
 
 B = C.BASELINE
 
 # ASSUMPTION: how much each mission's hazards weigh on each organ over the remaining mission.
 HAZARD_WEIGHT = {
-    "mars": {"bones": 1.25, "heart": 1.1, "sleep": 1.0, "eyes": 1.15, "muscles": 1.0, "lungs": 0.6},
-    "moon": {"bones": 0.8, "heart": 0.9, "sleep": 0.9, "eyes": 0.7, "muscles": 0.8, "lungs": 1.0},
-    "iss": {"bones": 1.0, "heart": 0.9, "sleep": 0.9, "eyes": 1.0, "muscles": 0.9, "lungs": 0.6},
+    "mars": {"bones": 1.25, "heart": 1.1, "sleep": 1.0, "eyes": 1.15, "muscles": 1.0, "lungs": 0.6, "ears": 0.7},
+    "moon": {"bones": 0.8, "heart": 0.9, "sleep": 0.9, "eyes": 0.7, "muscles": 0.8, "lungs": 1.0, "ears": 0.8},
+    "iss": {"bones": 1.0, "heart": 0.9, "sleep": 0.9, "eyes": 1.0, "muscles": 0.9, "lungs": 0.6, "ears": 0.7},
 }
 
-NAMES = {"heart": "Heart", "bones": "Bones", "sleep": "Sleep & mind", "eyes": "Eyes", "lungs": "Lungs", "muscles": "Muscles"}
+NAMES = {"heart": "Heart", "bones": "Bones", "sleep": "Sleep & mind", "eyes": "Eyes", "lungs": "Lungs", "muscles": "Muscles",
+         "ears": "Ears & balance"}
 
 UNITS = {
     "heart": ("beats a minute at rest", "54-62"),
@@ -31,6 +38,7 @@ UNITS = {
     "eyes": ("mm optic nerve sheath (ultrasound)", "under 5.0 mm"),
     "lungs": ("breaths a minute", "14-18"),
     "muscles": ("strength estimate out of 100", "80-95"),
+    "ears": ("dBA noise, day average", "under 70"),
 }
 
 SOURCES = {
@@ -40,6 +48,7 @@ SOURCES = {
     "eyes": "NASA HRP: Spaceflight Associated Neuro-ocular Syndrome, NASA's leading spaceflight health risk",
     "muscles": "NASA HRP: Reduced Cardiorespiratory and Musculoskeletal Fitness",
     "lungs": "NASA HRP: Hypoxia; Host-Microorganism Interactions",
+    "ears": "NASA HRP: Altered Sensorimotor and Vestibular Function; NIOSH noise limits",
 }
 
 WHAT_COULD_GO_WRONG = {
@@ -65,6 +74,11 @@ WHAT_COULD_GO_WRONG = {
     "lungs": [
         ("Breathing problems from cabin air or dust", None, ["oxygen below 95%", "breathing faster at rest"]),
     ],
+    "ears": [
+        ("Hearing loss from months of cabin noise", None, ["hearing test worse", "ringing in the ears"]),
+        ("Dizziness and falls after landing while balance readjusts", "arrival", ["nausea score rising", "unsteady when turning the head"]),
+        ("Ear and sinus pain from a cabin pressure change", None, ["ears not clearing", "cabin pressure dropping"]),
+    ],
 }
 
 # `research` = the real NASA HRP study behind a countermeasure (app/hrp.py RESEARCH).
@@ -74,6 +88,8 @@ COUNTERMEASURES = {
          "mods": {"missed_exercise_days": -3}, "relief": {"bones": 0.08, "muscles": 0.05}},
     ],
     "heart": [
+        {"id": "stabilise", "label": "Medical officer treats and stabilises the heart", "minutes": 20,
+         "mods": {"cardiac": "", "bp_drop": -60.0}, "relief": {}},
         {"id": "lbnp_30", "label": "30 min lower body negative pressure", "minutes": 30, "mods": {}, "relief": {"heart": 0.12}},
         {"id": "cardio_45", "label": "45 min cycling", "minutes": 45, "research": "Zero T2",
          "mods": {"missed_exercise_days": -1}, "relief": {"heart": 0.06}},
@@ -94,8 +110,19 @@ COUNTERMEASURES = {
         {"id": "ared_60", "label": "60 min resistive exercise", "minutes": 60,
          "mods": {"missed_exercise_days": -3}, "relief": {"bones": 0.08, "muscles": 0.05}},
     ],
+    "ears": [
+        {"id": "ear_protection", "label": "Earplugs for sleep + fix the noisy fan", "minutes": 20,
+         "mods": {"noise_offset": -10.0}, "relief": {"ears": 0.05}},
+        {"id": "leak_check", "label": "Find and seal the cabin leak, repressurise", "minutes": 60,
+         "mods": {"pressure_drop_kpa": -10.0}, "relief": {}},
+    ],
     "lungs": [
-        {"id": "air_check", "label": "Cabin air check + breathing exercises", "minutes": 15, "mods": {}, "relief": {"lungs": 0.05}},
+        {"id": "air_check", "label": "Cabin air check + scrubber reset", "minutes": 15,
+         "mods": {"co2_offset": -2.0}, "relief": {"lungs": 0.05}},
+        {"id": "fire_response", "label": "Put out the fire and clear the smoke", "minutes": 20,
+         "mods": {"smoke": -1.0, "temp_offset_c": -15.0}, "relief": {}},
+        {"id": "atmosphere_trim", "label": "Bring cabin pressure, oxygen and temperature back to normal", "minutes": 15,
+         "mods": {"pressure_rise_kpa": -10.0, "o2_boost_kpa": -6.0, "temp_offset_c": -15.0}, "relief": {}},
     ],
 }
 
@@ -131,88 +158,54 @@ def likelihood(risk):
 
 # ---------- readings ----------
 
-def expected(mods, metric):
-    """What a device should read given the body state (used for projections and before any readings)."""
-    if metric == "heart_rate":
-        return B["heart_rate"] + 5 * mods["sleep_debt"] + 0.25 * mods["bp_offset"] + 4 * mods["stress"]
-    if metric == "sleep_hours":
-        return B["sleep_hours"] - mods["sleep_debt"]
-    if metric == "reaction_ms":
-        return B["reaction_ms"] + 18 * mods["sleep_debt"] + 15 * mods["stress"]
-    if metric == "mood_1to5":
-        return clamp(B["mood_1to5"] - 0.5 * mods["sleep_debt"] - mods["stress"], 1, 5)
-    if metric == "bp_sys":
-        return B["bp_sys"] + mods["bp_offset"]
-    if metric == "resp_rate":
-        return B["resp_rate"] + 0.05 * mods["bp_offset"] + mods["stress"]
-    if metric == "hrv":
-        return 55 - 6 * mods["sleep_debt"] - 5 * mods["stress"]
-    if metric == "glucose":
-        return B["glucose"] + 8 * mods["stress"]
-    if metric == "bp_dia":
-        return B["bp_dia"] + 0.5 * mods["bp_offset"]
-    if metric == "resistive_load_pct":
-        return max(60, 96 - 2.5 * mods["missed_exercise_days"])
-    return B.get(metric, 0)
-
-
-def reading(sim, mods, metric, live):
-    """Live: average of recent device readings. Otherwise the expected value."""
-    if live:
-        value = sim.recent(metric)
-        if value is not None:
-            return value
-    return expected(mods, metric)
+def expected(mods, metric, relief=None, mission_id="mars", day=184.0):
+    """What a device should read given the body state (projections, and before any readings)."""
+    return signals.value(metric, mods, relief or {k: 0.0 for k in ORGANS}, mission_id, day)
 
 
 # ---------- organ models ----------
 
-def bone_density_pct(mission_id, day, mods, relief):
-    m = M.get(mission_id)
-    loss = C.BONE_LOSS_PCT_PER_MONTH * M.microgravity_months(m, day) * (1 - C.EXERCISE_PROTECTION)
-    loss += 0.15 * mods["missed_exercise_days"]  # ASSUMPTION: extra loss per missed exercise day
-    return 100 - loss + relief["bones"] * 10
-
-
-def onsd_mm(mission_id, day, relief):
-    m = M.get(mission_id)
-    widen = C.ONSD_GROWTH_MM_PER_MONTH * M.microgravity_months(m, day)
-    return C.ONSD_BASELINE_MM + widen - relief["eyes"] * 1.0
+def organ_analysis(sim, organ, mission_id, day, mods, relief, live):
+    """Full pipeline result for the deep systems (heart, muscles); None for the simple ones."""
+    reader = Reader(sim, mods, relief, mission_id, day, live)
+    if organ == "heart":
+        return heart_analysis.analyze(reader)
+    if organ == "muscles":
+        return training_analysis.analyze(reader)
+    return None
 
 
 def organ_severity(sim, organ, mission_id, day, mods, relief, live):
     """Returns (severity 0..1, displayed value)."""
-    m = M.get(mission_id)
-    months = M.microgravity_months(m, day)
+    reader = Reader(sim, mods, relief, mission_id, day, live)
+    if organ in ("heart", "muscles"):
+        a = organ_analysis(sim, organ, mission_id, day, mods, relief, live)
+        return a["severity"], a["value"]
     if organ == "bones":
         density = bone_density_pct(mission_id, day, mods, relief)
         return clamp((100 - density) / 8), density
     if organ == "eyes":
-        onsd = onsd_mm(mission_id, day, relief)
-        scan = sim.latest.get("onsd_mm") if live else None
-        if scan:
-            onsd = scan["value"]  # the last weekly ultrasound, not a continuous value
+        onsd = reader("onsd_mm") if live and sim.latest.get("onsd_mm") else onsd_mm(mission_id, day, relief)
         return clamp((onsd - C.ONSD_WATCH_MM) / 1.0), onsd
-    if organ == "heart":
-        hr = reading(sim, mods, "heart_rate", live)
-        bp = reading(sim, mods, "bp_sys", live)
-        decon = 0.25 * min(1, months / 9) * (1 - C.EXERCISE_PROTECTION)  # ASSUMPTION
-        sev = max(0, hr - B["heart_rate"]) / 20 + max(0, bp - 125) / 40 + decon
-        return clamp(sev - relief["heart"]), hr
     if organ == "sleep":
-        hours = reading(sim, mods, "sleep_hours", live)
-        react = reading(sim, mods, "reaction_ms", live)
-        mood = reading(sim, mods, "mood_1to5", live)
+        hours = reader("sleep_hours")
+        react = reader("reaction_ms")
+        mood = reader("mood_1to5")
         sev = max(0, B["sleep_hours"] - hours) / 4.0 + max(0, react - 260) / 200 + max(0, 3 - mood) / 6
         return clamp(sev - relief["sleep"]), hours
-    if organ == "muscles":
-        sev = 0.06 * months * (1 - C.EXERCISE_PROTECTION) + 0.05 * mods["missed_exercise_days"]
-        sev = clamp(sev - relief["muscles"])
-        return sev, 100 - 45 * sev
+    if organ == "ears":
+        noise, shift = reader("noise_dba"), reader("hearing_shift_db")
+        pressure, sick = reader("cabin_pressure_kpa"), reader("motion_sickness_0to10")
+        sev = (0.4 * clamp((noise - 70) / (C.NOISE_24H_LIMIT_DBA - 70)) + 0.3 * clamp(shift / C.HEARING_SHIFT_DB)
+               + 0.2 * clamp((C.CABIN_PRESSURE_RANGE_KPA[0] - pressure) / 6) + 0.1 * clamp(sick / 6))
+        return clamp(sev - relief["ears"]), noise
     if organ == "lungs":
-        spo2 = reading(sim, mods, "spo2", live)
-        resp = reading(sim, mods, "resp_rate", live)
-        sev = max(0, 97.5 - spo2) / 5 + abs(resp - B["resp_rate"]) / 10
+        spo2 = reader("spo2")
+        resp = reader("resp_rate")
+        co2 = reader("co2_mmhg")
+        ppo2 = reader("ppo2_kpa")
+        sev = (max(0, 97.5 - spo2) / 5 + abs(resp - B["resp_rate"]) / 10 + 0.3 * clamp((co2 - C.CO2_COMFORT_MMHG) / 3)
+               + 0.4 * clamp((C.PPO2_RANGE_KPA[0] - ppo2) / 2.5))
         return clamp(sev - relief["lungs"]), resp
     return 0.0, 0
 
@@ -240,7 +233,18 @@ def note_for(organ, severity, value, mods):
         if mods["missed_exercise_days"] > 0:
             return f"{mods['missed_exercise_days']:.0f} missed workout days are slowing recovery."
         return "Recovering well from workouts."
+    if organ == "ears":
+        if mods.get("pressure_drop_kpa", 0) > 2:
+            return f"Cabin pressure is down {mods['pressure_drop_kpa']:.0f} kPa: ears and sinuses feel it, and oxygen drops with it."
+        if value > 70:
+            return f"Noise averaging {value:.0f} dBA today. Above 70 the ears need protection."
+        return "Hearing, balance and cabin pressure are normal."
     if organ == "lungs":
+        if mods.get("pressure_drop_kpa", 0) > 2:
+            return "Cabin pressure is low, so every breath carries less oxygen. The ship's air, not your lungs."
+        co2 = C.CO2_BASELINE_MMHG + mods.get("co2_offset", 0.0)
+        if co2 > C.CO2_COMFORT_MMHG:
+            return f"Breathing faster because cabin CO2 is {co2:.1f} mmHg. The ship's air, not your lungs."
         return "Breathing is steady. Right where it usually is."
     return ""
 
@@ -263,11 +267,20 @@ def drivers_for(organ, mission_id, day, mods, dose_frac):
         out.append("stress")
     if dose_frac > 0.4 and organ in ("heart", "sleep"):
         out.append("radiation dose")
+    if organ in ("lungs", "heart") and C.CO2_BASELINE_MMHG + mods.get("co2_offset", 0) > C.CO2_COMFORT_MMHG:
+        out.append("cabin CO2 high (ship air, not your lungs)")
+    if organ in ("lungs", "heart", "ears") and mods.get("pressure_drop_kpa", 0) > 2:
+        out.append("cabin pressure low (less oxygen)")
+    if organ == "ears" and mods.get("noise_offset", 0) > 3:
+        out.append("noisy module")
     return out
 
 
 def apply_change(mods, relief, cm):
     for key, delta in cm.get("mods", {}).items():
+        if isinstance(delta, str):  # states like the heart rhythm are set, not added
+            mods[key] = delta
+            continue
         mods[key] = max(0.0, mods[key] + delta)
     for key, delta in cm.get("relief", {}).items():
         relief[key] = relief[key] + delta
@@ -296,9 +309,24 @@ def measurement_for(sim, organ, live):
     return out
 
 
+def checks_for(sim, organ, mission_id, day, mods, relief, live, analysis, value):
+    """What the app shows when the organ is clicked: value, healthy range, source, verdict, why."""
+    reader = Reader(sim, mods, relief, mission_id, day, live)
+    if organ == "heart":
+        return organ_checks.heart_checks(analysis, reader)
+    if organ == "muscles":
+        return organ_checks.muscle_checks(analysis, reader)
+    if organ == "lungs":
+        return organ_checks.lung_checks(reader)
+    if organ == "ears":
+        return organ_checks.ear_checks(reader)
+    return organ_checks.simple_checks(organ, reader, value)
+
+
 def organ_state(sim, organ, mission_id, day, mods, relief, live, dose_frac):
     m = M.get(mission_id)
     severity, value = organ_severity(sim, organ, mission_id, day, mods, relief, live)
+    analysis = organ_analysis(sim, organ, mission_id, day, mods, relief, live)
     hz = horizon_day(m, day)
     future, _ = organ_severity(sim, organ, mission_id, hz, mods, relief, False)
     weight = HAZARD_WEIGHT.get(mission_id, HAZARD_WEIGHT["mars"])[organ]
@@ -346,12 +374,15 @@ def organ_state(sim, organ, mission_id, day, mods, relief, live, dose_frac):
         "mission_risk": round(risk, 3), "severity": round(severity, 3), "status": status_for(severity),
         "level": level_for(severity),
         "value": shown, "unit": unit, "usual": usual,
-        "note": note_for(organ, severity, value, mods),
+        "note": analysis["note"] if analysis else note_for(organ, severity, value, mods),
         "drivers": drivers_for(organ, mission_id, day, mods, dose_frac),
         "projection": projection, "countermeasures": cms, "what_could_go_wrong": wrong,
         "source": SOURCES[organ],
         "measurement": measurement_for(sim, organ, live),
     }
+    if analysis:
+        state["analysis"] = analysis
+    state["checks"] = checks_for(sim, organ, mission_id, day, mods, relief, live, analysis, value)
     state.update(hrp.tags_for(organ))
     return state
 

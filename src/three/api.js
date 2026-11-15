@@ -85,7 +85,7 @@ export function resetView(instant) {
 }
 
 // Injury alert (src/ui/injury.js): fly to a spot on the body and light only that spot, in red.
-// spot = { x, v, radius, dist, back }: x/v as in REGIONS, back = on the back of the body.
+// spot = { x, v, radius, dist, back, depth }: x/v as in REGIONS, back = on the back of the body.
 // model = the system to show with the spot lit on it ('bones', 'muscles', 'heart'...), or null for skin only.
 // Call again with a smaller spot to zoom further in. False if the body has not loaded yet.
 const RED = new THREE.Color('#e0442e');

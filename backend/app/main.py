@@ -11,6 +11,7 @@ Run from backend/:  uvicorn app.main:app --reload --port 8001
 """
 import asyncio
 import contextlib
+import time
 
 from dotenv import load_dotenv
 
@@ -18,12 +19,18 @@ load_dotenv()
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.responses import Response, StreamingResponse  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
 from . import director, history, hrp, officer, provenance, trends, triage  # noqa: E402
 from . import constants as C  # noqa: E402
 from . import missions as M  # noqa: E402
+from .analysis import heart as heart_analysis  # noqa: E402
+from .analysis import radiation as radiation_analysis  # noqa: E402
+from .analysis import training as training_analysis  # noqa: E402
+from .analysis.common import Reader  # noqa: E402
 from .devices import catalog  # noqa: E402
+from .vitaly import brain, crew, guides, profile, protocols, voice, watchdog  # noqa: E402
 from .devices.simulated import DEVICES  # noqa: E402
 from .engine.physiology import COUNTERMEASURES, apply_change, mission_state  # noqa: E402
 from .sources import donki, horizons, noaa  # noqa: E402
@@ -70,9 +77,14 @@ async def sim_loop():
                 sim.record(v)
                 vitals.append(v)
         sim.measure_now = False
+        if watchdog.tick(sim):
+            prewarm_new_alerts()
+            if clients:
+                await broadcast({"type": "incidents", "incidents": watchdog.active(sim)})
         if clients:
             for v in vitals:
-                await broadcast({"type": "vital", **v})
+                if v["quality"] == "good":  # flagged readings are counted, not shown
+                    await broadcast({"type": "vital", **v})
         if tick % 2 == 0:
             state = mission_state(sim)
             triage.update(sim, state)
@@ -84,6 +96,8 @@ async def sim_loop():
 
 @contextlib.asynccontextmanager
 async def lifespan(app):
+    # Voice every checklist line and common phrase in advance (from disk after the first run).
+    voice.prewarm(*voice.COMMON, *protocols.all_lines(profile.profile(crew.PATIENT_ID)["name"]), *guides.all_lines())
     tasks = [asyncio.create_task(refresh_loop()), asyncio.create_task(sim_loop())]
     yield
     for t in tasks:
@@ -169,14 +183,19 @@ def get_trends(days: int = 7):
 
 
 @app.post("/api/countermeasure")
-def post_countermeasure(body: CountermeasureIn):
+async def post_countermeasure(body: CountermeasureIn):
     for cm in COUNTERMEASURES.get(body.organ, []):
         if cm["id"] == body.id:
             before = mission_state(sim)["organs"][body.organ]
             apply_change(sim.mods, sim.relief, cm)
             sim.events.insert(0, f"countermeasure:{body.id}")
-            after = mission_state(sim)["organs"][body.organ]
-            return {"ok": True, "before": before, "after": after}
+            sim.fresh_readings(DEVICES)
+            state = mission_state(sim)
+            triage.update(sim, state)
+            watchdog.tick(sim)
+            await broadcast({"type": "state", "state": state})
+            await push_incidents()
+            return {"ok": True, "before": before, "after": state["organs"][body.organ]}
     raise HTTPException(status_code=404, detail="unknown organ or countermeasure id")
 
 
@@ -192,10 +211,17 @@ def get_triage():
 
 
 @app.post("/api/director/event")
-def post_director_event(body: EventIn):
+async def post_director_event(body: EventIn):
     result = director.trigger(sim, body.type)
     if not result["ok"]:
         raise HTTPException(status_code=400, detail=result["error"])
+    # Unscheduled check on every device, then push the new state and alerts right away.
+    sim.fresh_readings(DEVICES)
+    state = mission_state(sim)
+    triage.update(sim, state)
+    watchdog.tick(sim)
+    await broadcast({"type": "state", "state": state})
+    await push_incidents()
     return result
 
 
@@ -244,36 +270,137 @@ def get_space_weather():
 
 @app.get("/api/radiation/curve")
 def get_radiation_curve(mission: str | None = None):
-    """Cumulative dose over the whole mission, for the dose graph. The model is piecewise linear
-    (one dose rate per phase), so the corner days are enough to draw it exactly. Storm dose is
-    added as a step at today, since the sim does not record which day each storm happened."""
+    """Cumulative dose over the whole mission, for the dose graph."""
     check_mission(mission)
-    mission_id = mission or sim.mission
-    m = M.get(mission_id)
-    today = float(min(sim.day, m["end_day"]))
-    days = sorted({0.0, float(min(m["arrival_day"], m["end_day"])), float(M.departure_day(m)), today, float(m["end_day"])})
-    points = [{"day": d, "msv": round(M.cumulative_dose(m, d), 1)} for d in days]
-    storm = sim.mods["extra_dose"]
+    return radiation_analysis.curve(mission or sim.mission, sim.day, sim.mods["extra_dose"])
 
-    # First day the projected dose (model + storms so far) reaches the career limit, if it does.
-    crosses = None
-    for a, b in zip(points, points[1:]):
-        lo = a["msv"] + (storm if a["day"] >= today else 0)
-        hi = b["msv"] + (storm if b["day"] >= today else 0)
-        if lo < C.CAREER_LIMIT_MSV <= hi and hi > lo:
-            crosses = round(a["day"] + (C.CAREER_LIMIT_MSV - lo) / (hi - lo) * (b["day"] - a["day"]))
-            break
-        if lo >= C.CAREER_LIMIT_MSV:
-            crosses = round(a["day"])
-            break
 
-    return {
-        "mission": mission_id, "day": today, "arrival_day": m["arrival_day"],
-        "departure_day": M.departure_day(m), "end_day": m["end_day"],
-        "career_limit_msv": C.CAREER_LIMIT_MSV, "event_limit_msv": C.SPE_EVENT_LIMIT_MSV,
-        "storm_dose_msv": storm, "points": points, "crosses_limit_day": crosses,
-        "source": "Mission model: published dose rates per phase (constants.py), plus director storm dose.",
-    }
+# ---------- analysis pipelines (backend only; see DATA.md) ----------
+
+def _reader():
+    return Reader(sim, sim.mods, sim.relief, sim.mission, sim.day, live=True)
+
+
+def _analysis(system):
+    if system == "heart":
+        return heart_analysis.analyze(_reader())
+    if system == "muscles":
+        return training_analysis.analyze(_reader())
+    if system == "radiation":
+        return radiation_analysis.analyze(_reader(), noaa.latest(), sim.storm)
+    raise HTTPException(status_code=404, detail="unknown system, use heart, muscles or radiation")
+
+
+@app.get("/api/analysis")
+def get_analysis():
+    """Every deep pipeline, layer by layer: inputs (with quality and age), derived measures against
+    the personal baseline, confidence with reasons, cause chains, and the resulting severity."""
+    return {s: _analysis(s) for s in ("heart", "muscles", "radiation")}
+
+
+@app.get("/api/analysis/{system}")
+def get_analysis_system(system: str):
+    return _analysis(system)
+
+
+# ---------- Vitaly: watchdog incidents, AI answers, voice actions ----------
+
+class VitalyAsk(BaseModel):
+    question: str
+    focus: str | None = None
+
+
+class VitalyAction(BaseModel):
+    type: str
+    incident_id: int | None = None
+    organ: str | None = None
+    id: str | None = None
+    text: str | None = None
+
+
+_prewarmed = set()
+
+
+def prewarm_new_alerts():
+    """Make sure a new alert's lines are voiced (they normally already are, from startup)."""
+    for inc in sim.incidents:
+        key = (inc["id"], inc["created"])
+        if inc["state"] != "open" or key in _prewarmed:
+            continue
+        _prewarmed.add(key)
+        voice.prewarm(inc["say"], *inc["guide"], background=False)
+
+
+async def push_incidents():
+    prewarm_new_alerts()
+    await broadcast({"type": "incidents", "incidents": watchdog.active(sim)})
+
+
+class VitalySpeak(BaseModel):
+    text: str
+
+
+@app.get("/api/vitaly/status")
+def vitaly_status():
+    return {**brain.status(), **voice.status()}
+
+
+@app.get("/api/vitaly/tts")
+async def vitaly_tts_stream(text: str):
+    """Vitaly's voice as streamed MP3 (Deepgram Aura): the browser's audio element plays it while it
+    arrives, so speech starts in about 0.2 s. 503 means: use the browser voice instead."""
+    got = voice.start(text)
+    if got is None:
+        raise HTTPException(status_code=503, detail="Deepgram voice not available; use the browser voice")
+    if isinstance(got, bytes):
+        return Response(content=got, media_type="audio/mpeg", headers={"Cache-Control": "no-store"})
+    if not await voice.first_chunk_ok(got):
+        raise HTTPException(status_code=503, detail="Deepgram did not answer; use the browser voice")
+    return StreamingResponse(got.follow(), media_type="audio/mpeg", headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/vitaly/tts")
+async def vitaly_tts(body: VitalySpeak):
+    """Whole MP3 in one response (for tools and tests). 503 means: use the browser voice instead."""
+    audio = await voice.speak(body.text)
+    if audio is None:
+        raise HTTPException(status_code=503, detail="Deepgram voice not available; use the browser voice")
+    return Response(content=audio, media_type="audio/mpeg")
+
+
+@app.get("/api/vitaly/incidents")
+def vitaly_incidents():
+    return watchdog.active(sim)
+
+
+@app.post("/api/vitaly/prewarm")
+async def vitaly_prewarm():
+    """Called when Vitaly is summoned: voice every everyday answer for the current data now, so
+    the reply plays instantly by the time the question is finished."""
+    texts = brain.quick.all_answers(mission_state(sim), sim)
+    voice.prewarm(*texts, background=False)
+    return {"lines": len(texts), "ready": sum(voice.cached(t) for t in texts)}
+
+
+@app.post("/api/vitaly/ask")
+async def vitaly_ask(body: VitalyAsk):
+    return await brain.ask(body.question[:500], mission_state(sim), sim, body.focus)
+
+
+@app.post("/api/vitaly/action")
+async def vitaly_action(body: VitalyAction):
+    """Runs an action the crew member confirmed by voice."""
+    if body.type == "log_countermeasure":
+        return await post_countermeasure(CountermeasureIn(organ=body.organ or "", id=body.id or ""))
+    if body.type == "note_earth":
+        text = (body.text or "").strip()[:500]
+        if not text:
+            raise HTTPException(status_code=400, detail="empty note")
+        delay = M.environment(sim.mission, sim.day)["comms_delay_min"]
+        note = {"text": text, "delay_min": round(delay, 1), "sent_at": time.time()}
+        sim.events.insert(0, "note_earth")
+        return {"ok": True, "note": note}
+    raise HTTPException(status_code=400, detail=f"unknown action, use one of {list(brain.ACTIONS)}")
 
 
 @app.get("/api/hrp")

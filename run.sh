@@ -14,7 +14,7 @@ fi
 lsof -ti tcp:8001 | xargs kill -9 2>/dev/null || true
 lsof -ti tcp:8000 | xargs kill -9 2>/dev/null || true
 
-( cd backend && exec ../backend/.venv/bin/uvicorn app.main:app --reload --port 8001 ) &
+( cd backend && exec ../backend/.venv/bin/uvicorn app.main:app --reload --reload-include .env --port 8001 ) &
 BACKEND=$!
 python3 -m http.server 8000 --bind 127.0.0.1 >/dev/null 2>&1 &
 FRONTEND=$!
