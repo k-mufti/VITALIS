@@ -34,7 +34,7 @@ def week(sim, days=7):
             mods["stress"] = 0.0
         rng = random.Random(f"{sim.mission}-{day}")
         for k in DEVICE_METRICS:
-            metrics[k].append(round(expected(mods, k) + rng.gauss(0, WOBBLE[k]), 1))
+            metrics[k].append(round(expected(mods, k, sim.relief, sim.mission, day) + rng.gauss(0, WOBBLE[k]), 1))
         for k, organ in ORGAN_VALUES.items():
             _, value = organ_severity(sim, organ, sim.mission, day, mods, sim.relief, False)
             metrics[k].append(round(value, 2))

@@ -44,6 +44,8 @@ export const twin = {
   injury: false,     // an injury alert is showing (showInjury)
   injuryModel: null, // the bone, muscle or organ system shown lit at the injury
   testSeverity: 0,   // FX panel preview
+  injury: false,     // an injury alert is showing (showInjury)
+  injuryModel: null, // the bone, muscle or organ system shown lit at the injury
 };
 
 export function flyTo(t, dur = 1500) {

@@ -7,10 +7,10 @@ export const API = 'http://localhost:8001';
 const WS_URL = 'ws://localhost:8001/ws';
 
 // Latest data from the backend. Views read from here (or from SYS, which is kept in sync).
-export const live = { online: false, state: null, risks: [], vitals: {}, triage: [], previewDay: null, trends: null };
+export const live = { online: false, state: null, risks: [], vitals: {}, triage: [], incidents: [], previewDay: null, trends: null };
 
 const listeners = [];
-// fn(type, live). type: 'online' | 'offline' | 'state' | 'vital' | 'triage'
+// fn(type, live). type: 'online' | 'offline' | 'state' | 'vital' | 'triage' | 'incidents'
 export function onData(fn) {
   listeners.push(fn);
 }
@@ -60,11 +60,15 @@ export const api = {
   sources: () => request('/api/sources'),
   provenance: () => request('/api/provenance'),
   trends: days => request('/api/trends' + query({ days })),
+  vitalyStatus: () => request('/api/vitaly/status'),
+  vitalyIncidents: () => request('/api/vitaly/incidents'),
+  vitalyAsk: (question, focus) => post('/api/vitaly/ask', { question, focus }, 15000),
+  vitalyAction: action => post('/api/vitaly/action', action, 15000),
 };
 
 /* One organ, merged from live data and the mock fallback, in the shape the views use.
    Always returns something for every organ id in ORGAN_IDS. */
-export const ORGAN_IDS = ['bones', 'sleep', 'eyes', 'heart', 'muscles', 'lungs'];
+export const ORGAN_IDS = ['bones', 'sleep', 'eyes', 'heart', 'muscles', 'lungs', 'ears'];
 // Shown only when the backend is off, so the panel still reads sensibly in a demo.
 const FALLBACK_WRONG = {
   bones: [{ title: 'Hip or spine fracture after landing' }],
@@ -73,8 +77,11 @@ const FALLBACK_WRONG = {
   sleep: [{ title: 'Slower reactions and mistakes during critical tasks' }],
   muscles: [{ title: 'Weak legs at landing, harder first surface walk' }],
   lungs: [{ title: 'Breathing problems from cabin air or dust' }],
+  ears: [{ title: 'Hearing loss from months of cabin noise' }],
 };
 const FALLBACK = {
+  ears: { name: 'Ears & balance', value: 64, unit: 'dBA noise, day average', usual: 'under 70', level: 'low',
+    note: 'Hearing, balance and cabin pressure are normal.', l2: 'Hearing test', v2: 'Monthly' },
   bones: { name: 'Bones', value: 95.9, unit: '% of preflight density (estimated)', usual: '97-100', level: 'mild',
     note: 'Estimated hip and spine density down 4.1% since launch. Scanned after landing.', l2: 'Next scan', v2: 'After landing' },
   eyes: { name: 'Eyes', value: 5.2, unit: 'mm optic nerve sheath', usual: 'under 5.0 mm', level: 'mild',
@@ -88,7 +95,7 @@ export function organ(id) {
       id, name: o.name, value: o.value, unit: o.unit, usual: o.usual, note: o.note,
       level: o.level, status: o.status, severity: o.severity, rank: o.rank,
       drivers: o.drivers, wrong: o.what_could_go_wrong, countermeasures: o.countermeasures,
-      hrpRisks: o.hrp_risks, hazards: o.hazards, projection: o.projection, measurement: o.measurement,
+      hrpRisks: o.hrp_risks, hazards: o.hazards, projection: o.projection, measurement: o.measurement, checks: o.checks,
       l2: (SYS[id] || FALLBACK[id] || {}).l2 || 'Watching for', v2: (SYS[id] || FALLBACK[id] || {}).v2 || o.status,
       week: (SYS[id] || {}).week,
     };
@@ -181,6 +188,7 @@ function connectSocket() {
     const msg = JSON.parse(e.data);
     if (msg.type === 'state' && live.previewDay === null) applyState(msg.state);
     if (msg.type === 'vital' && live.previewDay === null) applyVital(msg);
+    if (msg.type === 'incidents') { live.incidents = msg.incidents; emit('incidents'); }
   };
   ws.onclose = () => {
     let wait = 30000;
@@ -210,6 +218,7 @@ export async function initData() {
   live.online = true;
   emit('online');
   applyState(await api.state());
+  try { live.incidents = await api.vitalyIncidents(); emit('incidents'); } catch (err) { /* older backend */ }
   connectSocket();
   pollTriage();
   setInterval(pollTriage, 2000);

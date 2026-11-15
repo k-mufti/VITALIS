@@ -1,5 +1,5 @@
 import { $, $$ } from '../util.js';
-import { live, api, setMission, setPreviewDay, missionInfo } from '../data/client.js';
+import { live, api, onData, setMission, setPreviewDay, refreshState, missionInfo } from '../data/client.js';
 
 /* Director panel, key D. Demo controls only: swap the mission, scrub the mission day, and
    throw events at the crew. A real crew member never sees this, which is why the mission
@@ -11,6 +11,17 @@ const EVENTS = [
   ['bad_sleep_week', 'Bad sleep week'],
   ['skipped_exercise', 'Skipped exercise'],
   ['bp_spike', 'Blood pressure spike'],
+  ['cabin_co2', 'Cabin CO2 rise (ship air)'],
+  ['cabin_leak', 'Cabin pressure leak (less oxygen)'],
+  ['noisy_module', 'Noisy module (failing fan)'],
+  ['slow_heart', 'Heart rate very slow'],
+  ['irregular_rhythm', 'Irregular heart rhythm (AF)'],
+  ['cardiac_arrest', 'Cardiac arrest'],
+  ['bp_crash', 'Blood pressure crash'],
+  ['cabin_overpressure', 'Cabin pressure too high'],
+  ['fire_smoke', 'Smoke / fire'],
+  ['o2_high', 'Cabin oxygen too high'],
+  ['cabin_hot', 'Cabin too hot'],
   ['reset', 'Reset the crew member'],
 ];
 
@@ -25,7 +36,7 @@ function markup() {
     <em class="d-day" id="dDayLabel">Day 184</em>
     <span class="d-label">Throw an event</span>
     <div class="d-events">${events}</div>
-    <p class="d-note" id="dNote"></p>`;
+    <p class="d-note" id="dirNote"></p>`;
 }
 
 function refresh() {
@@ -47,7 +58,7 @@ export function initDirector() {
   panel.innerHTML = markup();
   document.body.append(panel);
 
-  const note = msg => { $('#dNote').textContent = msg; };
+  const note = msg => { $('#dirNote').textContent = msg; };
 
   addEventListener('keydown', e => {
     const typing = /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName);
@@ -81,12 +92,20 @@ export function initDirector() {
     if (!live.online) return note('Start the backend to throw events.');
     try {
       const r = await api.director(b.dataset.event);
-      if (r.storm) note(`Replaying real storm ${r.storm.sepID}`);
-      else note(`Event sent: ${b.dataset.event.replace(/_/g, ' ')}`);
+      // Events act on today, so leave any scrubbed preview day and pull the new state now.
+      if (live.previewDay !== null) await setPreviewDay(null);
+      else await refreshState();
+      if (b.dataset.event === 'reset') note('Crew member reset to baseline.');
+      else if (r.storm) note(`Replaying real storm ${r.storm.sepID}`);
+      else note(`Done: ${b.dataset.event.replace(/_/g, ' ')}`);
     } catch (err) {
       note('That event failed. Check the backend.');
     }
   }));
 
+  // Keep the mission buttons and day label in step with the live state (reset, mission swaps).
+  onData(type => {
+    if (type === 'state' && panel.classList.contains('on')) refresh();
+  });
   refresh();
 }

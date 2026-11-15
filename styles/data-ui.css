@@ -354,3 +354,19 @@
 .d-how-tag.estimated { background: var(--amber); }
 .d-how-tag.self-report { background: var(--cyan); }
 .d-how-last { display: block; margin-top: 3px; font: 500 11px var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--ink); opacity: .7; }
+
+/* Checks: measured value vs healthy range, with source and verdict */
+.d-checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.d-check { padding: 8px 10px; background: var(--white); border-left: 3px solid var(--green); }
+.d-check.watch { border-left-color: var(--amber); }
+.d-check.act { border-left-color: var(--red); }
+.dc-top { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: baseline; }
+.dc-top b { font: 600 13px var(--sans); }
+.dc-val { font: 500 16px var(--cond); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dc-val small { font-size: 11px; color: var(--soft); }
+.dc-verdict { font: 700 10px var(--cond); letter-spacing: .14em; text-transform: uppercase; padding: 2px 6px; color: var(--white); background: var(--green); }
+.d-check.watch .dc-verdict { background: var(--amber); }
+.d-check.act .dc-verdict { background: var(--red); }
+.dc-ref { margin-top: 3px; font: 400 11.5px/1.35 var(--sans); color: var(--soft); }
+.dc-ref em { font-style: normal; opacity: .8; }
+.dc-why { margin-top: 3px; font: 500 11.5px/1.35 var(--sans); color: var(--ink); }
