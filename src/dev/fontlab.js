@@ -4,7 +4,8 @@
 
 // head = logo + headings, cond = labels/tabs/numbers (--cond), sans = body text (--sans)
 const FONTS = [
-  { name: 'Barlow (now)',     note: 'current signage pair',
+  { name: 'Tektur (now)',     note: 'the real look (styles/type.css)', now: true, load: [] },
+  { name: 'Barlow (old)',     note: 'previous signage pair',
     head: 'Barlow Condensed', cond: 'Barlow Condensed', sans: 'Barlow', load: [] },
   { name: 'Big Shoulders',    note: 'stadium wayfinding, tall + tight',
     head: 'Big Shoulders Display', cond: 'Big Shoulders Display', sans: 'Barlow', headW: 800, track: .06,
@@ -27,9 +28,6 @@ const FONTS = [
   { name: 'Telemetry',        note: 'mono readout',
     head: 'Space Mono', cond: 'Space Mono', sans: 'Space Grotesk', condScale: .88,
     load: ['Space+Mono:wght@400;700', 'Space+Grotesk:wght@400..700'] },
-  { name: 'Tektur',           note: 'angular sci-fi, still readable',
-    head: 'Tektur', cond: 'Tektur', sans: 'Barlow', headW: 800,
-    load: ['Tektur:wght@400..900'] },
   { name: 'Glitch',           note: 'crazy: broken signal logo',
     head: 'Rubik Glitch', cond: 'Oxanium', sans: 'Oxanium', headW: 400,
     load: ['Rubik+Glitch', 'Oxanium:wght@400..800'] },
@@ -43,8 +41,8 @@ const MARK = `<svg class="fl-mark" viewBox="0 0 26 24" aria-hidden="true">
   <path d="M2 4 L9.5 20 L13 10.5" />
   <path class="c" d="M13 10.5 L15.2 15 L17.6 4 L19.4 9 L24 9" /></svg>`;
 const LOGOS = [
+  { name: 'Slab (now)', now: true, html: () => 'VITALIS' },
   { name: 'Plain',   html: () => 'VITALIS' },
-  { name: 'Slab',    html: () => '<span class="fl-slab">VITALIS</span>' },
   { name: 'Lambda',  html: () => 'VIT<b class="fl-c">Λ</b>LIS' },
   { name: 'Pulse',   html: () => `<span class="fl-pulse">VITALIS<svg viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true"><path d="M0 6 H38 L42 1 L46 9 L50 3 L53 6 H100"/></svg></span>` },
   { name: 'Mark',    html: () => `<span class="fl-row">${MARK}<span>VITALIS</span></span>` },
@@ -107,6 +105,9 @@ function apply() {
   const f = FONTS[state.f], lg = LOGOS[state.l];
   f.load.forEach(loadFont);
   const r = document.documentElement.style;
+  document.documentElement.classList.toggle('fl-font', !f.now);
+  if (f.now) ['--cond', '--sans', '--fl-head', '--fl-head-w', '--fl-track'].forEach(p => r.removeProperty(p));
+  else {
   let cond = f.cond;
   if (f.condScale) {
     const spec = f.load.find(x => x.split(':')[0].replace(/\+/g, ' ') === f.cond);
@@ -118,8 +119,10 @@ function apply() {
   r.setProperty('--fl-head', `'${f.head}', sans-serif`);
   r.setProperty('--fl-head-w', f.headW || 700);
   r.setProperty('--fl-track', f.track ?? .18);
+  }
   document.querySelectorAll('.logo, .corner.tl').forEach(el => {
     el.innerHTML = lg.html();
+    el.classList.toggle('fl-custom', !lg.now);
     el.dataset.flLogo = lg.name.toLowerCase();
   });
   const ui = document.getElementById('fontLab');
@@ -165,14 +168,18 @@ function injectCss() {
 #fontLab p { font: 500 10px 'Barlow Condensed', sans-serif; letter-spacing: .14em; text-transform: uppercase; color: #b4b4ae; margin-top: 2px; }
 
 /* display font on logo + headings */
-.logo, .corner.tl, h1, h2 { font-family: var(--fl-head) !important; }
-.logo, .corner.tl { font-weight: var(--fl-head-w) !important; letter-spacing: calc(var(--fl-track) * 1em) !important; }
-h1, h2 { font-weight: var(--fl-head-w); }
+.fl-font .logo, .fl-font .corner.tl, .fl-font h1, .fl-font h2 { font-family: var(--fl-head) !important; }
+.fl-font .logo, .fl-font .corner.tl { font-weight: var(--fl-head-w) !important; letter-spacing: calc(var(--fl-track) * 1em) !important; }
+.fl-font h1, .fl-font h2 { font-weight: var(--fl-head-w); }
+.fl-font { font-stretch: 100%; }
 
 /* ---- logo styles ---- */
-.logo, .corner.tl { display: inline-flex; align-items: center; line-height: 1; white-space: nowrap; }
-.logo { font-size: 22px !important; }
-.corner.tl { font-size: 15px !important; color: #0e0e0e; }
+/* other logo styles: undo the slab from type.css */
+.fl-custom.logo, .fl-custom.corner.tl { display: inline-flex; align-items: center; line-height: 1; white-space: nowrap;
+  background: none; color: var(--ink); padding: 0; }
+.fl-custom.logo::after, .fl-custom.corner.tl::after { display: none; }
+.fl-custom.logo { font-size: 22px !important; }
+.fl-custom.corner.tl { font-size: 15px !important; }
 .fl-c { color: var(--cyan); font-weight: inherit; }
 .fl-slab { background: var(--ink); color: #fff; padding: .34em .5em .3em .7em; position: relative; }
 .fl-slab::after { content: ''; position: absolute; right: 0; top: 0; border: .32em solid transparent; border-top-color: var(--cyan); border-right-color: var(--cyan); }
