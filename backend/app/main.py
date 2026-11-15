@@ -30,7 +30,7 @@ from .analysis import radiation as radiation_analysis  # noqa: E402
 from .analysis import training as training_analysis  # noqa: E402
 from .analysis.common import Reader  # noqa: E402
 from .devices import catalog  # noqa: E402
-from .vitaly import brain, voice, watchdog  # noqa: E402
+from .vitaly import brain, crew, profile, protocols, voice, watchdog  # noqa: E402
 from .devices.simulated import DEVICES  # noqa: E402
 from .engine.physiology import COUNTERMEASURES, apply_change, mission_state  # noqa: E402
 from .sources import donki, horizons, noaa  # noqa: E402
@@ -96,7 +96,8 @@ async def sim_loop():
 
 @contextlib.asynccontextmanager
 async def lifespan(app):
-    voice.prewarm(*voice.COMMON)
+    # Voice every checklist line and common phrase in advance (from disk after the first run).
+    voice.prewarm(*voice.COMMON, *protocols.all_lines(profile.profile(crew.PATIENT_ID)["name"]))
     tasks = [asyncio.create_task(refresh_loop()), asyncio.create_task(sim_loop())]
     yield
     for t in tasks:
@@ -397,6 +398,15 @@ async def vitaly_tailor(incident_id: int):
     if not inc["tailored"]:
         inc["tailored"] = await brain.tailor(inc, mission_state(sim), sim)
     return inc["tailored"]
+
+
+@app.post("/api/vitaly/prewarm")
+async def vitaly_prewarm():
+    """Called when Vitaly is summoned: voice every everyday answer for the current data now, so
+    the reply plays instantly by the time the question is finished."""
+    texts = brain.quick.all_answers(mission_state(sim), sim)
+    voice.prewarm(*texts)
+    return {"lines": len(texts), "ready": sum(voice.cached(t) for t in texts)}
 
 
 @app.post("/api/vitaly/ask")

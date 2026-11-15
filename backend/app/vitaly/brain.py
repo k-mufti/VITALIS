@@ -16,8 +16,10 @@ import re
 
 import httpx
 
+import time
+
 from .. import officer
-from . import crew, profile
+from . import crew, profile, quick
 
 URL = "https://openrouter.ai/api/v1/chat/completions"
 # Picked by eval_vitaly.py: best answers of the cheap models tested, ~$0.03 per 1M tokens in and out.
@@ -202,8 +204,14 @@ LOG_WORDS = [
 ]
 
 
+QUESTION = re.compile(r"^\s*(how|what|when|where|why|who|which|does|do|is|are|can|could|will|would|should)\b", re.I)
+
+
 def command(question, state, sim):
-    """A recognised voice command -> (say, action), or None to let the AI answer."""
+    """A recognised voice command -> (say, action), or None to let the AI answer.
+    Questions ("how long does a message take to reach Earth?") are never commands."""
+    if QUESTION.search(question) and not re.search(r"\b(can|could|would|will) you\b", question, re.I):
+        return None
     for kind, pattern in COMMANDS:
         if not pattern.search(question):
             continue
@@ -233,6 +241,35 @@ async def ask(question, state, sim, focus=None):
     cmd = command(question, state, sim)
     if cmd:
         return {"say": cmd[0], "action": cmd[1], "engine": "command"}
+    fast = quick.answer(question, state, sim)
+    if fast:
+        return {"say": fast, "action": None, "engine": "instant"}
+    key = cache_key(question, state, sim, focus)
+    hit = _replies.get(key)
+    if hit and time.time() - hit[0] < REPLY_TTL_S:
+        return {**hit[1], "engine": hit[1]["engine"] + " (cached)"}
+    reply = await ask_model(question, state, sim, focus)
+    if reply["engine"] != "rules":
+        _replies[key] = (time.time(), reply)
+        if len(_replies) > 300:
+            _replies.pop(next(iter(_replies)))
+    return reply
+
+
+# AI replies are reused for the same question while the situation is the same.
+REPLY_TTL_S = 120
+_replies = {}
+
+
+def cache_key(question, state, sim, focus):
+    words = re.sub(r"[^a-z0-9 ]", "", question.lower())
+    words = " ".join(w for w in words.split() if w not in {"hey", "vitaly", "vitali", "please", "um", "uh", "so", "the", "a"})
+    situation = (tuple(sorted(i["kind"] for i in sim.incidents if i["state"] == "open")),
+                 tuple(state["organs"][k]["status"] for k in sorted(state["organs"])), focus)
+    return (words, situation)
+
+
+async def ask_model(question, state, sim, focus):
     prompt = (f"DATA:\n{snapshot(state, sim, focus)}\n\nCrew member says: \"{question}\"\n\n"
               "Reply with JSON only: {\"say\": \"at most two short sentences\", \"action\": null} "
               "or with action set to one of: {\"type\": \"call_help\"}, {\"type\": \"cancel_help\"}, "

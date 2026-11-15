@@ -79,6 +79,17 @@ assert brain.command("Vitaly, call the medic", state, sim)[1]["type"] == "call_h
 assert brain.command("tell earth that I feel fine", state, sim)[1]["type"] == "note_earth"
 assert brain.command("I'm fine", state, sim) is None  # nothing to cancel: just conversation
 assert brain.command("how is my heart", state, sim) is None
+assert brain.command("How long does a message take to reach Earth?", state, sim) is None
+assert brain.command("Can you call the medic", state, sim)[1]["type"] == "call_help"
+
+# Everyday questions are answered instantly from live data, no AI
+from app.vitaly import quick  # noqa: E402
+for q, word in (("How's my heart?", "Heart rate"), ("What's my oxygen?", "Blood oxygen"), ("How much radiation?", "millisieverts"),
+                ("Is the cabin air okay?", "Cabin pressure"), ("What day is it?", "day 184"),
+                ("How long does a message take to reach Earth?", "minutes")):
+    a = quick.answer(q, state, sim)
+    assert a and word in a, (q, a)
+assert quick.answer("Tell me a fun fact about Mars", state, sim) is None
 
 # AI lines that would mislead in an emergency are rejected
 warn = fire("cabin_overpressure")["pressure_high"]

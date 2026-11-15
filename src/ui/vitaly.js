@@ -22,6 +22,7 @@ const NO = /\b(no|nope|cancel that|don't|do not|stop|never ?mind|negative)\b/i;
 const OK_WORDS = /\b(i'?m (ok|okay|fine|good|alright)|all good|false alarm)\b/i;
 const REPEAT = /\b(repeat|say (that|it) again|what\?)\b/i;
 const CLOSE_AFTER_MS = 5000;
+const ENDPOINT_MS = 700;      // silence that ends a question
 const COLORS = { calm: [63, 214, 198], warning: [227, 155, 45], emergency: [224, 68, 46] };
 
 let mode = 'idle';            // idle | listening | thinking | speaking | confirm | alert
@@ -132,6 +133,8 @@ function openEmergency() {
 }
 
 export function summon() {
+  // Start voicing every everyday answer now, so the reply plays instantly.
+  fetch(`${API}/api/vitaly/prewarm`, { method: 'POST' }).catch(() => {});
   show(openEmergency() ? 'emergency' : 'calm');
   mode = 'listening';
   status(ears ? 'Listening' : 'Type your question');
@@ -186,8 +189,9 @@ async function announce(inc) {
   pending = null;
   show(inc.severity === 'emergency' ? 'emergency' : 'warning');
   mode = 'alert';
-  status(inc.title);
+  status(/\d/.test(inc.value) ? `${inc.title} · ${inc.value}` : inc.title);
   hush();
+  alarm(inc.severity);
   // The checklist is preloaded: speak it at once, no waiting on the AI.
   const tailored = api.vitalyTailor(inc.id).catch(() => null);
   await say(inc.say);
@@ -356,7 +360,7 @@ function playDeepgram(text, token) {
       audioEl = new Audio();
       audioEl.crossOrigin = 'anonymous';  // lets the analyser read the backend's audio
       try {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
         const src = audioCtx.createMediaElementSource(audioEl);
         analyser = audioCtx.createAnalyser();
         analyser.fftSize = 512;
@@ -423,21 +427,36 @@ function startEars() {
   rec.interimResults = true;
   rec.lang = 'en-US';
   let denied = false;
+  // Low latency: react to Chrome's in-progress text instead of waiting ~1 s for its final text.
+  // The wake word counts the moment it appears; a question ends after 0.7 s with no new words.
+  let handled = -1;          // index of the last result already acted on
+  let endTimer = null;
+  let yesTimer = null;
+  const finish = (index, text) => {
+    clearTimeout(endTimer);
+    if (index <= handled) return;
+    handled = index;
+    const q = text.replace(WAKE, '').trim();
+    if (q.length > 1) { clearTimeout(yesTimer); heard(q); }
+  };
   rec.onresult = e => {
     if (speaking || Date.now() < ignoreUntil) return;
-    const res = e.results[e.results.length - 1];
+    const index = e.results.length - 1;
+    if (index <= handled) return;
+    const res = e.results[index];
     const text = res[0].transcript.trim();
-    if (open) $('#vHeard').textContent = text ? `“${text}”` : '';
-    if (!res.isFinal || !text) return;
+    if (!text) return;
     if (!open || mode === 'idle') {
       if (!WAKE.test(text)) return;
-      const rest = text.replace(WAKE, '').trim();
       summon();
-      if (rest.length > 2) heard(rest);
-      else say('Yes?');
-      return;
+      // "Hey Vitaly" alone: answer "Yes?" unless a question follows right away.
+      clearTimeout(yesTimer);
+      yesTimer = setTimeout(() => { if (mode === 'listening' && !speaking) say('Yes?'); }, 700);
     }
-    heard(text.replace(WAKE, '').trim() || text);
+    $('#vHeard').textContent = `“${text}”`;
+    if (res.isFinal) return finish(index, text);
+    clearTimeout(endTimer);
+    endTimer = setTimeout(() => finish(index, text), ENDPOINT_MS);
   };
   rec.onerror = e => {
     if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
@@ -456,6 +475,31 @@ function startEars() {
   } catch (err) {
     ears = null;
   }
+}
+
+// ---------- alarm tone ----------
+// Plays the instant an alert arrives, before any voice: two tones for a warning, three fast
+// rising ones for an emergency. Pure Web Audio, nothing to download.
+function alarm(severity) {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const notes = severity === 'emergency' ? [880, 988, 1175] : [660, 880];
+    const step = severity === 'emergency' ? 0.14 : 0.2;
+    notes.forEach((f, i) => {
+      const t = audioCtx.currentTime + i * step;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = f;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + step * 0.9);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + step);
+    });
+  } catch (err) { /* no audio: the screen still shows the alert */ }
 }
 
 // ---------- text on screen ----------
