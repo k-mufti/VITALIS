@@ -16,15 +16,18 @@ Everything here runs in the backend. The app only shows the results.
 
 | Device | Readings | Cadence |
 |---|---|---|
-| Biomonitor shirt (like CSA Astroskin) | ECG heart rate, HRV, pulse transit time, breathing, SpO2, skin temp, heart rate during and after workouts | continuous / per session |
-| Blood pressure cuff | Systolic, diastolic | daily |
-| Handheld ultrasound | Optic nerve sheath, heart stroke volume (Doppler), thigh muscle thickness | weekly |
-| Exercise machines | Minutes, resistive load | per session |
-| Sleep wristband, crew tablet | Sleep, reaction time, mood | nightly / daily |
-| Cabin air monitor (ship) | CO2, oxygen partial pressure, total cabin pressure | continuous |
-| Noise dosimeter (worn) | Personal noise exposure | daily average |
-| Crew tablet | Hearing test (headphones), balance and nausea check | monthly / daily |
-| Personal dosimeter | Total dose, dose rate | continuous |
+| **Worn:** smartwatch (Apple Watch Ultra class) | Heart rate, HRV, pulse transit time, breathing, SpO2, wrist temperature, heart rhythm, sleep, sound level, exercise minutes, heart rate during and after workouts | continuous / nightly / per session |
+| **Worn:** blood sugar patch | Glucose | every 5 min |
+| **Med bay kit:** blood pressure cuff | Systolic, diastolic | daily |
+| **Med bay kit:** handheld ultrasound | Optic nerve sheath, heart stroke volume (Doppler), thigh muscle thickness | weekly |
+| **Med bay kit:** radiation badge | Total dose, dose rate | continuous |
+| Ship: exercise machines | Resistive load | per session |
+| Ship: crew tablet | Reaction time, mood, hearing test, balance and nausea check | daily / monthly |
+| Ship: cabin air monitor | CO2, oxygen partial pressure, total cabin pressure, temperature, smoke | continuous |
+
+Readings come in each device's own steps (whole beats, whole mg/dL) and `/api/vitals/raw` gives them in the
+device's own record format: Apple HealthKit samples for the watch and cuff, Dexcom EGV records for the
+glucose patch (`app/devices/native.py`). Real hardware would hand over the same records.
 
 Nothing on board can measure bone density, so it is **estimated** and labelled that way.
 
