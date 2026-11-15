@@ -2,16 +2,19 @@ import { $ } from '../util.js';
 import { API, api, live, onData } from '../data/client.js';
 import { state } from '../state.js';
 
-/* Vitaly: the voice assistant.
+/* Vitaly: the voice assistant. Standalone: it guides you, it never calls anyone.
 
    Summon: say "Hey Vitaly" (Chrome speech recognition), or press T if the wake word misses.
    The screen switches to a pulsing orb with the body dimmed behind it; the orb is teal when
    calm, amber for a warning, red for an emergency, and pulses with Vitaly's voice.
 
-   Alerts come from the backend watchdog (fixed rules), not the AI. When one fires, Vitaly takes
-   over on its own: it speaks the preloaded checklist at once, then one tailored line from the AI.
-   Warnings wait 15 s for "I'm OK" before help is called. Follow-up questions go to the AI with
-   all live data; actions (call or cancel help, log a countermeasure, note to Earth) need a "yes".
+   Guides: when the backend watchdog detects a problem, or you say what's wrong ("sharp pain in
+   my chest", "she's not breathing"), Vitaly walks you through it one step at a time. Say "next",
+   "repeat", "back" or "stop". The whole guide arrives in one reply and every line is voiced in
+   advance, so stepping through it needs no server round trip and no waiting.
+
+   Questions go to the backend: everyday ones are answered instantly from live data, unusual
+   ones by the AI. Actions (log a countermeasure, note to Earth) need a "yes".
 
    Voice: Deepgram Aura (through the backend, so the key stays there); Chrome's built-in voice if
    Deepgram isn't set up. Listening needs Chrome; typing always works. */
@@ -19,8 +22,10 @@ import { state } from '../state.js';
 const WAKE = /\b(?:hey|hi|ok|okay)?\s*(?:vitaly|vitali|vitalie|vitaley|vitality|vitally|vitale|vital e)\b[,.!?]?\s*/i;
 const YES = /\b(yes|yeah|yep|confirm|do it|go ahead|please do|affirmative|correct)\b/i;
 const NO = /\b(no|nope|cancel that|don't|do not|stop|never ?mind|negative)\b/i;
-const OK_WORDS = /\b(i'?m (ok|okay|fine|good|alright)|all good|false alarm)\b/i;
-const REPEAT = /\b(repeat|say (that|it) again|what\?)\b/i;
+const REPEAT = /\b(repeat|again|say (that|it) again|what was that|pardon)\b/i;
+const NEXT = /\b(next|done|did (it|that)|okay|ok|got it|continue|go on|ready|what now|then what|and then|yes|yeah|yep|no|nope)\b/i;
+const BACK = /\b(back|previous|before that)\b/i;
+const STOP = /\b(stop|exit|quit|end (the )?guide|cancel|i'?m (fine|okay|ok|good|alright) now|false alarm|never ?mind)\b/i;
 const CLOSE_AFTER_MS = 5000;
 const ENDPOINT_MS = 700;      // silence that ends a question
 const COLORS = { calm: [63, 214, 198], warning: [227, 155, 45], emergency: [224, 68, 46] };
@@ -30,6 +35,7 @@ let open = false;
 let level = 'calm';
 let pending = null;           // action waiting for "yes"
 let current = null;           // incident being handled
+let guide = null;             // { title, severity, steps, i, incidentId } while walking through steps
 let closeTimer = null;
 let speaking = false;
 let ignoreUntil = 0;          // don't hear our own voice
@@ -47,7 +53,10 @@ export function initVitaly() {
         <p class="v-say" id="vSay"></p>
         <p class="v-heard" id="vHeard"></p>
       </div>
-      <div class="v-help" id="vHelp"></div>
+      <div class="v-guide" id="vGuide"></div>
+      <div class="v-bar" id="vBar" hidden>
+        <button data-say="back">Back</button><button data-say="repeat">Repeat</button><button data-say="next" class="main">Next</button><button data-say="stop">End</button>
+      </div>
       <div class="v-confirm" id="vConfirm" hidden>
         <button data-answer="yes">Yes</button><button data-answer="no">No</button>
       </div>
@@ -72,6 +81,10 @@ export function initVitaly() {
     const a = e.target.dataset.answer;
     if (a) heard(a);
   });
+  $('#vBar').addEventListener('click', e => {
+    const a = e.target.dataset.say;
+    if (a) heard(a);
+  });
   addEventListener('keydown', e => {
     const typing = /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName);
     if (e.key === 'Escape' && open) close();
@@ -89,7 +102,6 @@ export function initVitaly() {
   const firstGesture = () => { startEars(); removeEventListener('pointerdown', firstGesture); removeEventListener('keydown', firstGesture); };
   addEventListener('pointerdown', firstGesture);
   addEventListener('keydown', firstGesture);
-  setInterval(paintHelp, 500);
 }
 
 // ---------- opening and closing ----------
@@ -112,6 +124,8 @@ function close() {
   mode = 'idle';
   pending = null;
   current = null;
+  guide = null;
+  paintGuide();
   $('#vitaly').classList.remove('on');
   setTimeout(() => { if (!open) $('#vitaly').hidden = true; }, 400);
   $('#vConfirm').hidden = true;
@@ -123,13 +137,13 @@ function closeSoon() {
   clearTimeout(closeTimer);
   closeTimer = setTimeout(() => {
     if (speaking || mode === 'confirm' || mode === 'thinking') return;
-    if (openEmergency()) return;
+    if (guide || openEmergency()) return;   // stay while a guide is running
     close();
   }, CLOSE_AFTER_MS);
 }
 
 function openEmergency() {
-  return (live.incidents || []).some(i => i.state === 'open' && i.severity === 'emergency' && !i.acked);
+  return (live.incidents || []).some(i => i.state === 'open' && i.severity === 'emergency');
 }
 
 export function summon() {
@@ -164,6 +178,7 @@ function checkIncidents() {
   }
   if (current && (current.state === 'resolved' || !find(current.id))) {
     cleared.push(current.title);
+    if (guide && guide.incidentId === current.id) { guide = null; paintGuide(); }
     current = null;
   }
   queue.sort((a, b) => sevRank(find(a)) - sevRank(find(b)));
@@ -187,51 +202,77 @@ async function announce(inc) {
   if (!inc) return;
   current = inc;
   pending = null;
-  show(inc.severity === 'emergency' ? 'emergency' : 'warning');
-  mode = 'alert';
-  status(/\d/.test(inc.value) ? `${inc.title} · ${inc.value}` : inc.title);
   hush();
   alarm(inc.severity);
-  // The checklist is preloaded: speak it at once, no waiting on the AI.
-  const tailored = api.vitalyTailor(inc.id).catch(() => null);
-  await say(inc.say);
-  if (!current || current.id !== inc.id) return;  // a more urgent alert took over
-  const t = await tailored;
-  if (t && t.line && current && current.id === inc.id) await say(t.line);
-  if (current && current.id === inc.id) {
-    mode = 'alert';
-    status(inc.escalate_at && !inc.acked ? 'Say "I\'m OK" if you\'re fine' : inc.title);
-  }
-  closeSoon();
+  await startGuide({ title: inc.title, severity: inc.severity, say: inc.say, steps: inc.guide, value: inc.value, incidentId: inc.id });
 }
 
-// Help crew, Earth note and the 15 s countdown, refreshed twice a second.
-function paintHelp() {
-  const box = $('#vHelp');
-  if (!open || !current) { box.innerHTML = ''; return; }
-  const inc = find(current.id) || current;
-  const now = Date.now() / 1000;
-  const rows = [];
-  if (inc.escalate_at && !inc.acked && !inc.help) {
-    rows.push(`<p class="v-count">Calling help in <b>${Math.max(0, Math.ceil(inc.escalate_at - now))} s</b> unless you say "I'm OK"</p>`);
-  }
-  if (inc.help && !inc.help.cancelled) {
-    const team = inc.help.team.map(t => {
-      const left = Math.max(0, Math.ceil(inc.help.called_at + t.eta_s - now));
-      return `<li><b>${t.name}</b> <span>${t.role}</span> <em>${left ? `${left} s` : 'arrived'}</em></li>`;
-    }).join('');
-    rows.push(`<p class="v-h">Help on the way to ${inc.help.to}</p><ul>${team}</ul>`);
-  }
-  if (inc.help && inc.help.cancelled) rows.push('<p class="v-h">Help call cancelled</p>');
-  if (inc.earth) {
-    const left = Math.max(0, Math.ceil(inc.earth.arrives_at - now));
-    rows.push(`<p class="v-earth">Flight surgeon on Earth: ${left ? `note arrives in ${fmtTime(left)}` : 'note received'} <span>(${inc.earth.delay_min} min signal delay)</span></p>`);
-  }
-  box.innerHTML = rows.join('');
+// ---------- guides: one step at a time ----------
+
+// Opening line, what the sensors show (if any), then step 1. Everything after is "next".
+async function startGuide(g) {
+  const mine = guide = { ...g, i: 0, started: false };
+  $('#vConfirm').hidden = true;
+  show(g.severity === 'emergency' ? 'emergency' : 'warning');
+  mode = 'alert';
+  paintGuide();
+  // If the crew member says "next" during the opening, guideCommand takes over and this stops.
+  const mineStill = () => guide === mine && !mine.started;
+  await say(g.say);
+  if (mineStill() && g.readings) await say(g.readings);
+  if (mineStill()) await sayStep();
 }
 
-function fmtTime(s) {
-  return s >= 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s} s`;
+async function sayStep() {
+  const g = guide;
+  g.started = true;
+  paintGuide();
+  await say(g.steps[g.i]);
+  if (guide === g) mode = 'alert';
+}
+
+async function guideCommand(text) {
+  const g = guide;
+  if (STOP.test(text)) {
+    guide = null;
+    paintGuide();
+    mode = 'listening';
+    show(openEmergency() ? 'emergency' : 'calm');
+    status(ears ? 'Listening' : 'Type your question');
+    await say('Okay, I\'ve stopped the guide. I\'m still watching your readings.');
+    return closeSoon();
+  }
+  if (!g.started) return sayStep();   // interrupted the opening: go straight to step 1
+  if (REPEAT.test(text)) return sayStep();
+  if (BACK.test(text)) {
+    if (g.i === 0) return say('That\'s the first step.');
+    g.i--;
+    return sayStep();
+  }
+  if (g.i >= g.steps.length - 1) {
+    guide = null;
+    paintGuide();
+    mode = 'listening';
+    show(openEmergency() ? 'emergency' : 'calm');
+    status(ears ? 'Listening' : 'Type your question');
+    await say('That was the last step. I\'m still watching your readings. Say Vitaly if anything changes.');
+    return closeSoon();
+  }
+  g.i++;
+  return sayStep();
+}
+
+function paintGuide() {
+  const box = $('#vGuide');
+  $('#vBar').hidden = !guide;
+  if (!guide) { box.innerHTML = ''; return; }
+  const reading = guide.value && /\d/.test(guide.value) ? ` · ${guide.value}` : '';
+  status(`${guide.title}${reading} · step ${guide.i + 1} of ${guide.steps.length}`);
+  box.innerHTML = `<p class="v-h">${guide.title}</p><ol>${guide.steps.map((t, i) =>
+    `<li class="${i < guide.i ? 'done' : i === guide.i ? 'now' : ''}">${t}</li>`).join('')}</ol>
+    <p class="v-hint">Say “next”, “repeat”, “back” or “stop”</p>`;
+  const now = box.querySelector('li.now');
+  if (now) now.scrollIntoView({ block: 'nearest' });
 }
 
 // ---------- what the crew member said ----------
@@ -245,13 +286,10 @@ async function heard(text) {
     if (YES.test(text)) return runAction(pending);
     if (NO.test(text)) { pending = null; $('#vConfirm').hidden = true; mode = 'listening'; await say('Okay, I won\'t.'); return closeSoon(); }
   }
-  if (current && OK_WORDS.test(text) && current.escalate_at && !current.acked && !current.help) {
-    await api.vitalyAck(current.id).catch(() => {});
-    current.acked = true;
-    await say('Okay. I\'ll keep watching your readings.');
-    return closeSoon();
+  // In a guide, short replies drive the steps. A new symptom or a real question still gets through.
+  if (guide && text.split(/\s+/).length <= 5 && (STOP.test(text) || REPEAT.test(text) || BACK.test(text) || NEXT.test(text))) {
+    return guideCommand(text);
   }
-  if (current && REPEAT.test(text)) { await say(current.say); return closeSoon(); }
 
   mode = 'thinking';
   status('Thinking');
@@ -261,6 +299,7 @@ async function heard(text) {
   } catch (err) {
     r = { say: 'I can\'t reach the medical system right now. Your alerts still work.' };
   }
+  if (r.guide) return startGuide(r.guide);
   if (r.action) {
     pending = r.action;
     mode = 'confirm';
@@ -269,8 +308,13 @@ async function heard(text) {
     await say(r.say);
     return;
   }
-  mode = 'listening';
   await say(r.say);
+  if (guide) {              // answered a question mid-guide: back to the current step
+    mode = 'alert';
+    paintGuide();
+    return;
+  }
+  mode = 'listening';
   status(ears ? 'Listening' : 'Type your question');
   closeSoon();
 }
@@ -281,15 +325,8 @@ async function runAction(action) {
   mode = 'thinking';
   status('On it');
   try {
-    const r = await api.vitalyAction({ ...action, incident_id: current ? current.id : undefined });
-    if (action.type === 'call_help') {
-      const inc = r.incident;
-      current = inc;
-      const first = inc && inc.help && inc.help.team[0];
-      await say(first ? `${first.name} is on the way. About ${first.eta_s} seconds.` : 'Help is on the way.');
-    } else if (action.type === 'cancel_help') {
-      await say('Help call cancelled. I\'ll keep watching.');
-    } else if (action.type === 'log_countermeasure') {
+    const r = await api.vitalyAction(action);
+    if (action.type === 'log_countermeasure') {
       await say('Logged. Your plan is updated.');
     } else if (action.type === 'note_earth') {
       await say(`Sent. It reaches the flight surgeon in about ${Math.round(r.note.delay_min)} minutes.`);
@@ -329,10 +366,13 @@ let levels = null;
 let speakToken = 0;           // newer speech cancels older
 
 // Stop whatever Vitaly is saying.
+let stopPlaying = null;      // ends the line being played, so whoever awaits it carries on
+
 function hush() {
   speakToken++;
   speechSynthesis.cancel();
-  if (audioEl) { audioEl.pause(); audioEl.onended = audioEl.onerror = audioEl.onplaying = null; }
+  if (stopPlaying) stopPlaying();
+  if (audioEl) audioEl.pause();
   speaking = false;
 }
 
@@ -371,7 +411,8 @@ function playDeepgram(text, token) {
     }
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
     let started = false;
-    const done = ok => { audioEl.onended = audioEl.onerror = audioEl.onplaying = null; clearTimeout(stall); resolve(ok && token === speakToken); };
+    const done = ok => { audioEl.onended = audioEl.onerror = audioEl.onplaying = null; clearTimeout(stall); stopPlaying = null; resolve(ok && token === speakToken); };
+    stopPlaying = () => done(false);
     // If nothing plays within 4 s (network, Deepgram down), give up and use Chrome's voice.
     const stall = setTimeout(() => { if (!started) { audioEl.pause(); done(false); } }, 4000);
     audioEl.onplaying = () => { started = true; };
@@ -403,6 +444,8 @@ async function say(text) {
   if (!text) return;
   $('#vSay').textContent = text;
   const token = ++speakToken;
+  speechSynthesis.cancel();          // a new line replaces whatever was being said
+  if (stopPlaying) stopPlaying();
   speaking = true;
   const prev = mode;
   if (mode !== 'alert' && mode !== 'confirm') mode = 'speaking';

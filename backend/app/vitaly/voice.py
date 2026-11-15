@@ -31,9 +31,16 @@ _cache = OrderedDict()    # key -> finished MP3 bytes
 DISK = Path(__file__).resolve().parents[2] / "data" / "voice_cache"
 _jobs = {}                # key -> Job still streaming from Deepgram
 
+# Background voicing (startup, a few hundred lines on first run) goes a few at a time so Deepgram
+# doesn't refuse us for too many requests at once; a line someone is waiting for skips the queue.
+BACKGROUND_AT_ONCE = 3
+_slots = None
+
 # Short lines Vitaly says often: generated once at startup.
-COMMON = ["Yes?", "Okay. I'll keep watching your readings.", "Okay, I won't.", "Help call cancelled. I'll keep watching.",
-          "Logged. Your plan is updated.", "That didn't go through. Try again."]
+COMMON = ["Yes?", "I'm here.", "Okay, I won't.", "Logged. Your plan is updated.", "That didn't go through. Try again.",
+          "Okay. Say next when you've done that.", "That was the last step. I'm still watching your readings. Say Vitaly if anything changes.",
+          "Okay, I've stopped the guide. I'm still watching your readings.", "That's the first step.",
+          "I can't reach the medical system right now. Your alerts still work."]
 
 
 def settings():
@@ -67,31 +74,59 @@ def _key(model, text):
 class Job:
     """One Deepgram stream that any number of listeners can follow while it is still arriving."""
 
-    def __init__(self, s, text, key):
+    def __init__(self, s, text, key, background):
         self.chunks, self.done, self.ok = [], False, False
         self.changed = asyncio.Event()
+        self.urgent = asyncio.Event()   # set when someone is waiting to hear this line
+        if not background:
+            self.urgent.set()
         self.task = asyncio.ensure_future(self.run(s, text, key))
 
     async def run(self, s, text, key):
+        global _slots
+        if _slots is None:
+            _slots = asyncio.Semaphore(BACKGROUND_AT_ONCE)
+        held = False
         try:
-            async with httpx.AsyncClient(timeout=TIMEOUT_S) as client:
-                async with client.stream("POST", URL, params={"model": s["model"], "encoding": "mp3"}, json={"text": text},
-                                         headers={"Authorization": f"Token {s['key']}"}) as r:
-                    r.raise_for_status()
-                    async for chunk in r.aiter_bytes():
-                        self.chunks.append(chunk)
-                        self.changed.set()
-            self.ok = True
-            audio = b"".join(self.chunks)
-            remember(key, audio)
-            try:
-                DISK.mkdir(parents=True, exist_ok=True)
-                (DISK / f"{key}.mp3").write_bytes(audio)
-            except OSError:
-                pass
+            if not self.urgent.is_set():
+                slot = asyncio.ensure_future(_slots.acquire())
+                rush = asyncio.ensure_future(self.urgent.wait())
+                await asyncio.wait({slot, rush}, return_when=asyncio.FIRST_COMPLETED)
+                rush.cancel()
+                if slot.done() and not slot.cancelled():
+                    held = True
+                else:
+                    slot.cancel()
+            for attempt in range(3):
+                try:
+                    self.chunks.clear()
+                    async with httpx.AsyncClient(timeout=TIMEOUT_S) as client:
+                        async with client.stream("POST", URL, params={"model": s["model"], "encoding": "mp3"}, json={"text": text},
+                                                 headers={"Authorization": f"Token {s['key']}"}) as r:
+                            if r.status_code == 429 and attempt < 2:   # too many at once: wait and retry
+                                await asyncio.sleep(1.5 * (attempt + 1))
+                                continue
+                            r.raise_for_status()
+                            async for chunk in r.aiter_bytes():
+                                self.chunks.append(chunk)
+                                self.changed.set()
+                    break
+                except httpx.HTTPStatusError:
+                    raise
+            self.ok = bool(self.chunks)
+            if self.ok:
+                audio = b"".join(self.chunks)
+                remember(key, audio)
+                try:
+                    DISK.mkdir(parents=True, exist_ok=True)
+                    (DISK / f"{key}.mp3").write_bytes(audio)
+                except OSError:
+                    pass
         except Exception:
             self.ok = False
         finally:
+            if held:
+                _slots.release()
             self.done = True
             self.changed.set()
             _jobs.pop(key, None)
@@ -111,8 +146,9 @@ class Job:
             await self.changed.wait()
 
 
-def start(text):
-    """Cached bytes, or a Job streaming them. None if Deepgram isn't set up."""
+def start(text, background=False):
+    """Cached bytes, or a Job streaming them. None if Deepgram isn't set up.
+    background=True queues the line politely; a later normal call for it jumps the queue."""
     s = settings()
     text = (text or "").strip()[:MAX_CHARS]
     if not s["key"] or not text:
@@ -127,7 +163,9 @@ def start(text):
         remember(key, audio)
         return audio
     if key not in _jobs:
-        _jobs[key] = Job(s, text, key)
+        _jobs[key] = Job(s, text, key, background)
+    elif not background:
+        _jobs[key].urgent.set()
     return _jobs[key]
 
 
@@ -156,8 +194,8 @@ async def speak(text):
     return b"".join(got.chunks) if got.ok else None
 
 
-def prewarm(*texts):
-    """Start generating lines in the background, e.g. an alert's checklist the moment it fires."""
+def prewarm(*texts, background=True):
+    """Start generating lines ahead of need, e.g. every guide step at startup."""
     for t in texts:
         if t:
-            start(t)
+            start(t, background=background)

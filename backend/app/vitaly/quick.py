@@ -1,7 +1,6 @@
 """Instant answers for everyday questions, written from live data with no AI call.
 
-"How am I?", "how's my heart?", "what's my oxygen?", "how much radiation?", "when does help get
-here?" are asked over and over. Matching them by keywords and filling a sentence from the live
+"How am I?", "how's my heart?", "what's my oxygen?", "how much radiation?" are asked over and over. Matching them by keywords and filling a sentence from the live
 state takes a millisecond and can't get a number wrong. Numbers are rounded the way a person
 says them ("about 65"), so the sentence rarely changes and its audio can be voiced in advance.
 Only questions that match nothing here go to the AI.
@@ -18,7 +17,6 @@ def val(sim, metric):
 
 # (intent, pattern). First match wins, so specific intents come before broad ones.
 INTENTS = [
-    ("help_eta", r"\b(when|how long|how soon|eta)\b.*\b(help|medic|doctor|chen|crew|arriv|get here|coming)\b|\bwho('?s| is) coming\b"),
     ("todo", r"\bwhat (should|do|can) i do\b|\bwhat now\b|\bnext steps?\b|\bwhat'?s the plan\b"),
     ("alerts", r"\b(what('?s| is) (wrong|happening|going on)|any (alerts?|problems?|issues?)|is (anything|something) wrong)\b"),
     ("heart", r"\b(heart|pulse|bpm|cardio|rhythm|blood pressure|bp)\b"),
@@ -149,19 +147,10 @@ def ears(state, sim):
     return organ_line(state["organs"]["ears"])
 
 
-def help_eta(state, sim):
-    for inc in open_alerts(sim):
-        team = (inc.get("help") or {}).get("team", [])
-        if team and not inc["help"].get("cancelled"):
-            left = max(0, int(inc["help"]["called_at"] + team[0]["eta_s"] - time.time()))
-            return f"{team[0]['name']} arrives in about {left} seconds." if left else f"{team[0]['name']} should be with you now."
-    return "No one has been called. Say \"call the medic\" if you need help."
-
-
 def todo(state, sim):
     alerts = open_alerts(sim)
     if alerts:
-        return f"{alerts[0]['steps'][0]}. Then {alerts[0]['steps'][1].lower() if len(alerts[0]['steps']) > 1 else 'wait for the crew'}."
+        return alerts[0]["guide"][0]
     top = state["organs"][state["risk_ranking"][0]]
     cm = top["countermeasures"][0] if top["countermeasures"] else None
     return f"Top priority is your {top['name'].lower()}. Best next step: {cm['label'].lower()}." if cm else "Nothing urgent. Keep to today's plan."
@@ -186,7 +175,7 @@ def mission(state, sim):
 
 
 ANSWERS = {"status": status, "heart": heart, "oxygen": oxygen, "cabin": cabin, "radiation": radiation, "sleep": sleep,
-           "muscles": muscles, "bones": bones, "eyes": eyes, "ears": ears, "help_eta": help_eta, "todo": todo,
+           "muscles": muscles, "bones": bones, "eyes": eyes, "ears": ears, "todo": todo,
            "alerts": alerts, "comms": comms, "mission": mission}
 
 

@@ -11,17 +11,20 @@
 .v-say { margin-top: 12px; font: 400 22px/1.4 var(--sans); color: #fff; min-height: 1.4em; }
 .v-heard { margin-top: 10px; font: 400 15px/1.4 var(--sans); color: rgba(255, 255, 255, .5); font-style: italic; min-height: 1.4em; }
 
-.v-help { position: absolute; right: 32px; top: 32px; width: 300px; font: 400 13px/1.45 var(--sans); color: rgba(255, 255, 255, .85); }
-.v-help:empty { display: none; }
-.v-help .v-h { font: 600 12px var(--cond); letter-spacing: .2em; text-transform: uppercase; color: rgb(var(--v)); margin: 0 0 6px; }
-.v-help ul { list-style: none; margin: 0 0 14px; padding: 0; }
-.v-help li { display: grid; grid-template-columns: 1fr auto; padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, .1); }
-.v-help li span { grid-column: 1; font-size: 11px; color: rgba(255, 255, 255, .5); }
-.v-help li em { grid-row: 1 / 3; grid-column: 2; align-self: center; font: 500 18px var(--cond); font-style: normal; color: #fff; font-variant-numeric: tabular-nums; }
-.v-count { padding: 10px 12px; margin-bottom: 14px; border: 1px solid rgb(var(--v)); color: #fff; }
-.v-count b { font: 600 18px var(--cond); color: rgb(var(--v)); }
-.v-earth { font-size: 12px; color: rgba(255, 255, 255, .7); }
-.v-earth span { color: rgba(255, 255, 255, .45); }
+/* Guide: the steps, with the current one lit */
+.v-guide { position: absolute; right: 32px; top: 32px; bottom: 120px; width: 340px; overflow-y: auto; scrollbar-width: thin; font: 400 14px/1.45 var(--sans); color: rgba(255, 255, 255, .55); }
+.v-guide:empty { display: none; }
+.v-guide .v-h { font: 600 12px var(--cond); letter-spacing: .2em; text-transform: uppercase; color: rgb(var(--v)); margin: 0 0 10px; }
+.v-guide ol { list-style: none; counter-reset: step; margin: 0; padding: 0; }
+.v-guide li { counter-increment: step; position: relative; padding: 9px 10px 9px 38px; border-left: 2px solid rgba(255, 255, 255, .12); }
+.v-guide li::before { content: counter(step); position: absolute; left: 12px; top: 9px; font: 600 14px var(--cond); color: rgba(255, 255, 255, .4); }
+.v-guide li.done { color: rgba(255, 255, 255, .3); text-decoration: line-through; text-decoration-color: rgba(255, 255, 255, .2); }
+.v-guide li.now { color: #fff; border-left-color: rgb(var(--v)); background: rgba(var(--v), .12); }
+.v-guide li.now::before { color: rgb(var(--v)); }
+.v-hint { margin-top: 12px; font: 500 11px var(--cond); letter-spacing: .14em; text-transform: uppercase; color: rgba(255, 255, 255, .4); }
+.v-bar { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); display: flex; gap: 10px; }
+.v-bar button { font: 600 13px var(--cond); letter-spacing: .16em; text-transform: uppercase; padding: 9px 18px; border: 1px solid rgba(255, 255, 255, .3); color: #fff; background: transparent; cursor: pointer; }
+.v-bar button.main { background: rgb(var(--v)); border-color: rgb(var(--v)); color: #071214; padding: 9px 34px; }
 
 .v-confirm { position: absolute; left: 50%; top: calc(70% + 150px); transform: translateX(-50%); display: flex; gap: 12px; }
 .v-confirm button { font: 600 14px var(--cond); letter-spacing: .16em; text-transform: uppercase; padding: 10px 26px; border: 1px solid rgb(var(--v)); color: #fff; background: transparent; cursor: pointer; }
@@ -41,10 +44,10 @@
 @keyframes v-breathe { 50% { opacity: .35; transform: scale(.8); } }
 
 @media (max-width: 900px) {
-  .v-help { left: 16px; right: 16px; top: 64px; width: auto; }
+  .v-guide { left: 16px; right: 16px; top: 64px; bottom: auto; max-height: 30vh; width: auto; }
   .v-say { font-size: 18px; }
 }
 @media (prefers-reduced-motion: reduce) { .v-launch.listening i { animation: none; } }
 
 /* `hidden` must win over the display rules above, or the closed overlay would still block clicks. */
-.vitaly[hidden], .v-confirm[hidden] { display: none; }
+.vitaly[hidden], .v-confirm[hidden], .v-bar[hidden] { display: none; }

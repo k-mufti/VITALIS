@@ -30,7 +30,7 @@ from .analysis import radiation as radiation_analysis  # noqa: E402
 from .analysis import training as training_analysis  # noqa: E402
 from .analysis.common import Reader  # noqa: E402
 from .devices import catalog  # noqa: E402
-from .vitaly import brain, crew, profile, protocols, voice, watchdog  # noqa: E402
+from .vitaly import brain, crew, guides, profile, protocols, voice, watchdog  # noqa: E402
 from .devices.simulated import DEVICES  # noqa: E402
 from .engine.physiology import COUNTERMEASURES, apply_change, mission_state  # noqa: E402
 from .sources import donki, horizons, noaa  # noqa: E402
@@ -97,7 +97,7 @@ async def sim_loop():
 @contextlib.asynccontextmanager
 async def lifespan(app):
     # Voice every checklist line and common phrase in advance (from disk after the first run).
-    voice.prewarm(*voice.COMMON, *protocols.all_lines(profile.profile(crew.PATIENT_ID)["name"]))
+    voice.prewarm(*voice.COMMON, *protocols.all_lines(profile.profile(crew.PATIENT_ID)["name"]), *guides.all_lines())
     tasks = [asyncio.create_task(refresh_loop()), asyncio.create_task(sim_loop())]
     yield
     for t in tasks:
@@ -316,21 +316,13 @@ _prewarmed = set()
 
 
 def prewarm_new_alerts():
-    """Start Vitaly's voice for new alerts on the server right away: checklist audio, then the
-    tailored line (AI text, then its audio), so the browser waits as little as possible."""
+    """Make sure a new alert's lines are voiced (they normally already are, from startup)."""
     for inc in sim.incidents:
         key = (inc["id"], inc["created"])
         if inc["state"] != "open" or key in _prewarmed:
             continue
         _prewarmed.add(key)
-        voice.prewarm(inc["say"])
-        asyncio.ensure_future(_prewarm_tailor(inc))
-
-
-async def _prewarm_tailor(inc):
-    if not inc["tailored"]:
-        inc["tailored"] = await brain.tailor(inc, mission_state(sim), sim)
-    voice.prewarm(inc["tailored"]["line"])
+        voice.prewarm(inc["say"], *inc["guide"], background=False)
 
 
 async def push_incidents():
@@ -375,37 +367,12 @@ def vitaly_incidents():
     return watchdog.active(sim)
 
 
-@app.post("/api/vitaly/incidents/{incident_id}/ack")
-async def vitaly_ack(incident_id: int):
-    """"I'm OK": stops the 15 s countdown before help is called."""
-    inc = watchdog.acknowledge(sim, incident_id)
-    if not inc:
-        raise HTTPException(status_code=404, detail="no such incident")
-    await push_incidents()
-    return inc
-
-
-@app.post("/api/vitaly/incidents/{incident_id}/tailor")
-async def vitaly_tailor(incident_id: int):
-    """One personal line from the AI to follow the preloaded checklist (cached per incident)."""
-    inc = watchdog.find(sim, incident_id)
-    if not inc:
-        raise HTTPException(status_code=404, detail="no such incident")
-    for _ in range(40):  # the server may already be writing it (prewarm); wait up to 4 s
-        if inc["tailored"]:
-            break
-        await asyncio.sleep(0.1)
-    if not inc["tailored"]:
-        inc["tailored"] = await brain.tailor(inc, mission_state(sim), sim)
-    return inc["tailored"]
-
-
 @app.post("/api/vitaly/prewarm")
 async def vitaly_prewarm():
     """Called when Vitaly is summoned: voice every everyday answer for the current data now, so
     the reply plays instantly by the time the question is finished."""
     texts = brain.quick.all_answers(mission_state(sim), sim)
-    voice.prewarm(*texts)
+    voice.prewarm(*texts, background=False)
     return {"lines": len(texts), "ready": sum(voice.cached(t) for t in texts)}
 
 
@@ -417,22 +384,6 @@ async def vitaly_ask(body: VitalyAsk):
 @app.post("/api/vitaly/action")
 async def vitaly_action(body: VitalyAction):
     """Runs an action the crew member confirmed by voice."""
-    if body.type == "call_help":
-        inc = watchdog.find(sim, body.incident_id) if body.incident_id else None
-        if inc and not inc["help"]:
-            watchdog.call_help(sim, inc, time.time(), reason="asked by voice")
-        elif not inc:
-            inc = watchdog.request_help(sim)
-        await push_incidents()
-        return {"ok": True, "incident": inc}
-    if body.type == "cancel_help":
-        open_with_help = [i for i in sim.incidents if i["state"] == "open" and i["help"]]
-        inc = watchdog.find(sim, body.incident_id) if body.incident_id else (open_with_help[-1] if open_with_help else None)
-        if not inc:
-            raise HTTPException(status_code=404, detail="no help call to cancel")
-        watchdog.cancel_help(sim, inc["id"])
-        await push_incidents()
-        return {"ok": True, "incident": inc}
     if body.type == "log_countermeasure":
         return await post_countermeasure(CountermeasureIn(organ=body.organ or "", id=body.id or ""))
     if body.type == "note_earth":

@@ -61,8 +61,6 @@ export const api = {
   provenance: () => request('/api/provenance'),
   vitalyStatus: () => request('/api/vitaly/status'),
   vitalyIncidents: () => request('/api/vitaly/incidents'),
-  vitalyAck: id => post(`/api/vitaly/incidents/${id}/ack`, {}),
-  vitalyTailor: id => post(`/api/vitaly/incidents/${id}/tailor`, {}, 12000),
   vitalyAsk: (question, focus) => post('/api/vitaly/ask', { question, focus }, 15000),
   vitalyAction: action => post('/api/vitaly/action', action, 15000),
 };
