@@ -12,13 +12,18 @@ voiced in advance and plays with no delay.
 import re
 
 # Someone else is the patient: "he", "she", "someone", "my crewmate"... or a name ("Amir is...").
-OTHER = re.compile(r"\b(he|she|they|him|her|them|his|their|he's|she's|they're|someone|somebody|crew ?mate|commander|"
-                   r"engineer|doctor|specialist|patient|person|friend|colleague)\b", re.I)
+# Words that name another person ("my teammate", "someone", "a stranger"), and pronouns that point at one.
+RELATION = re.compile(r"\b(someone|somebody|team ?mates?|crew ?mates?|crew member|commander|engineer|doctor|specialist|patient|person|"
+                      r"friend|buddy|partner|colleague|co-?worker|room ?mate|class ?mate|brother|sister|mom|mum|mother|dad|father|wife|husband|"
+                      r"boyfriend|girlfriend|son|daughter|kid|child|baby|boss|guy|girl|woman|lady|stranger|neighbou?r|passenger|teacher|"
+                      r"astronaut|pilot|captain)\b", re.I)
+PRONOUN = re.compile(r"\b(he|she|they|him|her|them|his|their|he's|she's|they're)\b", re.I)
+OTHER = re.compile(RELATION.pattern + "|" + PRONOUN.pattern, re.I)
 NAMED = re.compile(r"\b(?!I\b|What\b|How\b|Why\b|Something\b|It\b|This\b|That\b|There\b)[A-Z][a-z]+ (has|is|isn't|can't|won't|fell|passed|hit|cut|burned)\b"
                    r"|\b(with|help) (?!Vitaly\b)[A-Z][a-z]+\b")
 # Clearly about the speaker: "my chest", "I can't breathe", "I cut my arm".
-SELF = re.compile(r"\bmy (chest|head|arm|leg|throat|hand|heart|breathing|breath|stomach|back)\b|"
-                  r"\bi(?:'m| am| have|'ve| feel| can'?t| cannot| cut| hit| burned| burnt| think i)\b", re.I)
+STRONG_SELF = re.compile(r"\bmy (chest|head|arm|leg|throat|hand|heart|breathing|breath|stomach|back|wrist|ankle|knee|eye|eyes|face|neck)\b", re.I)
+SELF = re.compile(STRONG_SELF.pattern + r"|\bi(?:'m| am| have|'ve| feel| can'?t| cannot| cut| hit| burned| burnt| think i)\b", re.I)
 
 GUIDES = {
     "unresponsive": {
@@ -327,7 +332,8 @@ GUIDES = {
             ],
         },
     },
-    # A cramp and a pulled muscle feel alike at first; a cramp lets go within minutes, a strain doesn't.
+    # A cramp and a pulled muscle feel alike at first; a cramp lets go within minutes, a strain doesn't
+    # (strains: the "sprain" guide in injuries.py).
     "cramp": {
         "title": "Muscle cramp", "severity": "warning",
         "match": r"\bcramp|charley horse|muscle (is )?(locked|knotted|seized)|spasm",
@@ -347,29 +353,6 @@ GUIDES = {
                 "Rub the muscle firmly while it lets go.",
                 "Give them some water to drink.",
                 "If it's still tight after ten minutes, or swollen, say pulled muscle and I'll guide you through a strain.",
-            ],
-        },
-    },
-    "strain": {
-        "title": "Pulled muscle", "severity": "warning",
-        "match": r"pull(ed)? (a |my |his |her |their |the )?(left |right )?(muscle|hamstr|groin|calf|quad|thigh|back|shoulder|neck)|hamstr|"
-                 r"\bstrain|tweak(ed)?|torn (a |my )?muscle|tore (a |my )?muscle|muscle (tear|pull)|pulled muscle",
-        "say": {"self": "Okay. Let's rest it and keep the swelling down.",
-                "other": "Okay. I'll talk you through looking after the muscle."},
-        "steps": {
-            "self": [
-                "Stop exercising and don't stretch it hard. Let it rest.",
-                "Wrap a cold pack in cloth and hold it on the sore spot for fifteen minutes.",
-                "Wrap it with an elastic bandage, firm but not tight.",
-                "Check past it: your skin should stay warm and pink, with normal feeling.",
-                "No heavy exercise with it for three days.",
-            ],
-            "other": [
-                "Have them stop exercising and keep the muscle still.",
-                "Wrap a cold pack in cloth and hold it on the sore spot for fifteen minutes.",
-                "Wrap it with an elastic bandage, firm but not tight.",
-                "Check past it: the skin should stay warm and pink, with normal feeling.",
-                "No heavy exercise with it for three days.",
             ],
         },
     },
@@ -410,18 +393,45 @@ GUIDES = {
         ]},
     },
 }
+from . import injuries  # noqa: E402  (first-aid steps shared with the injury drill)
+
+
+def _merge(base, extra):
+    """The base guides in order, with each extra guide placed before the broader one it must beat."""
+    out = {}
+    for key, g in base.items():
+        for k, e in extra.items():
+            if e.get("before") == key:
+                out[k] = e
+        out[key] = g
+    for k, e in extra.items():
+        out.setdefault(k, e)
+    return out
+
+
+GUIDES = _merge(GUIDES, injuries.GUIDES)
 for g in GUIDES.values():
     g["pattern"] = re.compile(g["match"], re.I)
 
 # "I'm fine" style talk that happens to contain a keyword shouldn't start a guide.
+# "What is an ACL?" and "tell me about the ligament in the knee" are questions about a thing, not an injury.
+# They only count when something says it is about the speaker or someone else.
+GENERAL_QUESTION = re.compile(r"^\s*(what|how|why|when|where|which|who|does|do|is|are|can|could|tell me|explain|describe)\b", re.I)
+PERSONAL = re.compile(r"\b(i|i'm|i've|me|my|mine|we|us|you)\b", re.I)
+
 NEGATED = re.compile(r"\b(no|not|don'?t have|isn'?t|without|any)\b.{0,12}\b(pain|bleeding|burn|dizzy|choking)\b", re.I)
 
 
 def who(text):
-    """'other' if they're describing someone else, else 'self'."""
+    """'other' if they're describing someone else, else 'self'.
+    Naming another person ("my teammate", "Amir", "someone") wins over "I have..." / "I think..." ("I have a teammate with chest pain"),
+    but not over the speaker's own body ("my chest hurts"). A bare "he" or "she" decides only when nothing says it is the speaker."""
+    names_other = bool(RELATION.search(text) or NAMED.search(text))
+    if names_other and not STRONG_SELF.search(text):
+        return "other"
     if SELF.search(text):
         return "self"
-    if OTHER.search(text) or NAMED.search(text):
+    if PRONOUN.search(text):
         return "other"
     return "self"
 
@@ -430,15 +440,47 @@ def match(text):
     """The guide for what the crew member just said, or None."""
     if NEGATED.search(text):
         return None
-    someone = bool(OTHER.search(text) or NAMED.search(text)) and not SELF.search(text)
+    someone = who(text) == "other" and bool(OTHER.search(text) or NAMED.search(text))
     for gid, g in GUIDES.items():
         if g.get("needs_person") and not someone:
             continue
         if g["pattern"].search(text):
+            if GENERAL_QUESTION.search(text):
+                rest = GENERAL_QUESTION.sub("", text, count=1)      # the opener itself ("tell me") must not count as personal
+                if not (PERSONAL.search(rest) or OTHER.search(rest) or NAMED.search(rest)):
+                    continue
             person = "other" if g.get("other_only") else who(text)
             return {"id": gid, "title": g["title"], "severity": g["severity"], "who": person,
                     "say": g["say"][person], "steps": g["steps"][person]}
     return None
+
+
+# Changing the patient part-way through a guide: "it's not for me, it's for my teammate", "actually it's me".
+NOT_ME = re.compile(r"\b(not (for )?(me|myself)|it'?s not me|it isn'?t me|isn'?t me|not mine|for (him|her|them)|someone else|somebody else|(he|she|they)(?:'s| is| are)? the (one|patient|person))\b", re.I)
+IT_IS_ME = re.compile(r"\b(it'?s me|it is me|for me|it'?s for me|i'?m the one|actually me|it'?s myself)\b", re.I)
+
+
+def retarget(text, current):
+    """'other' or 'self' if what was said moves the guide in progress to a different patient, else None.
+    `current` is {"id", "who"} of the guide being walked through."""
+    if not current or current.get("id") not in GUIDES:
+        return None
+    steps = GUIDES[current["id"]]["steps"]
+    if current.get("who") == "self" and "other" in steps and (NOT_ME.search(text) or RELATION.search(text) or NAMED.search(text)) \
+            and not STRONG_SELF.search(text):
+        return "other"
+    if current.get("who") == "other" and "self" in steps and IT_IS_ME.search(text) and not RELATION.search(text):
+        return "self"
+    return None
+
+
+def build(gid, who, ack=False):
+    """A guide by id for a patient. With ack, the opening first says it understood who the patient is."""
+    g = GUIDES[gid]
+    say = g["say"][who]
+    if ack:
+        say = ("Got it, it's not you. " if who == "other" else "Got it, it's you. ") + re.sub(r"^Okay[.,]\s*", "", say)
+    return {"id": gid, "title": g["title"], "severity": g["severity"], "who": who, "say": say, "steps": g["steps"][who]}
 
 
 def opening(say, first_step):

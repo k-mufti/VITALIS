@@ -15,3 +15,5 @@ assets/models/digestive-system-2/
 backend/data/voice_cache/
 # The Fitbit sign-in tokens (secrets). Never commit.
 backend/data/fitbit_tokens.json
+# What Vitaly's AI has cost so far (the $1 cap)
+backend/data/ai_spend.json

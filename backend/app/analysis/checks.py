@@ -55,9 +55,9 @@ def grade(value, ok, watch, higher_is_worse=True):
     return "act"
 
 
-def check(cid, name, value, unit, verdict, why=""):
+def check(cid, name, value, unit, verdict, why="", healthy=None):
     ref = REF[cid]
-    return {"id": cid, "name": name, "value": value, "unit": unit, "healthy": ref["healthy"],
+    return {"id": cid, "name": name, "value": value, "unit": unit, "healthy": healthy or ref["healthy"],
             "source": ref["source"], "approx": ref.get("approx", False), "verdict": verdict, "why": why}
 
 
@@ -70,15 +70,19 @@ def heart_checks(a, reader):
     why = "; ".join(f"{c['cause']}: {', '.join(c['effects'])}" for c in a["chain"][:2])
     own = googlehealth.resting_baseline(C.BASELINE["heart_rate"])   # None: real watch, own rate not learned yet
     bp_verdict = "ok" if sys_ < 120 and dia < 80 else "watch" if sys_ < 140 and dia < 90 else "act"
+    # "yours N" must be the wearer's own number while a real watch is the source, never the simulated crew member's 58
+    hr_healthy = "60-100 bpm" + (f" (yours {own:.0f})" if own is not None else "")
+    hrv_real = bool((reader.sim.latest.get("hrv") or {}).get("real"))
+    hrv_healthy = "no fixed range: compare with your own trend" if hrv_real else None
     return [
         check("resting_hr", "Resting heart rate", round(hr), "bpm",
-              "ok" if 60 <= hr <= 100 and (own is None or hr - own <= 8) else "watch" if hr <= 100 else "act", why),
+              "ok" if 60 <= hr <= 100 and (own is None or hr - own <= 8) else "watch" if hr <= 100 else "act", why, hr_healthy),
         check("blood_pressure", "Blood pressure", f"{sys_:.0f}/{dia:.0f}", "mmHg", bp_verdict,
               "AHA: 120-129 elevated, 130-139 stage 1, 140+ stage 2"),
         check("hr_recovery", "Heart-rate recovery", round(hrr), "bpm in 1 min",
               grade(hrr, 18, C.HRR_ABNORMAL_BPM, higher_is_worse=False), "falls as fitness drops"),
         check("hrv", "Heart rate variability", round(reader("hrv")), "ms", d["hrv"]["status"],
-              "lower with stress and poor sleep"),
+              "lower with stress and poor sleep", hrv_healthy),
         check("stroke_volume", "Blood pumped per beat", round(sv), "mL", grade(sv, 60, 50, higher_is_worse=False),
               f"{d['cardiac_output']['stroke_volume']['pct']:+.0f}% from preflight: less blood volume in microgravity"),
         check("cardiac_output", "Cardiac output", round(d["cardiac_output"]["value"], 1), "L/min",

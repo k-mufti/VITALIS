@@ -23,12 +23,28 @@ gh.TOKEN_FILE = Path(tempfile.mkdtemp()) / "fitbit_tokens.json"
 iso = lambda t: dt.datetime.fromtimestamp(t, dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")  # noqa: E731
 
 
+def midnight():
+    return dt.datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+
+
 def payloads(now, hr_age_s=180, hr_bpm=76):
     """What Google's list endpoint returns for each data type (shapes from the API reference)."""
     day = dt.datetime.fromtimestamp(now - 86400, dt.timezone.utc)
     date = {"year": day.year, "month": day.month, "day": day.day}
     src = {"device": {"displayName": "Fitbit Versa 4", "formFactor": "WATCH"}}
+    since = midnight()
+    mid = since + (now - since) / 2                       # some time today, whatever time the test runs
+    iv = lambda a, b: {"startTime": iso(a), "endTime": iso(b)}  # noqa: E731
     return {
+        "steps": [{"steps": {"interval": iv(mid + 60, mid + 120), "count": "1500"}},
+                  {"steps": {"interval": iv(mid, mid + 60), "count": "3000"}},
+                  {"steps": {"interval": iv(since - 7200, since - 7140), "count": "9999"}}],      # yesterday: not counted
+        "exercise": [{"exercise": {"interval": iv(mid, mid + 1800), "activeDuration": "1500s", "exerciseType": "RUNNING",
+                                   "metricsSummary": {"averageHeartRateBeatsPerMinute": "139"}}},
+                     {"exercise": {"interval": iv(since - 86400, since - 84000), "activeDuration": "2400s",
+                                   "metricsSummary": {"averageHeartRateBeatsPerMinute": "150"}}}],   # yesterday's run
+        "daily-sleep-temperature-derivations": [{"dailySleepTemperatureDerivations": {"date": date, "nightlyTemperatureCelsius": 33.4,
+                                                                                      "baselineTemperatureCelsius": 33.1}}],
         "heart-rate": [{"dataSource": src, "heartRate": {"sampleTime": {"physicalTime": iso(now - hr_age_s - 60)}, "beatsPerMinute": "70"}},
                        {"dataSource": src, "heartRate": {"sampleTime": {"physicalTime": iso(now - hr_age_s)}, "beatsPerMinute": str(hr_bpm)}},
                        {"heartRate": {"sampleTime": {"physicalTime": iso(now - hr_age_s - 120)}, "beatsPerMinute": "999"}}],  # impossible: dropped
@@ -40,8 +56,11 @@ def payloads(now, hr_age_s=180, hr_bpm=76):
     }
 
 
-def fake_google(now, hr_age_s=180, hr_bpm=76, fail=()):
+def fake_google(now, hr_age_s=180, hr_bpm=76, fail=(), only=None):
     calls = {"token": [], "api": []}
+    data = payloads(now, hr_age_s, hr_bpm)
+    if only is not None:
+        data.update(only)
 
     def handler(request):
         url = request.url
@@ -59,7 +78,7 @@ def fake_google(now, hr_age_s=180, hr_bpm=76, fail=()):
         calls["api"].append((kind, dict(url.params), request.headers.get("authorization")))
         if kind in fail:
             return httpx.Response(403, json={"error": {"message": "no scope"}})
-        return httpx.Response(200, json={"dataPoints": payloads(now, hr_age_s, hr_bpm).get(kind, [])})
+        return httpx.Response(200, json={"dataPoints": data.get(kind, [])})
 
     return httpx.AsyncClient(transport=httpx.MockTransport(handler)), calls
 
@@ -77,6 +96,15 @@ async def main():
     assert gh.parse_heart_rate([]) == ([], None) and gh.parse_sleep([{"sleep": {}}]) is None and gh.parse_daily([{"x": 1}], "y", "z") is None
     assert abs(gh.parse_time("2026-11-15T14:03:20.5Z") - gh.parse_time("2026-11-15T14:03:20Z") - 0.5) < 1e-6
     assert gh.parse_time("2026-11-15T14:03:20+00:00") == gh.parse_time("2026-11-15T14:03:20Z")
+
+    # --- steps, exercise and skin temperature ---
+    since = midnight()
+    assert gh.parse_steps(p["steps"], since) == (4500, 2) and gh.parse_steps(p["steps"], since + 10 * 86400) is None
+    mins, sessions, last = gh.parse_exercise(p["exercise"], since)
+    assert mins == 25.0 and sessions == 1 and last[0] == 139.0, (mins, sessions, last)   # today's active minutes; the newest session's heart rate
+    assert gh.parse_exercise([], since) == (0.0, 0, None) and gh.parse_steps([{"steps": {}}], since) is None
+    assert gh.parse_daily(p["daily-sleep-temperature-derivations"], "dailySleepTemperatureDerivations", "nightlyTemperatureCelsius")[0] == 33.4
+    assert "activity_and_fitness.readonly" in " ".join(gh.SCOPES)
 
     # --- sign-in: PKCE, one-use state, no secret in the URL ---
     url = gh.login_url()
@@ -118,11 +146,32 @@ async def main():
     assert not any(secret in blob for secret in ("TOPSECRETVALUE", "ACCESSVALUE", "REFRESHVALUE")), "report must never carry a secret"
     assert gh.fresh("heart_rate", now + 25 * 60) is None and gh.fresh("hrv", now + 25 * 60) is not None   # HR window 20 min, overnight 36 h
     assert gh.report(now + 25 * 60)["state"] == "stale"
+    got = gh._s["latest"]
+    assert got["steps"]["value"] == 4500 and got["exercise_min"]["value"] == 25.0 and got["session_hr_avg"]["value"] == 139.0
+    assert got["skin_temp"]["value"] == 33.4 and gh.fresh("steps") and gh.fresh("session_hr_avg")
+    n_calls = len(calls["api"]); await gh.poll_once(client)               # a second poll soon after: only the quick types are asked for
+    assert {k for k, _, _ in calls["api"][n_calls:]}.isdisjoint({"steps", "exercise"}) and gh._s["latest"]["steps"]["value"] == 4500
 
     # one data type refused: the rest still work, and it is reported
     client2, _ = fake_google(now, fail=("oxygen-saturation", "daily-oxygen-saturation"))
     gh._s["latest"].clear()
     assert await gh.poll_once(client2) and "spo2" not in gh._s["latest"] and "spo2" in gh.report()["errors"]
+
+    # the activity permission not granted: steps and exercise stay simulated, the rest still works, and the error is kept
+    client3, _ = fake_google(now, fail=("steps", "exercise"))
+    gh._s.update(latest={}, slow_at=0)
+    assert await gh.poll_once(client3) and not {"steps", "exercise_min", "session_hr_avg"} & set(gh._s["latest"]) and "heart_rate" in gh._s["latest"]
+    assert {"steps", "exercise"} <= set(gh.report()["errors"])
+    await gh.poll_once(client3)
+    assert {"steps", "exercise"} <= set(gh.report()["errors"])             # still reported on a quick poll
+    assert gh.report()["needs_activity_scope"] is True
+    # a day with steps but no workout: exercise today is a real zero. No steps and no workout (not synced today): nothing real.
+    idle = {"exercise": []}
+    gh._s.update(latest={}, slow_at=0); client4, _ = fake_google(now, only=idle)
+    assert await gh.poll_once(client4) and gh.report()["needs_activity_scope"] is False   # permission fine once it answers and gh._s["latest"]["exercise_min"]["value"] == 0.0 and "session_hr_avg" not in gh._s["latest"]
+    gh._s.update(latest={}, slow_at=0); client5, _ = fake_google(now, only={"exercise": [], "steps": []})
+    assert await gh.poll_once(client5) and "exercise_min" not in gh._s["latest"] and "steps" not in gh._s["latest"]
+    gh._s.update(latest={}, slow_at=0)
 
     # a revoked refresh token asks for a sign-in again
     tokens = gh.load_tokens(); tokens.update(refresh_token="REVOKED", expires_at=0); gh.save_tokens(tokens)
@@ -162,6 +211,20 @@ async def main():
     sim.measure_now = False
     assert other and not any(x.get("real") for x in other)             # only the watch can be real
 
+    t = time.time() - 60
+    gh._s["latest"].update(steps={"value": 4500.0, "ts": t, "kind": "day", "fetched": t}, exercise_min={"value": 25.0, "ts": t, "kind": "day", "fetched": t},
+                           session_hr_avg={"value": 139.0, "ts": t, "kind": "session", "fetched": t}, skin_temp={"value": 33.4, "ts": t, "kind": "night", "fetched": t})
+    sim.reset(); sim.measure_now = True
+    real_now = {x["metric"]: x for x in watch.read(sim) if x.get("real")}
+    sim.measure_now = False
+    assert {"steps", "exercise_min", "session_hr_avg", "skin_temp"} <= set(real_now) and real_now["steps"]["value"] == 4500 and real_now["exercise_min"]["value"] == 25
+    for k in ("steps", "exercise_min", "session_hr_avg", "skin_temp"):
+        gh._s["latest"].pop(k, None)
+    sim.reset(); sim.measure_now = True
+    steps_sim = next(x for x in watch.read(sim) if x["metric"] == "steps")   # no real steps: the simulated value, not labelled real
+    sim.measure_now = False
+    assert not steps_sim.get("real") and 4000 < steps_sim["value"] < 15000, steps_sim
+
     # --- records say what is real ---
     from app.devices import native
     gh._s["latest"]["heart_rate"]["ts"] = time.time() - 60
@@ -199,6 +262,22 @@ async def main():
     assert own["id"] == "resting_hr" and own["verdict"] == "watch"       # 82 vs 66: more than 8 above their own
     live_hr(72)
     assert mission_state(sim)["organs"]["heart"]["checks"][0]["verdict"] == "ok"   # 72 vs 66: fine (was "watch" against 58)
+
+    # Everything the model and the screen are told about the heart uses the wearer's own number, never the simulated 58
+    gh._s["resting"] = {"value": 62.0, "ts": time.time() - 3600}
+    live_hr(99)
+    heart = mission_state(sim)["organs"]["heart"]
+    texts = " ".join([heart["note"], heart["usual"], *[c["healthy"] + " " + c["why"] for c in heart["checks"] if c["id"] == "resting_hr"]])
+    assert not any(old in texts for old in ("yours 58", "+41", "54-62")), texts   # 99 - 58 = 41 was what the model quoted
+    assert heart["usual"] == "58-66" and "+37" in " ".join(p["says"] for p in heart["analysis"]["derived"] if p["id"] == "resting_hr") and "+37" in heart["note"]
+    gh._s["resting"] = None
+    live_hr(99)
+    heart = mission_state(sim)["organs"]["heart"]
+    assert heart["usual"] == "60-100" and "from your normal" not in " ".join(p["says"] for p in heart["analysis"]["derived"] if p["id"] == "resting_hr")
+    assert "58" not in heart["note"] and "41" not in heart["note"] and next(c for c in heart["checks"] if c["id"] == "resting_hr")["healthy"] == "60-100 bpm"   # no baseline learned yet: no comparison
+    gh._s["resting"] = {"value": 62.0, "ts": time.time() - 3600}
+    sim.reset(); gh._s["latest"].pop("heart_rate", None); sim.fresh_readings(DEVICES)
+    assert mission_state(sim)["organs"]["heart"]["usual"] == "54-62"              # simulated again: the crew member's own
 
     # a Director event on top of the real heart is detected like any other (that is how you trigger Vitaly on demand)
     live_hr(80)

@@ -72,6 +72,7 @@ METRICS = {
     "reaction_ms":  {"device": "tablet",     "method": MEASURED,    "cadence": "daily",      "demo_every_s": 20, "unit": "ms"},
     "mood_1to5":    {"device": "tablet",     "method": SELF_REPORT, "cadence": "daily",      "demo_every_s": 20, "unit": "1-5"},
     "exercise_min": {"device": "wearable",   "method": MEASURED,    "cadence": "per session", "demo_every_s": 20, "unit": "min/day"},
+    "steps":        {"device": "wearable",   "method": MEASURED,    "cadence": "continuous", "demo_every_s": 5,  "unit": "steps"},
     "resistive_load_pct": {"device": "exercise", "method": MEASURED, "cadence": "per session", "demo_every_s": 20, "unit": "% of preflight load"},
     "pulse_transit_ms": {"device": "wearable", "method": MEASURED,  "cadence": "continuous", "demo_every_s": 1,  "unit": "ms"},
     "session_hr_avg": {"device": "wearable",   "method": MEASURED,  "cadence": "per session", "demo_every_s": 20, "unit": "bpm"},
@@ -95,7 +96,7 @@ METRICS = {
 # 98 mg/dL. Simulated readings are rounded the same way so they look like the real thing.
 RESOLUTION = {
     "heart_rate": 1, "hrv": 1, "spo2": 1, "resp_rate": 0.5, "session_hr_avg": 1, "hr_recovery_bpm": 1,
-    "exercise_min": 1, "noise_dba": 1, "glucose": 1, "bp_sys": 1, "bp_dia": 1, "reaction_ms": 1,
+    "exercise_min": 1, "steps": 1, "noise_dba": 1, "glucose": 1, "bp_sys": 1, "bp_dia": 1, "reaction_ms": 1,
     "dose_rate_usv_h": 0.01, "co2_mmhg": 0.01,
 }
 DEFAULT_RESOLUTION = 0.1
@@ -111,6 +112,7 @@ NATIVE = {
     "skin_temp":       ("healthkit", "HKQuantityTypeIdentifierAppleSleepingWristTemperature", "degC"),
     "hr_recovery_bpm": ("healthkit", "HKQuantityTypeIdentifierHeartRateRecoveryOneMinute", "count/min"),
     "exercise_min":    ("healthkit", "HKQuantityTypeIdentifierAppleExerciseTime", "min"),
+    "steps":           ("healthkit", "HKQuantityTypeIdentifierStepCount", "count"),
     "noise_dba":       ("healthkit", "HKQuantityTypeIdentifierEnvironmentalAudioExposure", "dBASPL"),
     "sleep_hours":     ("healthkit", "HKCategoryTypeIdentifierSleepAnalysis", None),
     "ecg_irregular":   ("healthkit", "HKCategoryTypeIdentifierIrregularHeartRhythmEvent", None),

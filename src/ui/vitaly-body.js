@@ -66,8 +66,24 @@ const GUIDE_BODY = {
   bleeding: { path: ['whole'], name: 'cut' },
   burn: { path: ['whole'], name: 'burn' },
   fracture: { path: ['whole'], name: 'broken bone' },
-  strain: { path: ['lower', 'l-leg', 'thigh'], name: 'pulled muscle' },
   cramp: { path: ['lower', 'l-leg', 'calf'], name: 'muscle cramp' },
+  // Guides taken from the injury drill's library (backend/app/vitaly/injuries.py).
+  sprain: { path: ['whole'], name: 'sprain strain pulled muscle' },
+  dislocation: { path: ['whole'], name: 'dislocated' },
+  nosebleed: { path: ['head', 'nose'], name: 'nosebleed' },
+  puncture: { path: ['whole'], name: 'puncture' },
+  back: { path: ['upper', 'lower-back'], name: 'back pain' },
+  nail: { path: ['upper', 'l-arm', 'fingers'], name: 'fingernail from glove' },
+  ear: { path: ['head', 'l-ear'], name: 'ear pressure' },
+  kidney: { path: ['upper', 'lower-back'], name: 'kidney stone' },
+  bends: { path: ['upper', 'l-arm', 'shoulder'], name: 'the bends' },
+  radiation: { path: ['whole'], name: 'radiation sickness' },
+  cold: { path: ['upper', 'l-arm', 'fingers'], name: 'frostbite' },
+  crush: { path: ['upper', 'l-arm', 'fingers'], name: 'crushed in hatch' },
+  tooth: { path: ['head', 'jaw'], name: 'toothache' },
+  rash: { path: ['upper', 'l-arm', 'forearm'], name: 'rash' },
+  bruise: { path: ['whole'], name: 'bruise' },
+  shock: { path: ['whole'], name: 'electric shock' },
 };
 
 // Where each watchdog alert is on the body. The name picks the 3D system the card would show

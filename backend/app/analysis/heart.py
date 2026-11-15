@@ -16,6 +16,7 @@ Score = weighted sum of each measure's severity. Weights are ours (ASSUMPTION); 
 come from the literature are named in constants.py.
 """
 from .. import constants as C
+from ..sources import googlehealth
 from .common import clamp, component, confidence, inputs, vs_baseline
 
 METRICS = ["heart_rate", "hrv", "pulse_transit_ms", "bp_sys", "bp_dia", "hr_recovery_bpm", "stroke_volume_ml", "ecg_irregular"]
@@ -52,12 +53,15 @@ def analyze(reader):
     co = sv * hr / 1000
     co_base = B["stroke_volume_ml"] * B["heart_rate"] / 1000
 
+    # The wearer's own resting rate while a real watch is the source; None until it is learned (then only absolute limits apply).
+    base = googlehealth.resting_baseline(B["heart_rate"])
+    base_sev = base if base is not None else 98       # 98 makes the severity formula below start at the absolute 100 bpm
     parts = [
         component("resting_hr", "Resting heart rate", hr, "bpm",
-                  max((hr - B["heart_rate"] - 2) / 15, (52 - hr) / 12),
+                  max((hr - base_sev - 2) / 15, (52 - hr) / 12),
                   ("No heartbeat detected." if hr < 20 else
                    f"Heart rate {hr:.0f} bpm: too slow." if hr < 45 else
-                   f"Resting heart rate {hr:.0f} bpm, {hr - B['heart_rate']:+.0f} from your normal."),
+                   f"Resting heart rate {hr:.0f} bpm" + (f", {hr - base:+.0f} from your normal." if base is not None else ".")),
                   vs_baseline("heart_rate", hr)),
         component("hrv", "Heart rate variability", hrv, "ms", 0.0 if irregular else (-hrv_b["pct"] - 5) / 40,
                   "HRV unreliable during an irregular rhythm." if irregular else

@@ -352,6 +352,7 @@ def get_analysis_system(system: str):
 class VitalyAsk(BaseModel):
     question: str
     focus: str | None = None
+    current: dict | None = None      # the guide in progress: {"id", "who"}
 
 
 class VitalyAction(BaseModel):
@@ -435,8 +436,10 @@ async def vitaly_prewarm():
 
 @app.post("/api/vitaly/ask")
 async def vitaly_ask(body: VitalyAsk):
-    reply = await brain.ask(body.question[:500], mission_state(sim), sim, body.focus)
+    reply = await brain.ask(body.question[:500], mission_state(sim), sim, body.focus, body.current)
     g = reply.get("guide")
+    if g:      # the opening plays as one clip with step 1; make sure it is voiced (instant when it already is)
+        voice.prewarm(guides.opening(g["say"], g["steps"][0]), background=False)
     if g and g.get("readings"):   # the live readings line is new each time: start voicing it with step 1 now
         voice.prewarm(f"{g['readings']} {g['steps'][0]}", background=False)
     if reply.get("heads_up"):     # played right after the answer: voice it while the answer plays

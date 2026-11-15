@@ -1,0 +1,545 @@
+{
+ "injuries": {
+  "cut": {
+   "id": "cut",
+   "title": "Cut",
+   "urgent": false,
+   "steps": [
+    "Anchor yourself and the crew member to a handrail or foot loops.",
+    "Put on gloves.",
+    "Press gauze firmly on the cut for 10 minutes. Do not lift it to check.",
+    "Clean around it with sterile water and close it with closure strips.",
+    "Cover with a dressing. Check it again in 2 hours."
+   ],
+   "help": [
+    "Still bleeding after 10 minutes of firm pressure",
+    "Deep or gaping, or you can see fat or bone",
+    "Numb or weak past the cut"
+   ],
+   "space": "Blood does not drip. It balls up on the skin and can float off. Catch it with gauze.",
+   "kit": "Gloves, gauze, sterile water, closure strips, dressing",
+   "limits": ""
+  },
+  "puncture": {
+   "id": "puncture",
+   "title": "Puncture wound",
+   "urgent": true,
+   "steps": [
+    "Anchor yourself and the crew member.",
+    "Do not pull out anything that is stuck in the skin.",
+    "Press gauze around it, not on it, to slow bleeding.",
+    "Pad around the object and tape it so it cannot move.",
+    "Call ground before taking anything out."
+   ],
+   "help": [
+    "Bleeding that will not slow",
+    "In the chest or belly",
+    "Trouble breathing"
+   ],
+   "space": "Loose fragments can float into eyes and air filters. Bag every piece.",
+   "kit": "Gloves, gauze, tape, dressing",
+   "limits": ""
+  },
+  "burn": {
+   "id": "burn",
+   "title": "Burn",
+   "urgent": false,
+   "steps": [
+    "Get away from the heat source and switch it off.",
+    "Cool the burn with a cold wet towel for 20 minutes.",
+    "Take off rings, watch or tight clothing near it before it swells.",
+    "Cover loosely with a burn dressing.",
+    "Do not pop blisters or put cream on it."
+   ],
+   "help": [
+    "Bigger than the palm of a hand",
+    "On the face, hands, joints or groin",
+    "White, leathery or charred skin"
+   ],
+   "space": "Water will not run over the burn. Soak a towel and hold it on.",
+   "kit": "Burn dressing, sterile water, towel",
+   "limits": ""
+  },
+  "fracture": {
+   "id": "fracture",
+   "title": "Possible broken bone",
+   "urgent": true,
+   "steps": [
+    "Keep it still. Do not try to straighten it.",
+    "Splint it as you found it, past the joint above and below.",
+    "Check past the injury: warm, pink, and they can feel your touch.",
+    "Wrap a cold pack in cloth and hold it on for 15 minutes.",
+    "Pain medicine from the kit, as the flight surgeon set out."
+   ],
+   "help": [
+    "Bone through the skin",
+    "Cold, numb or blue past the injury",
+    "Bent the wrong way"
+   ],
+   "space": "Strap the splinted limb to the body or a rail so it cannot drift and knock things.",
+   "kit": "Splint, elastic wrap, cold pack, pain medicine",
+   "limits": "No exercise with this limb and no spacewalks until ground clears it."
+  },
+  "dislocation": {
+   "id": "dislocation",
+   "title": "Dislocated joint",
+   "urgent": true,
+   "steps": [
+    "Do not try to push it back in.",
+    "Support it in the position you found it, with a sling or splint.",
+    "Check past the joint: warm, pink, and they can feel your touch.",
+    "Cold pack wrapped in cloth for 15 minutes.",
+    "Call ground. They talk you through putting it back."
+   ],
+   "help": [
+    "Cold, numb or blue past the joint",
+    "Pain getting worse fast"
+   ],
+   "space": "Without weight pulling on it, a joint can look fine. Compare it with the other side.",
+   "kit": "Sling, splint, cold pack, pain medicine",
+   "limits": "No exercise with this joint until ground clears it."
+  },
+  "sprain": {
+   "id": "sprain",
+   "title": "Sprain or strain",
+   "urgent": false,
+   "steps": [
+    "Stop using it.",
+    "Cold pack wrapped in cloth, 15 minutes, every 2 to 3 hours.",
+    "Wrap it with an elastic bandage. Firm, not tight.",
+    "Check past it: warm, pink, and they can feel your touch.",
+    "Move it gently after 2 days if the pain allows."
+   ],
+   "help": [
+    "A pop, then it will not work",
+    "Cannot move it at all",
+    "Swelling fast or turning purple"
+   ],
+   "space": "Muscles are weaker after months in space, so they tear more easily. Go easy on it.",
+   "kit": "Cold pack, elastic wrap, pain medicine",
+   "limits": "No heavy exercise with this part for 3 days."
+  },
+  "head": {
+   "id": "head",
+   "title": "Head injury",
+   "urgent": true,
+   "steps": [
+    "Stop all work. Strap in and stay still.",
+    "Ask: what is your name, where are you, what day is it?",
+    "Check the pupils with a light. Both should be the same size.",
+    "Cold pack on the bump for 15 minutes.",
+    "Someone checks on them every 2 hours for the next day."
+   ],
+   "help": [
+    "Vomiting",
+    "Headache getting worse",
+    "Confused, very sleepy or slurring",
+    "One pupil bigger than the other",
+    "Clear fluid from the nose or ears"
+   ],
+   "space": "Head-down fluid shift already raises head pressure in space. Treat any knock seriously.",
+   "kit": "Cold pack, penlight",
+   "limits": "No spacewalks, exercise or pain medicine that thins the blood until ground clears it."
+  },
+  "eye": {
+   "id": "eye",
+   "title": "Something in the eye",
+   "urgent": false,
+   "steps": [
+    "Do not rub it.",
+    "Hold the eyewash cup over the eye and rinse for 5 minutes.",
+    "Blink. Look up, down, left and right.",
+    "Check with a light and mirror. Lift the speck off with a wet swab.",
+    "Still hurts? Tape a pad over it and rest the eye."
+   ],
+   "help": [
+    "Blurry or lost vision",
+    "Something stuck in the eye",
+    "Chemical splash",
+    "Will not open from pain"
+   ],
+   "space": "Dust and metal flakes do not settle. They float. This is one of the most common injuries on the ISS.",
+   "kit": "Eyewash cup, saline, penlight, swab, eye pad",
+   "limits": ""
+  },
+  "nosebleed": {
+   "id": "nosebleed",
+   "title": "Nosebleed",
+   "urgent": false,
+   "steps": [
+    "Lean forward, not back.",
+    "Pinch the soft part of the nose for 10 to 15 minutes. Breathe through the mouth.",
+    "Catch blood with gauze so it does not float.",
+    "Cold pack on the bridge of the nose.",
+    "No blowing the nose for a few hours."
+   ],
+   "help": [
+    "Not stopped after 20 minutes",
+    "Came after a hit to the head",
+    "Feeling faint"
+   ],
+   "space": "Fluid shifts to the head in space, so nosebleeds are more common. Blood can float into the eyes.",
+   "kit": "Gauze, cold pack, gloves",
+   "limits": ""
+  },
+  "chest": {
+   "id": "chest",
+   "title": "Chest pain",
+   "urgent": true,
+   "steps": [
+    "Stop all activity. Strap in and rest.",
+    "Take heart rate and blood pressure now, and every 5 minutes.",
+    "Put on oxygen if breathing is hard.",
+    "Aspirin from the kit, if the flight surgeon protocol says so.",
+    "Call ground now with the readings."
+   ],
+   "help": [
+    "Pain spreading to the arm, jaw or back",
+    "Short of breath, sweaty or faint",
+    "Heart rate very fast or uneven"
+   ],
+   "space": "An AED works in space. Strap the crew member down first so the shock does not push them away.",
+   "kit": "Blood pressure cuff, oxygen mask, aspirin, AED",
+   "limits": ""
+  },
+  "back": {
+   "id": "back",
+   "title": "Back pain",
+   "urgent": false,
+   "steps": [
+    "Curl up: pull your knees to your chest and hold for 30 seconds.",
+    "Repeat 5 times, then stretch out slowly.",
+    "Warm pack on the sore spot for 15 minutes.",
+    "Pain medicine from the kit if needed.",
+    "No heavy lifting on the resistance machine today."
+   ],
+   "help": [
+    "Numb or weak legs",
+    "Cannot control bladder or bowels",
+    "Pain after a hit or fall"
+   ],
+   "space": "The spine stretches up to 5 cm in space, which strains the discs. Most crew get back pain early on.",
+   "kit": "Warm pack, pain medicine",
+   "limits": ""
+  },
+  "nail": {
+   "id": "nail",
+   "title": "Fingernail injury",
+   "urgent": false,
+   "steps": [
+    "Clean the finger with sterile water.",
+    "Trim any loose part of the nail so it cannot catch.",
+    "Cover with a small dressing and tape.",
+    "Keep it dry. Change the dressing every day."
+   ],
+   "help": [
+    "Red, hot or pus under the nail",
+    "Whole nail lifting off"
+   ],
+   "space": "Spacewalk gloves press on the fingertips and can lift nails off.",
+   "kit": "Nail clippers, sterile water, dressing, tape",
+   "limits": "No spacewalks until the nail heals and the glove fit is checked."
+  },
+  "ear": {
+   "id": "ear",
+   "title": "Ear pressure injury",
+   "urgent": false,
+   "steps": [
+    "Stop any pressure change: hold the airlock or suit pressure where it is.",
+    "Swallow, yawn, or pinch the nose and blow gently to even the pressure.",
+    "Do not put anything in the ear.",
+    "Pain medicine from the kit if it aches.",
+    "Test hearing: rub fingers by each ear and compare."
+   ],
+   "help": [
+    "Blood or fluid from the ear",
+    "Spinning dizziness or vomiting",
+    "Hearing loss that does not come back"
+   ],
+   "space": "Airlock and suit pressure changes squeeze the eardrum. A head cold in space makes it worse, because the sinuses cannot drain.",
+   "kit": "Pain medicine, decongestant spray, penlight",
+   "limits": "No spacewalks or airlock use until the ear clears."
+  },
+  "kidney": {
+   "id": "kidney",
+   "title": "Kidney stone",
+   "urgent": true,
+   "steps": [
+    "Drink 2 to 3 litres of water through the day.",
+    "Pain medicine from the kit, as the flight surgeon set out.",
+    "Collect urine in the sample bag to catch the stone.",
+    "Take temperature. A fever changes the plan.",
+    "Rest strapped in. Ground runs an ultrasound with you."
+   ],
+   "help": [
+    "Fever or chills",
+    "Cannot pee",
+    "Pain that medicine does not touch",
+    "Vomiting"
+   ],
+   "space": "Calcium lost from bones in space goes through the kidneys and can form stones.",
+   "kit": "Pain medicine, urine sample bags, thermometer, ultrasound",
+   "limits": ""
+  },
+  "sick": {
+   "id": "sick",
+   "title": "Space sickness",
+   "urgent": false,
+   "steps": [
+    "Strap in and keep your head still.",
+    "Fix your eyes on one point. Line your body up with the module floor.",
+    "Anti-sickness medicine from the kit.",
+    "Keep a sick bag in hand. Sip water slowly.",
+    "Rest. Most crew feel better in 2 to 3 days."
+   ],
+   "help": [
+    "Cannot keep water down for a day",
+    "Dizzy, dry mouth, very little urine",
+    "Vomiting blood"
+   ],
+   "space": "Most new astronauts get it. The inner ear and eyes disagree about which way is up. Vomit floats, so bag it.",
+   "kit": "Sick bags, anti-sickness medicine, water",
+   "limits": "No spacewalks while sick. Vomit inside a helmet can choke you."
+  },
+  "bends": {
+   "id": "bends",
+   "title": "Decompression sickness",
+   "urgent": true,
+   "steps": [
+    "Tell ground now.",
+    "Put on the oxygen mask: pure oxygen, tight fit.",
+    "Get back in the suit and raise its pressure. The suit becomes a pressure chamber.",
+    "Stay still. Do not rub or exercise the sore joint.",
+    "Check vision, strength and feeling every 10 minutes."
+   ],
+   "help": [
+    "Confused or slurring",
+    "Blurry vision",
+    "Trouble breathing",
+    "Numb or weak arms or legs"
+   ],
+   "space": "Spacewalk suits run at low pressure. Nitrogen in the blood can form bubbles, most often in the shoulders and elbows.",
+   "kit": "Oxygen mask, suit pressure kit, pain medicine",
+   "limits": "No spacewalks until ground clears it."
+  },
+  "radiation": {
+   "id": "radiation",
+   "title": "Radiation sickness",
+   "urgent": true,
+   "steps": [
+    "Go to the storm shelter now: the area walled with water and supplies.",
+    "Write down your dosimeter reading.",
+    "Anti-sickness medicine from the kit.",
+    "Drink water. Rest.",
+    "Ground will ask for a blood sample in the next days."
+   ],
+   "help": [
+    "Vomiting within hours of the dose",
+    "Bleeding gums or easy bruising",
+    "Fever"
+   ],
+   "space": "Outside Earth's magnetic field, a solar storm can deliver a large dose in hours.",
+   "kit": "Dosimeter, anti-sickness medicine, blood sample kit",
+   "limits": "Stay in the shelter until the storm passes."
+  },
+  "air": {
+   "id": "air",
+   "title": "Breathing trouble",
+   "urgent": true,
+   "steps": [
+    "Move to another module with a working fan.",
+    "Put on the oxygen mask.",
+    "Check the CO₂ reading on the ship display.",
+    "Smoke? Press the fire alarm and close the hatch behind you.",
+    "Check blood oxygen on the finger sensor. It should be 95% or more."
+   ],
+   "help": [
+    "Blood oxygen under 90%",
+    "Lips or fingers turning blue",
+    "Confused or very sleepy"
+   ],
+   "space": "Air does not rise or mix by itself. Without a fan, your breath forms a CO₂ bubble around your head.",
+   "kit": "Oxygen mask, finger sensor, smoke mask",
+   "limits": ""
+  },
+  "cold": {
+   "id": "cold",
+   "title": "Cold injury",
+   "urgent": false,
+   "steps": [
+    "Warm the fingers slowly: hold them in your armpits.",
+    "Do not rub them.",
+    "Soak in warm water, 37 to 39 °C, for 20 minutes if you can.",
+    "Wrap each finger loosely in dry gauze.",
+    "Pain medicine from the kit. Rewarming hurts."
+   ],
+   "help": [
+    "Skin hard, white or grey",
+    "Blisters",
+    "Still numb after warming"
+   ],
+   "space": "In shadow, spacewalk gloves face −150 °C. If a glove heater fails, fingertips go first.",
+   "kit": "Gauze, warm pack, pain medicine",
+   "limits": "No spacewalks until the fingers are checked."
+  },
+  "crush": {
+   "id": "crush",
+   "title": "Crush injury",
+   "urgent": false,
+   "steps": [
+    "Free it gently.",
+    "Check the shape: bent or out of place means treat it as a break.",
+    "Cold pack wrapped in cloth for 15 minutes.",
+    "Check the nail: dark blood underneath needs the flight surgeon.",
+    "Tape it to the next finger if it hurts to move."
+   ],
+   "help": [
+    "Misshapen or will not bend",
+    "Deep cut with it",
+    "Numb past the injury"
+   ],
+   "space": "Hatches and heavy gear still have full mass. They move slowly but stop hard.",
+   "kit": "Cold pack, tape, finger splint",
+   "limits": ""
+  },
+  "tooth": {
+   "id": "tooth",
+   "title": "Toothache",
+   "urgent": false,
+   "steps": [
+    "Rinse the mouth with warm salt water.",
+    "Pain medicine from the kit.",
+    "Lost filling? Pack it with temporary filling from the dental kit.",
+    "Clove oil on a cotton swab for the pain.",
+    "Soft food. Chew on the other side."
+   ],
+   "help": [
+    "Face or jaw swelling",
+    "Fever",
+    "Bad taste or pus"
+   ],
+   "space": "The nearest dentist is months away. Crew learn basic dental care before flight.",
+   "kit": "Dental kit, temporary filling, clove oil, pain medicine",
+   "limits": ""
+  },
+  "allergy": {
+   "id": "allergy",
+   "title": "Allergic reaction",
+   "urgent": true,
+   "steps": [
+    "Get away from whatever caused it.",
+    "Allergy medicine from the kit.",
+    "Lips, tongue or throat swelling, or hard to breathe? Use the adrenaline pen in the thigh now.",
+    "Oxygen mask on.",
+    "Strap in. Someone stays with them."
+   ],
+   "help": [
+    "Swelling in the mouth or throat",
+    "Trouble breathing",
+    "Feeling faint"
+   ],
+   "space": "New foods, cleaning wipes and lab chemicals are common causes on board.",
+   "kit": "Allergy medicine, adrenaline pen, oxygen mask",
+   "limits": ""
+  },
+  "rash": {
+   "id": "rash",
+   "title": "Skin rash",
+   "urgent": false,
+   "steps": [
+    "Clean the skin gently and pat dry.",
+    "Hydrocortisone cream, thin layer, twice a day.",
+    "Loose clothing over it.",
+    "Take a photo for the flight surgeon."
+   ],
+   "help": [
+    "Spreading fast",
+    "Blisters or open skin",
+    "Fever"
+   ],
+   "space": "Skin gets thin and dry in space and heals more slowly. Rashes are one of the most common complaints.",
+   "kit": "Hydrocortisone cream, wipes, camera",
+   "limits": ""
+  },
+  "faint": {
+   "id": "faint",
+   "title": "Fainting",
+   "urgent": true,
+   "steps": [
+    "Strap them in so they cannot drift into anything.",
+    "Check they are breathing and take a pulse.",
+    "Take heart rate and blood pressure.",
+    "When awake: drink water with a salt tablet.",
+    "Rest for an hour before moving around."
+   ],
+   "help": [
+    "Does not wake within a minute",
+    "Uneven heartbeat",
+    "Chest pain",
+    "Faints again"
+   ],
+   "space": "Blood volume drops in space, so the heart has less to work with. Hard exercise can tip it over.",
+   "kit": "Blood pressure cuff, salt tablets, water",
+   "limits": ""
+  },
+  "bruise": {
+   "id": "bruise",
+   "title": "Bruise",
+   "urgent": false,
+   "steps": [
+    "Cold pack wrapped in cloth, 15 minutes.",
+    "Check it moves normally and is not misshapen.",
+    "Compare it with the other side.",
+    "Check again in 2 hours. Repeat the cold pack if it swells."
+   ],
+   "help": [
+    "Swelling fast",
+    "Cannot move it",
+    "Pain gets worse, not better"
+   ],
+   "space": "Loose objects keep moving in space. Strap down whatever hit you.",
+   "kit": "Cold pack",
+   "limits": ""
+  },
+  "shock": {
+   "id": "shock",
+   "title": "Electric shock",
+   "urgent": true,
+   "steps": [
+    "Cut the power before you touch them.",
+    "Check they are awake and breathing.",
+    "Take heart rate. Watch for an uneven beat.",
+    "Look for burns where the current went in and out. Cover them.",
+    "Call ground now, even if they feel fine."
+   ],
+   "help": [
+    "Not breathing or no pulse: start CPR and get the AED",
+    "Uneven heartbeat",
+    "Burns on the skin"
+   ],
+   "space": "For CPR, strap them to the floor and brace your feet on the ceiling.",
+   "kit": "AED, burn dressing, blood pressure cuff",
+   "limits": ""
+  }
+ },
+ "general": {
+  "id": "general",
+  "title": null,
+  "urgent": false,
+  "steps": [
+   "Stop what you are doing and anchor yourself.",
+   "Look at it and compare with the other side: swelling, bleeding, shape.",
+   "Check they can move it and feel your touch.",
+   "Cold pack wrapped in cloth for 15 minutes if it swells or hurts.",
+   "Tell the flight surgeon on the next call."
+  ],
+  "help": [
+   "Bleeding that will not stop",
+   "Numb, cold or blue past the injury",
+   "Pain getting worse fast"
+  ],
+  "space": "Strap down anything loose first. Tools and blood both float.",
+  "kit": "Gloves, gauze, cold pack",
+  "limits": ""
+ }
+}

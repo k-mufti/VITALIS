@@ -31,7 +31,13 @@ const STOP = /\b(stop|exit|quit|end (the )?guide|cancel|i'?m (fine|okay|ok|good|
 const GREETING = 'What do you need help with?';   // after "Hey Vitaly" on its own; voiced in advance by the backend
 // A lone "hey" or "um" is not a question (unless a guide or a yes/no is waiting for short answers).
 const FILLER = /^(?:hey|hi|hello|ok|okay|um+|uh+|hmm+|well|so)[\s.,!?]*$/i;
+// Words that change who a guide is for ("it's not for me, it's for my teammate", "actually it's me"). Checked before
+// the short step commands, so "no, it's my teammate" is not taken as "next".
+const RETARGET = /\b(team ?mates?|crew ?mates?|someone|somebody|friend|buddy|partner|colleague|co-?worker|brother|sister|mom|dad|wife|husband|not (for )?(me|myself)|it'?s not me|for (him|her|them|me)|it'?s me)\b/i;
 const CLOSE_AFTER_MS = 5000;
+const CANCEL_DEAF_MS = 1200;   // after Esc: nothing is heard for a moment
+const SKIP_MAX_MS = 8000;      // give up waiting for Deepgram to end an utterance that was already acted on or cancelled
+const ECHO_TAIL_MS = 3000;     // after Vitaly stops talking: short fragments of its own last line are echo, not you
 // How long a pause ends what you're saying. Chrome's own "final" result usually arrives first;
 // these are the backstop. Short guide commands are quick; a sentence that stops on a word like
 // "and" or "my" is clearly unfinished, so it gets longer.
@@ -82,7 +88,7 @@ export function initVitaly() {
     </button>`);
 
   $('#vLaunch').addEventListener('click', () => summon());
-  $('#vClose').addEventListener('click', () => close());
+  $('#vClose').addEventListener('click', () => close(true));
   $('#vType').addEventListener('submit', e => {
     e.preventDefault();
     const text = $('#vInput').value.trim();
@@ -106,7 +112,7 @@ export function initVitaly() {
   });
   addEventListener('keydown', e => {
     const typing = /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName);
-    if (e.key === 'Escape' && open) close();
+    if (e.key === 'Escape' && open) close(true);
     if ((e.key === 't' || e.key === 'T') && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
       summon();
@@ -136,8 +142,15 @@ function show(lv = 'calm') {
   }
 }
 
-function close() {
+// cancelled: you pressed Esc or the close button. Whatever you had just said ("Hey Vitaly") is dropped, including
+// words still being transcribed, so it cannot reopen the screen a moment later.
+function close(cancelled = false) {
   clearTimeout(closeTimer);
+  clearTimeout(endTimer);
+  if (cancelled) {
+    ignoreUntil = Date.now() + CANCEL_DEAF_MS;
+    if (ears) { try { ears.abort(true); } catch (err) { /* restarts itself */ } }
+  }
   hush();
   releaseBody();
   dock(false);
@@ -385,7 +398,7 @@ async function heard(text) {
     }
   }
   // In a guide, short replies drive the steps. A new symptom or a real question still gets through.
-  if (guide && text.split(/\s+/).length <= 5 && (STOP.test(text) || REPEAT.test(text) || BACK.test(text) || NEXT.test(text))) {
+  if (guide && !(guide.id && RETARGET.test(text)) && text.split(/\s+/).length <= 5 && (STOP.test(text) || REPEAT.test(text) || BACK.test(text) || NEXT.test(text))) {
     return guideCommand(text);
   }
 
@@ -393,7 +406,7 @@ async function heard(text) {
   status('Thinking');
   let r;
   try {
-    r = await api.vitalyAsk(text, state.current);
+    r = await api.vitalyAsk(text, state.current, guide && guide.id ? { id: guide.id, who: guide.who, step: guide.i } : null);
   } catch (err) {
     r = { say: 'I can\'t reach the medical system right now. Your alerts still work.' };
   }
@@ -474,8 +487,11 @@ let speakToken = 0;           // newer speech cancels older
 let stopPlaying = null;      // ends the line being played, so whoever awaits it carries on
 let playSeq = 0;             // which line owns the audio element
 let lastSaid = '';           // recent speech, to recognise our own voice in the microphone
+let lastLine = '';           // the last line Vitaly said
+let lastSpokeAt = 0;         // when Vitaly last stopped talking
 
 function hush() {
+  lastSpokeAt = Date.now();
   speakToken++;
   speechSynthesis.cancel();
   if (stopPlaying) stopPlaying();
@@ -496,15 +512,6 @@ async function deepgramReady() {
 
 const pause = ms => new Promise(r => setTimeout(r, ms));
 
-// The orb follows the real loudness of Deepgram's audio.
-function audioLevel() {
-  if (!analyser || !audioEl || audioEl.paused) return 0;
-  analyser.getByteTimeDomainData(levels);
-  let sum = 0;
-  for (const v of levels) sum += ((v - 128) / 128) ** 2;
-  return Math.sqrt(sum / levels.length);
-}
-
 // Deepgram audio streams from the backend; the audio element starts playing as soon as the first
 // chunk lands (about 0.2 s). Resolves true when it finished, false if it failed (use Chrome's voice).
 function playDeepgram(text, token) {
@@ -517,6 +524,7 @@ function playDeepgram(text, token) {
         const src = audioCtx.createMediaElementSource(audioEl);
         analyser = audioCtx.createAnalyser();
         analyser.fftSize = 512;
+        analyser.smoothingTimeConstant = 0.45;   // quick enough to follow syllables
         levels = new Uint8Array(analyser.fftSize);
         src.connect(analyser);
         analyser.connect(audioCtx.destination);
@@ -576,6 +584,7 @@ async function say(text) {
   if (!text) return;
   $('#vSay').textContent = text;
   lastSaid = (lastSaid + ' ' + text).slice(-600);
+  lastLine = text;
   const token = ++speakToken;
   speechSynthesis.cancel();          // a new line replaces whatever was being said
   if (stopPlaying) stopPlaying();
@@ -601,6 +610,7 @@ async function say(text) {
   speaking = false;
   // The recogniser lags about a second behind the room, so it is still chewing on Vitaly's own
   // voice. Throw that away: restart it, and stay deaf for a moment.
+  lastSpokeAt = Date.now();
   ignoreUntil = Date.now() + 450;
   if (ears) { try { ears.abort(); } catch (err) { /* restarts itself */ } }
   if (mode === 'speaking') mode = prev === 'speaking' ? 'listening' : prev;
@@ -619,7 +629,11 @@ const words = t => t.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filt
 // True if what the mic picked up is Vitaly's own recent speech (4+ words found in order).
 const isEcho = text => {
   const w = words(text);
-  return w.length >= 4 && words(lastSaid).join(' ').includes(w.join(' '));
+  if (w.length >= 4) return words(lastSaid).join(' ').includes(w.join(' '));
+  // Deepgram runs about a second behind the room, so the end of Vitaly's own last line (its greeting, a step)
+  // can arrive as a fragment after it stops. Without this, "...help with?" was taken as your question.
+  if (!w.length || Date.now() - lastSpokeAt > ECHO_TAIL_MS || !words(lastLine).join(' ').includes(w.join(' '))) return false;
+  return w.length >= 2 || !(NEXT.test(text) || BACK.test(text) || REPEAT.test(text) || STOP.test(text) || YES.test(text) || NO.test(text));
 };
 // What was said to Vitaly: the words after "hey Vitaly" (or before it, if the name came last).
 function afterWake(text) {
@@ -640,6 +654,7 @@ function finishHearing(id, text, done) {
   if (id <= handled) return;
   handled = id;
   if (done) done();
+  if (Date.now() < ignoreUntil) return;       // you just cancelled: this was said before that
   const q = afterWake(text);
   if (isEcho(q)) return;
   if (q.length < 2 && WAKE.test(text)) return greet();     // "Hey Vitaly" on its own
@@ -759,7 +774,9 @@ async function startDeepgramEars() {
   const tap = new AudioWorkletNode(ctx, 'vitaly-tap');
   const mute = ctx.createGain();
   mute.gain.value = 0;        // the tap must reach the output to run, but must not be heard
-  ctx.createMediaStreamSource(stream).connect(tap).connect(mute).connect(ctx.destination);
+  const micSrc = ctx.createMediaStreamSource(stream);
+  micSrc.connect(tap).connect(mute).connect(ctx.destination);
+  meterMic(ctx, micSrc);
 
   let ws = null;
   let parts = [];             // pieces of the current utterance Deepgram has finalised
@@ -767,10 +784,21 @@ async function startDeepgramEars() {
   let id = 0;
   let fails = 0;
   let stopped = false;
-  const clear = () => { parts = []; latest = ''; id++; };
+  // Deepgram keeps re-sending the same words for seconds, until it decides you have finished talking ("Hey Vitaly"
+  // arrived four times over four seconds). So an utterance that was acted on, or cancelled with Esc, is ignored until
+  // Deepgram says it has ended; otherwise its late repeats looked like a new "Hey Vitaly" and the screen popped up again.
+  let ended = false;          // Deepgram has said the current utterance is over
+  let skipping = false;       // ignoring the rest of an utterance that was already dealt with
+  let skipSince = 0;
+  const clear = () => { parts = []; latest = ''; id++; ended = false; };
+  const dealtWith = () => {   // an utterance was acted on: ignore the rest of it
+    const over = ended;
+    clear();
+    if (!over) { skipping = true; skipSince = Date.now(); }
+  };
   const update = (text, quiet, settle) => {
     latest = text;
-    const kept = hearing(id, text, quiet, settle, clear);
+    const kept = hearing(id, text, quiet, settle, dealtWith);
     if (!kept && quiet) clear();   // chatter that wasn't for Vitaly, or Vitaly's own voice: drop it
   };
   const connect = () => {
@@ -781,6 +809,14 @@ async function startDeepgramEars() {
       const m = JSON.parse(e.data);
       gotWords = true;
       fails = 0;
+      const over = m.type === 'stopped' || !!m.stopped;
+      if (skipping) {
+        if (over) { skipping = false; clear(); return; }                 // the old utterance has ended
+        if (Date.now() - skipSince < SKIP_MAX_MS) return;                // still the old one: ignore
+        skipping = false; clear();                                       // gave up waiting: this is new
+      }
+      if (over) ended = true;
+      else if (ended && m.type === 'words' && m.text) clear();           // words after an ended utterance: a new one
       if (m.type === 'stopped') { if (latest) update(latest, true, SETTLE_STOPPED_MS); return; }
       if (m.type !== 'words') return;
       if (m.final && m.text) parts.push(m.text);
@@ -812,8 +848,16 @@ async function startDeepgramEars() {
   // Chrome suspends audio in a tab it thinks is idle; wake it when the page is looked at again.
   document.addEventListener('visibilitychange', () => { if (!document.hidden && ctx.state === 'suspended') ctx.resume(); });
   connect();
-  // abort(): forget what was heard so far (called when Vitaly finishes talking).
-  ears = { abort() { clearTimeout(endTimer); clear(); } };
+  // abort(): forget what was heard so far (called when Vitaly finishes talking). With cancel (Esc), an utterance in
+  // progress is also ignored until it ends.
+  ears = {
+    abort(cancel) {
+      clearTimeout(endTimer);
+      const inProgress = !!latest && !ended;
+      clear();
+      if (cancel && inProgress) { skipping = true; skipSince = Date.now(); }
+    },
+  };
   earsOn('deepgram');
   return true;
 }
@@ -845,6 +889,10 @@ function startChromeEars() {
     rec.start();
     ears = rec;
     earsOn('chrome');
+    // The recogniser keeps its audio to itself, so open the mic separately for the orb's meter.
+    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
+      .then(stream => { const c = new (window.AudioContext || window.webkitAudioContext)(); meterMic(c, c.createMediaStreamSource(stream)); })
+      .catch(() => { /* no meter: the orb still breathes while listening */ });
   } catch (err) {
     ears = null;
   }
@@ -901,19 +949,105 @@ function status(text) { $('#vStatus').textContent = text; }
 function setText(sayText, heardText) { $('#vSay').textContent = sayText; $('#vHeard').textContent = heardText; }
 
 // ---------- the orb ----------
-/* A geodesic sphere of dots inside two wavy particle rings. Everything breathes slowly; Vitaly's
-   voice (word boundaries) kicks the rings outward, and the colour follows severity. */
+/* A liquid orb drawn like the organs: flat blue layers that ripple like water, with halftone dots
+   at the edges and on the lit side. Nothing jitters: every motion is a sum of sine waves.
 
-let pulse = 0;
-let rgb = COLORS.calm.slice();
-const SPHERE = fibonacciSphere(220);
-const LINKS = nearestLinks(SPHERE, 3);
-const DUST = Array.from({ length: 90 }, () => ({ a: Math.random() * Math.PI * 2, r: 1.15 + Math.random() * 0.6, s: 0.2 + Math.random() * 0.8 }));
+   It listens to whoever is talking. While Vitaly speaks it follows Vitaly's audio; otherwise it
+   follows the microphone. The voice is split into low, mid and high: the low part swells the
+   orb and its core, the mid part makes the big ripples, the high part adds small fast ripples.
+   A sudden loud sound (the start of a word) pushes everything outward. The mouse can play with
+   it too (see startOrb). */
+
+let pulse = 0;      // kicks from word boundaries (Chrome's voice, which has no audio to read)
+let micAnalyser = null, micBins = null;
+
+// Microphone meter for the orb (the same stream the ears use).
+function meterMic(ctx, source) {
+  try {
+    micAnalyser = ctx.createAnalyser();
+    micAnalyser.fftSize = 512;
+    micAnalyser.smoothingTimeConstant = 0.45;
+    micBins = new Uint8Array(micAnalyser.frequencyBinCount);
+    source.connect(micAnalyser);
+  } catch (err) { micAnalyser = null; }
+}
+
+// Loudness of three speech bands (about 80-300 Hz, 300-1500 Hz, 1.5-5 kHz), each 0..1. Each source
+// learns its own loudest level (and slowly forgets it), so a soft or a loud voice both use the full
+// range and every syllable shows as a rise and fall instead of sitting at the top.
+const outBins = new Uint8Array(256);
+function bands(an, bins) {
+  an.getByteFrequencyData(bins);
+  const hz = an.context.sampleRate / an.fftSize;
+  const avg = (lo, hi) => {
+    const a = Math.max(1, Math.round(lo / hz)), b = Math.min(bins.length - 1, Math.round(hi / hz));
+    let s = 0;
+    for (let i = a; i <= b; i++) s += bins[i];
+    return s / (b - a + 1);
+  };
+  const raw = [avg(80, 300), avg(300, 1500), avg(1500, 5000)];
+  const FLOOR = 60;                                   // a quiet room
+  an.peak = Math.max(Math.max(...raw), (an.peak || 0) * 0.997, FLOOR + 50);
+  return raw.map(v => Math.min(1, Math.max(0, (v - FLOOR) / (an.peak - FLOOR))) ** 0.9);
+}
+
+// What the orb should react to right now: [low, mid, high].
+function voiceNow(t) {
+  if (speaking) {
+    if (analyser && audioEl && !audioEl.paused) return bands(analyser, outBins);
+    // Chrome's voice: no audio to read, so fake a syllable rhythm plus the word-boundary kicks.
+    const syl = Math.max(0, Math.sin(t * 11)) * (0.6 + 0.4 * Math.sin(t * 3.7));
+    return [0.3 + 0.5 * syl + pulse * 0.5, 0.35 + 0.55 * syl + pulse * 0.6, 0.2 + 0.45 * syl];
+  }
+  if (micAnalyser && mode !== 'thinking') {
+    if (micAnalyser.context.state === 'suspended') micAnalyser.context.resume();
+    return bands(micAnalyser, micBins);
+  }
+  return [0, 0, 0];
+}
+
+// Smoothed state the drawing uses.
+const orb = { low: 0, mid: 0, high: 0, kick: 0, last: 0, ripple: 0, prevT: 0, acc: 0, hist: [],
+  mx: null, my: null, pull: 0, pa: 0, stir: 0, stirGoal: 0, splash: 0 };
+
+// Drawn like the organs: flat colour, dark at the back and brighter inside, with halftone dots
+// (a 45-degree screen grid, like print) that grow at the edges and on the side the light hits.
+// Severity picks the palette: deep / body / dots, same blues as the organs when calm.
+const ORB_COLORS = {
+  calm:      { deep: [10, 31, 107], body: [24, 70, 196], dot: [127, 233, 255] },
+  warning:   { deep: [74, 40, 6], body: [190, 118, 20], dot: [255, 226, 168] },
+  emergency: { deep: [84, 16, 10], body: [200, 52, 31], dot: [255, 196, 184] },
+};
+const pal = JSON.parse(JSON.stringify(ORB_COLORS.calm));
+const CELL = 6;                  // halftone cell in CSS pixels, as on the organs
+const N_ANG = 144;               // points around each layer
+const LAYERS = 6;
+const rad = Array.from({ length: LAYERS }, () => new Float32Array(N_ANG));
+const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const mixRGB = (a, b, f) => a.map((v, i) => Math.round(v + (b[i] - v) * f));
+const css = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+// Light from the upper left, toward the viewer (same direction as the organs).
+const LX = -0.55, LY = -0.65, LZ = 0.55, LN = Math.hypot(LX, LY, LZ);
 
 function startOrb() {
   const canvas = $('#vOrb');
   const ctx = canvas.getContext('2d');
-  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // The orb always moves, even with the system's "Reduce motion" on: it is how Vitaly shows it
+  // is listening and talking, so a still orb would look broken.
+  // The mouse plays with the water: near the orb it pulls a bulge toward the cursor, moving fast
+  // stirs it up, and a click makes a splash.
+  addEventListener('pointermove', e => {
+    if (!open) return;
+    const r = canvas.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    if (orb.mx != null) orb.stirGoal = Math.min(1, orb.stirGoal + Math.hypot(x - orb.mx, y - orb.my) / 600);
+    orb.mx = x; orb.my = y;
+  });
+  addEventListener('pointerdown', e => {
+    if (!open || e.target.closest('button, a, input, [data-say], [data-ask]')) return;
+    orb.kick = Math.min(1, orb.kick + 0.5);
+    orb.splash = 1;
+  });
   const frame = now => {
     requestAnimationFrame(frame);
     if (!open) return;
@@ -922,86 +1056,141 @@ function startOrb() {
     if (canvas.width !== Math.round(w * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    const t = reduce ? 0 : now / 1000;
-    const target = COLORS[level] || COLORS.calm;
-    rgb = rgb.map((c, i) => c + (target[i] - c) * 0.06);
-    const col = a => `rgba(${rgb.map(Math.round).join(',')},${a})`;
+    const t = now / 1000;
+    const dt = Math.min(0.1, Math.max(0, t - orb.prevT));
+    orb.prevT = t;
+    const goalPal = ORB_COLORS[level] || ORB_COLORS.calm;
+    for (const k of ['deep', 'body', 'dot']) pal[k] = pal[k].map((c, i) => c + (goalPal[k][i] - c) * 0.06);
+    const deep = pal.deep.map(Math.round), body = pal.body.map(Math.round), dotC = pal.dot.map(Math.round);
 
-    // Voice energy: decays; while speaking it never drops below a murmur.
-    const loud = audioLevel();
-    const base = loud ? Math.min(1, loud * 4) : speaking ? 0.25 + 0.15 * Math.sin(t * 9) : mode === 'thinking' ? 0.15 + 0.1 * Math.sin(t * 4) : 0.05;
-    pulse = Math.max(base, pulse * 0.9);
+    // Follow the voice: rise quickly, settle a little slower (frame-rate independent).
+    pulse *= Math.exp(-dt * 5);
+    let [low, mid, high] = voiceNow(t);
+    if (mode === 'thinking') {                    // a slow churn while it works out an answer
+      low = 0.2 + 0.12 * Math.sin(t * 2.6);
+      mid = 0.25 + 0.15 * Math.sin(t * 3.4 + 1);
+      high = 0.1 + 0.08 * Math.sin(t * 6.1);
+    }
+    const follow = (cur, goal) => cur + (goal - cur) * (1 - Math.exp(-dt * (goal > cur ? 16 : 6)));
+    orb.low = follow(orb.low, low);
+    orb.mid = follow(orb.mid, mid);
+    orb.high = follow(orb.high, high);
+    // A small push at the start of each word.
+    const loudNow = Math.max(low, mid);
+    if (loudNow - orb.last > 0.08) orb.kick = Math.min(0.8, orb.kick + (loudNow - orb.last) * 1.6);
+    orb.last = loudNow;
+    orb.kick *= Math.exp(-dt * 4);
+    orb.splash *= Math.exp(-dt * 2.5);
+    orb.stir += (orb.stirGoal - orb.stir) * (1 - Math.exp(-dt * 8));
+    orb.stirGoal *= Math.exp(-dt * 3);
+    const e = Math.min(1, (orb.low + orb.mid) / 2 + orb.kick * 0.4 + orb.stir * 0.3);
+    // Water: what the voice does now reaches the centre first and rolls outward, layer by layer.
+    orb.acc += dt;
+    while (orb.acc > 1 / 60) {
+      orb.acc -= 1 / 60;
+      orb.hist.unshift([orb.low, orb.mid, orb.high, orb.kick]);
+      if (orb.hist.length > 60) orb.hist.pop();
+    }
+    const past = k => orb.hist[Math.min(orb.hist.length - 1, k)] || [0, 0, 0, 0];
+    // Always flowing; the voice speeds it up (the phase adds up, so a speed change never jumps).
+    orb.ripple += dt * (0.9 + e * 2.4);
+    const rp = orb.ripple;
+
     const cx = w / 2, cy = h * 0.42, R = Math.min(w, h) * 0.24;
+    // Cursor pull: strongest at the orb's edge, gone three radii away.
+    const pa = orb.mx == null ? 0 : Math.atan2(orb.my - cy, orb.mx - cx);
+    const pd = orb.mx == null ? 1e9 : Math.hypot(orb.mx - cx, orb.my - cy);
+    orb.pull += (Math.max(0, Math.min(1, (R * 3 - pd) / (R * 2))) - orb.pull) * (1 - Math.exp(-dt * 5));
+    orb.pa += Math.atan2(Math.sin(pa - orb.pa), Math.cos(pa - orb.pa)) * (1 - Math.exp(-dt * 8));
 
-    // Outer rings of particles, deformed by the voice.
-    for (let ring = 0; ring < 2; ring++) {
-      const base = R * (1.0 + ring * 0.12);
-      const amp = R * (0.03 + pulse * (0.10 + ring * 0.05));
-      const n = 520;
-      for (let i = 0; i < n; i++) {
-        const a = (i / n) * Math.PI * 2;
-        const wob = Math.sin(3 * a + t * (0.8 + ring * 0.3)) + 0.6 * Math.sin(5 * a - t * 1.3 + ring) + 0.3 * Math.sin(9 * a + t * 2.1);
-        const r = base + amp * wob + (Math.random() - 0.5) * R * 0.02;
-        ctx.fillStyle = col(0.25 + 0.5 * Math.random());
-        ctx.fillRect(cx + Math.cos(a) * r, cy + Math.sin(a) * r, 1.3, 1.3);
+    // Layer shapes, outer (k = 0) to inner. Inner layers feel the voice first.
+    for (let k = 0; k < LAYERS; k++) {
+      const f = k / (LAYERS - 1);
+      const [l, m, hi, kk] = past(Math.round((1 - f) * 12));
+      const wLow = 0.04 + l * 0.09 + kk * 0.03, wMid = 0.025 + m * 0.1, wHigh = 0.006 + hi * 0.035 + kk * 0.015;
+      const base = R * (0.86 - f * 0.5) * (1 + l * 0.07 + kk * 0.06);
+      const sp = 1 + k * 0.18;
+      const keep = 1 - f * 0.35;
+      for (let i = 0; i < N_ANG; i++) {
+        const a = (i / N_ANG) * Math.PI * 2;
+        const ripple = wLow * Math.sin(2 * a + rp * sp + k * 1.3)
+          + wMid * Math.sin(3 * a - rp * sp * 1.4 + k * 0.7)
+          + wMid * 0.6 * Math.sin(5 * a + rp * sp * 1.1 - k)
+          + wHigh * Math.sin(8 * a - rp * sp * 2.4 + k * 2)
+          + wHigh * 0.6 * Math.sin(13 * a + rp * sp * 3.1 - k * 1.7)
+          + orb.pull * (0.12 - f * 0.05) * Math.max(0, Math.cos(a - orb.pa)) ** 6
+          + orb.splash * (0.08 - f * 0.04) * Math.sin(7 * a - rp * 4 + k * 0.9)
+          + orb.stir * 0.04 * Math.sin(4 * a + rp * 2.6 - k);
+        rad[k][i] = base * (1 + ripple * keep);
       }
     }
-    // Inner thin ring.
-    ctx.strokeStyle = col(0.35);
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let i = 0; i <= 200; i++) {
-      const a = (i / 200) * Math.PI * 2;
-      const r = R * 0.62 * (1 + 0.02 * Math.sin(6 * a + t * 2) * (1 + pulse * 3));
-      const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
-      if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+
+    // Flat layers: navy outside, brighter body colour toward the middle. Each layer's edge gets a
+    // faint dark line so the water rings read clearly.
+    const layerPath = k => {
+      ctx.beginPath();
+      for (let i = 0; i <= N_ANG; i++) {
+        const a = (i / N_ANG) * Math.PI * 2, r = rad[k][i % N_ANG];
+        const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+        if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+      }
+      ctx.closePath();
+    };
+    ctx.lineWidth = 1.5;
+    for (let k = 0; k < LAYERS; k++) {
+      const f = k / (LAYERS - 1);
+      layerPath(k);
+      ctx.fillStyle = css(mixRGB(deep, body, 0.3 + f * 0.7));
+      ctx.fill();
+      if (k) { ctx.strokeStyle = css(deep, 0.35); ctx.stroke(); }
     }
+
+    // Halftone dots. Each dot asks: how close to the orb's silhouette (rim), how much light
+    // (upper left), how close to its own layer's wavy edge, and is it in the core.
+    const Ro = R * 0.9;
+    const coreR = R * (0.16 + orb.low * 0.1 + orb.kick * 0.05);
+    const reach = R * 1.3;
+    const s = CELL / Math.SQRT2;
+    const dots = new Path2D();
+    for (let u = -reach; u <= reach; u += CELL) {
+      for (let v = -reach; v <= reach; v += CELL) {
+        const dx = (u - v) * Math.SQRT1_2, dy = (u + v) * Math.SQRT1_2;
+        const rho = Math.hypot(dx, dy);
+        let ang = Math.atan2(dy, dx); if (ang < 0) ang += Math.PI * 2;
+        const ia = Math.round((ang / (Math.PI * 2)) * N_ANG) % N_ANG;
+        if (rho > rad[0][ia]) continue;           // outside the orb
+        let k = LAYERS - 1;
+        while (k > 0 && rho > rad[k][ia]) k--;    // the innermost layer this dot is in
+        const rel = rho / rad[k][ia];
+        // As if the orb were a sphere: rim and light.
+        const nx = dx / Ro, ny = dy / Ro, nz = Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny));
+        const rim = 1 - nz;
+        const lam = Math.max(0, (nx * LX + ny * LY + nz * LZ) / LN);
+        let size = Math.max(
+          smooth(0.35, 0.97, rim) * 0.74 * (rho / rad[0][ia]),
+          smooth(0.4, 1, lam) * 0.6,
+          smooth(0.82, 1, rel) * (0.55 - k * 0.05),
+          rho < coreR ? 0.6 * (1 - rho / coreR) + 0.2 : 0,
+        ) * (1 + e * 0.3);
+        if (size < 0.06) continue;
+        const r = Math.min(0.5, size * 0.5) * s * 1.35;
+        const x = cx + dx, y = cy + dy;
+        dots.moveTo(x + r, y);
+        dots.arc(x, y, r, 0, Math.PI * 2);
+      }
+    }
+    // Cut the dots off at the smooth outline (as the organs' silhouette does), then a crisp edge.
+    ctx.save();
+    layerPath(0);
+    ctx.clip();
+    ctx.fillStyle = css(dotC);
+    ctx.fill(dots);
+    ctx.restore();
+    layerPath(0);
+    ctx.strokeStyle = css(dotC, 0.85);
+    ctx.lineWidth = 1.5;
     ctx.stroke();
-    // Dust drifting around the rings.
-    for (const d of DUST) {
-      const a = d.a + t * 0.05 * d.s;
-      const r = R * (d.r + 0.05 * Math.sin(t * d.s + d.a));
-      ctx.fillStyle = col(0.15 + 0.3 * d.s);
-      ctx.fillRect(cx + Math.cos(a) * r, cy + Math.sin(a) * r, 1.2, 1.2);
-    }
-    // Geodesic sphere: rotating dots with links to their nearest neighbours.
-    const sr = R * 0.36 * (1 + pulse * 0.12);
-    const rot = t * 0.35, ca = Math.cos(rot), sa = Math.sin(rot), tilt = 0.35, ct = Math.cos(tilt), st = Math.sin(tilt);
-    const proj = SPHERE.map(([x, y, z]) => {
-      const x1 = x * ca + z * sa, z1 = -x * sa + z * ca;
-      const y2 = y * ct - z1 * st, z2 = y * st + z1 * ct;
-      return [cx + x1 * sr, cy + y2 * sr, z2];
-    });
-    ctx.lineWidth = 0.6;
-    for (const [i, j] of LINKS) {
-      const a = proj[i], b = proj[j];
-      const depth = (a[2] + b[2]) / 2;
-      ctx.strokeStyle = col(0.08 + 0.32 * (depth + 1) / 2);
-      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
-    }
-    for (const p of proj) {
-      ctx.fillStyle = col(0.2 + 0.7 * (p[2] + 1) / 2);
-      ctx.fillRect(p[0] - 1, p[1] - 1, 2, 2);
-    }
+
   };
   requestAnimationFrame(frame);
-}
-
-function fibonacciSphere(n) {
-  const pts = [], g = Math.PI * (3 - Math.sqrt(5));
-  for (let i = 0; i < n; i++) {
-    const y = 1 - (i / (n - 1)) * 2, r = Math.sqrt(1 - y * y), a = g * i;
-    pts.push([Math.cos(a) * r, y, Math.sin(a) * r]);
-  }
-  return pts;
-}
-
-function nearestLinks(pts, k) {
-  const links = new Set();
-  pts.forEach((p, i) => {
-    pts.map((q, j) => [j, (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2])
-      .filter(([j]) => j !== i).sort((a, b) => a[1] - b[1]).slice(0, k)
-      .forEach(([j]) => links.add(i < j ? `${i}-${j}` : `${j}-${i}`));
-  });
-  return [...links].map(s => s.split('-').map(Number));
 }

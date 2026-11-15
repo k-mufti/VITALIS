@@ -17,6 +17,7 @@ from ..analysis.common import Reader
 from ..devices.catalog import ORGAN_MEASUREMENT, describe
 from . import signals
 from .signals import bone_density_pct, onsd_mm  # noqa: F401  (re-exported for older imports)
+from ..sources import googlehealth
 from ..state import ORGANS
 
 B = C.BASELINE
@@ -222,9 +223,12 @@ def note_for(organ, severity, value, mods):
     if organ == "heart":
         if severity < 0.33:
             return "Resting heart rate is in your usual range."
+        own = googlehealth.resting_baseline(B["heart_rate"])    # the real wearer's own rate while a real watch is the source
+        if own is None:
+            return f"Resting heart rate is {value:.0f} beats a minute. " + ("Needs action today." if severity >= 0.66 else "Worth watching.")
         if severity >= 0.66:
-            return f"Resting rate is {value - B['heart_rate']:.0f} beats above your usual. Needs action today."
-        return f"Resting rate is {value - B['heart_rate']:.0f} beats above your usual. Worth watching."
+            return f"Resting rate is {value - own:.0f} beats above your usual. Needs action today."
+        return f"Resting rate is {value - own:.0f} beats above your usual. Worth watching."
     if organ == "sleep":
         if value >= B["sleep_hours"] - 0.3:
             return "Sleeping as usual. Focus is normal."
@@ -365,6 +369,9 @@ def organ_state(sim, organ, mission_id, day, mods, relief, live, dose_frac):
     cms.sort(key=lambda c: c["effect"])
 
     unit, usual = UNITS[organ]
+    if organ == "heart":      # the wearer's own usual range while a real watch is the source
+        own = googlehealth.resting_baseline(B["heart_rate"])
+        usual = "60-100" if own is None else f"{own - 4:.0f}-{own + 4:.0f}"
     if organ in ("bones", "sleep", "eyes"):
         shown = round(value, 1)
     else:

@@ -17,12 +17,13 @@ import re
 import time
 
 from .. import officer
-from . import crew, guides, net, profile, quick
+from . import crew, guides, net, profile, quick, spend
 
 URL = "https://openrouter.ai/api/v1/chat/completions"
-# Picked by eval_vitaly.py: best answers of the cheap models tested, ~$0.03 per 1M tokens in and out.
-DEFAULT_MODEL = "mistralai/mistral-nemo"
-DEFAULT_FALLBACK = "meta-llama/llama-3.1-8b-instruct"
+# Picked by eval_vitaly.py (10 questions, twice): Gemini 3.1 Flash-Lite got every one right and was the fastest (about
+# 0.5 s), at about $0.0003 an answer (3,000 answers per dollar). Mistral Nemo, the earlier pick, got 9 of 10 and is the backup.
+DEFAULT_MODEL = "google/gemini-3.1-flash-lite"
+DEFAULT_FALLBACK = "mistralai/mistral-nemo"
 TIMEOUT_S = 6
 
 ACTIONS = ("log_countermeasure", "note_earth")
@@ -38,13 +39,17 @@ def settings():
 
 def status():
     s = settings()
-    return {"ai": bool(s["key"]), "model": s["model"], "fallback": s["fallback"]}
+    return {"ai": bool(s["key"]) and not spend.exhausted(), "model": s["model"], "fallback": s["fallback"], **spend.status()}
 
 
 # ---------- the snapshot the model reads ----------
 
-def snapshot(state, sim, focus=None):
-    """Everything live, as compact text (~1k tokens). Only numbers from here may be spoken."""
+def snapshot(state, sim, focus=None, brief=True):
+    """Everything live, as compact text. Only numbers from here may be spoken.
+    brief: each organ keeps its status, value and note, but the list of what is off ("Not OK: blood oxygen 86%...") is left
+    out unless the organ is the one being looked at. That list tempted the model to bring up whatever was flagged
+    ("Is it normal to feel queasy?" got "your blood oxygen is 86 percent"). Without the value and note it had nothing to
+    quote and made a number up, so those stay."""
     p = profile.profile(crew.PATIENT_ID)
     r = sim.recent
     lines = []
@@ -72,8 +77,9 @@ def snapshot(state, sim, focus=None):
         bad = [f"{c['name']} {c['value']} {c['unit']} ({c['verdict']}, healthy {c['healthy']})"
                for c in o.get("checks", []) if c["verdict"] != "ok"]
         mark = " <- user is looking at this" if oid == focus else ""
+        detail = bad and not (brief and oid != focus)
         lines.append(f"- {o['name']}: {o['status']}, {o['value']} {o['unit']}. {o['note']}"
-                     + (f" Not OK: {'; '.join(bad)}." if bad else "") + mark)
+                     + (f" Not OK: {'; '.join(bad)}." if detail else "") + mark)
     cms = [f"{oid}:{c['id']} ({c['label']})" for oid in state["organs"] for c in state["organs"][oid]["countermeasures"]]
     lines.append("Countermeasures that can be logged: " + "; ".join(cms))
     return "\n".join(lines)
@@ -87,26 +93,39 @@ def fmt(v):
 
 PERSONA = ("You are Vitaly, the onboard medical AI on a crewed Mars mission. Calm, brief, precise, like a co-pilot. "
            "You speak out loud, so use plain words and short sentences, no lists, no markdown. "
-           "Use only facts and numbers from DATA. Never diagnose; never add medical steps beyond the checklist. "
-           "If DATA lists active alerts and the question touches them, name the most serious alert first. "
-           "Refer to crew members by name or role, never he or she. "
+           "ANSWER EXACTLY WHAT WAS ASKED, and nothing else. Do not bring up other readings or alerts unless they directly answer "
+           "the question. A question about the heart gets heart numbers; a question about a knee gets nothing about the heart. "
+           "Quote numbers exactly as written in DATA. Never work out differences or percentages yourself. "
+           "General knowledge about spaceflight medicine and first aid is fine, kept to two short sentences; for facts about the crew "
+           "member, use only DATA. "
+           "Never diagnose. If asked about an injury or symptom, give the one safest first-aid action in plain words "
+           "(stop, keep it still and supported, cold pack, press on bleeding), then one thing to watch for. "
+           "If you do not know, say so briefly. "
+           "When asked how they are doing or what is wrong, name the most serious active alert first. "
+           "Speak to the crew member directly as you; do not say their full name. Refer to anyone else by name or role, never he or she. "
            "There is no one to call: the crew member handles it with your guidance. Never say help is coming. "
            "If something is life-threatening, say what to do right now.")
 
 
-async def complete(messages, max_tokens):
+async def complete(messages, max_tokens, model=None):
+    """One model call. None if there is no key, the spend cap is reached, or the call fails. `model` overrides the setting
+    (for comparing models)."""
     s = settings()
-    if not s["key"]:
+    if not s["key"] or spend.exhausted():
         return None
+    if model:
+        s = {**s, "model": model, "fallback": model}
     # provider.sort = latency: OpenRouter picks whichever host is answering fastest right now. The
     # same model took 1.5 s typically and 3 s at worst; this makes it about 0.5 s.
     body = {"model": s["model"], "models": [s["model"], s["fallback"]], "messages": messages,
-            "max_tokens": max_tokens, "temperature": 0.3, "provider": {"sort": "latency"}}
+            "max_tokens": max_tokens, "temperature": 0.3, "provider": {"sort": "latency"}, "usage": {"include": True}}
     try:
         r = await net.client().post(URL, json=body, headers={"Authorization": f"Bearer {s['key']}"}, timeout=TIMEOUT_S)
         r.raise_for_status()
         data = r.json()
-        return {"text": data["choices"][0]["message"]["content"].strip(), "model": data.get("model", s["model"])}
+        cost = (data.get("usage") or {}).get("cost")
+        spend.add(cost)
+        return {"text": data["choices"][0]["message"]["content"].strip(), "model": data.get("model", s["model"]), "cost": cost}
     except Exception:
         return None
 
@@ -156,23 +175,28 @@ def command(question, state, sim):
     return None
 
 
-async def ask(question, state, sim, focus=None):
-    """Spoken answer (max two sentences) and an optional action for the crew member to confirm."""
+async def ask(question, state, sim, focus=None, current=None):
+    """Spoken answer (max two sentences) and an optional action for the crew member to confirm.
+    `current` is the guide being walked through ({"id", "who"}), so "it's for my teammate" can change the patient."""
     guide = guides.match(question)
+    if not guide:
+        patient = guides.retarget(question, current)
+        if patient:
+            guide = guides.build(current["id"], patient, ack=True)
     if guide:
         return {"say": guide["say"], "action": None, "engine": "guide",
                 "guide": {**guide, "readings": readings_line(guide, sim, state)}}
     cmd = command(question, state, sim)
     if cmd:
         return {"say": cmd[0], "action": cmd[1], "engine": "command"}
-    fast = quick.answer(question, state, sim)
+    fast = quick.answer(question, state, sim) if instant_allowed(question, current) else None
     if fast:
         return {"say": fast, "action": None, "engine": "instant", "heads_up": heads_up(state, sim)}
-    key = cache_key(question, state, sim, focus)
+    key = cache_key(question, state, sim, focus, current)
     hit = _replies.get(key)
     if hit and time.time() - hit[0] < REPLY_TTL_S:
         return {**hit[1], "engine": hit[1]["engine"] + " (cached)", "heads_up": heads_up(state, sim)}
-    reply = await ask_model(question, state, sim, focus)
+    reply = await ask_model(question, state, sim, focus, current)
     if reply["engine"] != "rules":
         _replies[key] = (time.time(), reply)
         if len(_replies) > 300:
@@ -221,7 +245,7 @@ def readings_line(guide, sim, state=None):
     themselves. Vitaly can't see anyone else's body, so there is no line for "other"."""
     if guide["who"] != "self":
         return None
-    if state and guide["id"] in ("fracture", "strain", "cramp"):
+    if state and guide["id"] in ("fracture", "sprain", "cramp"):
         return injury_line(guide["id"], state)
     hr, spo2 = quick.val(sim, "heart_rate"), quick.val(sim, "spo2")
     irregular = quick.val(sim, "ecg_irregular") >= 0.5
@@ -267,16 +291,41 @@ REPLY_TTL_S = 120
 _replies = {}
 
 
-def cache_key(question, state, sim, focus):
+# Instant answers whose trigger words turn up in first-aid talk ("the cold pack", "pressure on it", "I'm tired"): while a guide is
+# running, those sentences go to the contextual AI instead. Status questions ("how am I doing", "when will Earth answer") still
+# get their instant answer.
+GUIDE_BLOCKED_INTENTS = {"cabin", "muscles", "sleep", "bones", "eyes", "ears", "mission"}
+
+
+def instant_allowed(question, current):
+    """False when a guide is running and the instant answer would only be a keyword accident."""
+    in_guide = bool(current and current.get("id") in guides.GUIDES)
+    return not (in_guide and quick.intent(question) in GUIDE_BLOCKED_INTENTS)
+
+
+def guide_context(current):
+    """One line saying which guide the crew member is in the middle of, and the step they are on (or None)."""
+    g = guides.GUIDES.get((current or {}).get("id"))
+    who = (current or {}).get("who")
+    if not g or who not in g["steps"]:
+        return None
+    steps, i = g["steps"][who], max(0, min(int((current or {}).get("step") or 0), len(g["steps"][who]) - 1))
+    return (f"The crew member is being talked through first aid for \"{g['title']}\" ({'for themselves' if who == 'self' else 'for someone else'}), "
+            f"now on step {i + 1} of {len(steps)}: \"{steps[i]}\" Answer what they just said in that context, as someone standing beside them: "
+            "acknowledge it, then say what it means for the step or what to do next. Remind them they can say next when they are ready.")
+
+
+def cache_key(question, state, sim, focus, current=None):
     words = re.sub(r"[^a-z0-9 ]", "", question.lower())
     words = " ".join(w for w in words.split() if w not in {"hey", "vitaly", "vitali", "please", "um", "uh", "so", "the", "a"})
     situation = (tuple(sorted(i["kind"] for i in sim.incidents if i["state"] == "open")),
                  tuple(state["organs"][k]["status"] for k in sorted(state["organs"])), focus)
-    return (words, situation)
+    return (words, situation, (current or {}).get("id"), (current or {}).get("step"))
 
 
-async def ask_model(question, state, sim, focus):
-    prompt = (f"DATA:\n{snapshot(state, sim, focus)}\n\nCrew member says: \"{question}\"\n\n"
+async def ask_model(question, state, sim, focus, current=None):
+    context = guide_context(current)
+    prompt = (f"DATA:\n{snapshot(state, sim, focus)}\n\n" + (f"{context}\n\n" if context else "") + f"Crew member says: \"{question}\"\n\n"
               "Reply with JSON only: {\"say\": \"at most two short sentences\", \"action\": null} "
               "or with action set to one of: "
               "{\"type\": \"log_countermeasure\", \"organ\": \"...\", \"id\": \"...\"}, {\"type\": \"note_earth\", \"text\": \"...\"}. "
