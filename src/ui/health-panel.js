@@ -5,7 +5,7 @@ import { setHoverOrgan } from '../three/api.js';
 import { openSystem } from './detail.js';
 
 /* "Your health": the right panel of the Body view. A ring on top says how today looks at a
-   glance; below, every reading grouped by body system in tabs.
+   glance; below, the main vital signs (General tab) and every reading grouped by body system.
 
    Each reading is one row: what it is, a 7-day trend line, the number, and one word for how it
    looks. Your usual range is in the row's tooltip, not on screen. Rows that belong to an organ
@@ -117,7 +117,7 @@ const READINGS = {
 
 // Tabs, by body system. organs = the organs this system covers (for its sentence and next step).
 const TABS = [
-  { id: 'general', label: 'General' },
+  { id: 'general', label: 'General', title: 'Vital signs' },
   { id: 'heart', label: 'Heart', title: 'Heart and blood', organs: ['heart'], rows: ['hr', 'bp', 'hrv', 'glucose'] },
   { id: 'lungs', label: 'Lungs', title: 'Breathing', organs: ['lungs'], rows: ['resp', 'spo2'] },
   { id: 'brain', label: 'Brain', title: 'Brain, sleep and eyes', organs: ['sleep', 'eyes'], rows: ['sleep', 'reaction', 'mood', 'onsd'] },
@@ -238,17 +238,11 @@ function systemBody(tab) {
     ${nextStep(tab)}`;
 }
 
-// General: how each system is doing in a word, then the one check-in reading that fits nowhere else.
-// The ring above already names what is off, so the rows stay to one word each.
+// General: the vital signs a doctor asks for first, all on one screen. Which system needs a look is
+// already said by the ring above and the marks on the tabs, so this tab is the numbers themselves.
+const KEY_READINGS = ['hr', 'bp', 'spo2', 'resp', 'temp', 'glucose', 'sleep'];
 function generalBody() {
-  const list = TABS.slice(1).map(t => {
-    const bad = flagged(t);
-    return `<button class="hp-row hp-sys ${bad ? 'high' : 'ok'}" data-tab="${t.id}">
-      <span class="hp-name">${t.title}</span>
-      <span class="hp-val"><em>${bad ? 'Needs a look' : 'Normal'}</em></span>
-    </button>`;
-  }).join('');
-  return `<div class="hp-rows">${list}${row('temp')}</div>`;
+  return `<div class="hp-rows hp-key">${KEY_READINGS.map(row).join('')}</div>`;
 }
 
 export function renderHealth() {

@@ -61,6 +61,7 @@ export function initVitaly() {
         <p class="v-heard" id="vHeard"></p>
       </div>
       <div class="v-guide" id="vGuide"></div>
+      <div class="v-earth" id="vEarth" hidden></div>
       <div class="v-bar" id="vBar" hidden>
         <button data-say="back">Back</button><button data-say="repeat">Repeat</button><button data-say="next" class="main">Next</button><button data-say="stop">End</button>
       </div>
@@ -89,6 +90,12 @@ export function initVitaly() {
     const a = e.target.dataset.answer;
     if (a) heard(a);
   });
+  // "Ask Vitaly" buttons under the steps of an alert.
+  $('#vGuide').addEventListener('click', e => {
+    const q = e.target.dataset.ask;
+    if (q) heard(q);
+  });
+  setInterval(paintEarth, 500);
   $('#vBar').addEventListener('click', e => {
     const a = e.target.dataset.say;
     if (a) heard(a);
@@ -278,9 +285,64 @@ function paintGuide() {
   status(`${guide.title}${reading} · step ${guide.i + 1} of ${guide.steps.length}`);
   box.innerHTML = `<p class="v-h">${guide.title}</p><ol>${guide.steps.map((t, i) =>
     `<li class="${i < guide.i ? 'done' : i === guide.i ? 'now' : ''}">${t}</li>`).join('')}</ol>
-    <p class="v-hint">Say “next”, “repeat”, “back” or “stop”</p>`;
+    <p class="v-hint">Say “next”, “repeat”, “back” or “stop”</p>
+    <div class="v-ask"><span>Ask Vitaly</span>${ASK.map(q => `<button data-ask="${q}">${q}</button>`).join('')}</div>`;
   const now = box.querySelector('li.now');
   if (now) now.scrollIntoView({ block: 'nearest' });
+  paintEarth();
+}
+
+// Questions offered during an alert. Each is answered at once from live data.
+const ASK = ['How am I doing?', 'When will Earth answer?'];
+
+// ---------- the copy sent to Earth ----------
+
+// "4 min 12 s" of real mission time left, from demo seconds left.
+function realTime(demoSeconds, scale) {
+  const s = Math.max(0, Math.round(demoSeconds * scale));
+  const m = Math.floor(s / 60);
+  return m ? `${m} min ${String(s % 60).padStart(2, '0')} s` : `${s} s`;
+}
+
+/* An emergency sends the readings to the flight surgeon. This shows the message on its way, at the
+   real delay to Earth, while the steps carry on: the guide never waits for the reply. */
+function paintEarth() {
+  const box = $('#vEarth');
+  if (!box) return;
+  const inc = guide && guide.incidentId ? find(guide.incidentId) : null;
+  const e = inc && inc.earth;
+  box.hidden = !e;
+  if (!e) return;
+  const now = Date.now() / 1000;
+  const oneWay = e.arrives_at - e.sent_at;
+  let stage = 'sending', head = 'Sent to Earth', sub = `Reaches the flight surgeon in ${realTime(e.arrives_at - now, e.time_scale)}`;
+  let fill = (now - e.sent_at) / oneWay;
+  if (now >= e.reply_at) {
+    stage = 'replied'; head = 'Earth replied'; sub = e.reply; fill = 0;
+  } else if (now >= e.arrives_at) {
+    stage = 'waiting'; head = 'Earth has your readings'; sub = `Reply lands in ${realTime(e.reply_at - now, e.time_scale)}`;
+    fill = (e.reply_at - now) / oneWay;
+  }
+  const pct = Math.round(Math.min(1, Math.max(0, fill)) * 100);
+  const note = stage === 'replied'
+    ? `Round trip ${Math.round(e.delay_min * 2)} min. You did not have to wait for it.`
+    : 'Keep going. The steps do not wait for Earth.';
+  // Same stage: only the countdown and the bar move, so the text does not flicker.
+  if (box.dataset.stage === stage && box.dataset.id === String(inc.id) && stage !== 'replied') {
+    box.querySelector('.v-earth-sub').textContent = sub;
+    box.querySelector('.v-track i').style.width = pct + '%';
+    return;
+  }
+  if (box.dataset.stage === stage && box.dataset.id === String(inc.id)) return;
+  box.dataset.stage = stage;
+  box.dataset.id = inc.id;
+  box.innerHTML = `<p class="v-h">Earth · ${e.delay_min.toFixed(1)} min away</p>
+    <div class="v-track-ends"><span>You</span><span>Earth</span></div>
+    <div class="v-track"><i style="width:${pct}%"></i></div>
+    <p class="v-earth-head">${head}</p>
+    <p class="v-earth-sub">${sub}</p>
+    <p class="v-earth-note">${note}</p>
+    <p class="v-earth-demo">Demo: time runs ${Math.round(e.time_scale)}× faster</p>`;
 }
 
 // ---------- what the crew member said ----------

@@ -57,6 +57,7 @@ export const api = {
   radiationCurve: mission => request('/api/radiation/curve' + query({ mission })),
   comms: () => request('/api/comms'),
   vitals: () => request('/api/vitals'),
+  vitalsRaw: () => request('/api/vitals/raw'),
   sources: () => request('/api/sources'),
   provenance: () => request('/api/provenance'),
   trends: days => request('/api/trends' + query({ days })),
