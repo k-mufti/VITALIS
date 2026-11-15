@@ -250,6 +250,7 @@ Organs open from BOTH the risk panel and the body spots; both call `openSystem(i
 | GET    | `/api/hrp`                | NASA HRP framework: 5 hazards, 17 risks, organ + mission mapping, coverage, research studies |
 | GET    | `/api/sources`            | live / cache / fallback status of every data source (Engineer Mode) |
 | POST   | `/api/sources/refresh`    | re-fetch DONKI + Horizons                            |
+| GET    | `/api/trends?days=7`      | `{ days, metrics: { heart_rate: [..], bone_pct: [..], ... }, simulated }` last N mission days per reading, for trend lines (ASSUMPTION: rebuilt from today's state) |
 
 WebSocket `/ws` messages: `{ "type": "vital", device, metric, value, unit, ts }` every second per metric,
 `{ "type": "state", "state": MissionState }` every 2 seconds and on connect.

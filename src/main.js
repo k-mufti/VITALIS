@@ -11,6 +11,7 @@ import { initHistory } from './ui/history.js';
 import { initDirector } from './ui/director.js';
 import { initSources } from './ui/sources.js';
 import { initRadiation } from './ui/radiation.js';
+import { initInjury } from './ui/injury.js';
 import { initData } from './data/client.js';
 
 /* VITALIS demo. Crew readings are simulated; mission data is live from NASA/JPL/NOAA.
@@ -29,6 +30,7 @@ initHistory();
 initDirector();
 initSources();
 initRadiation();
+initInjury();
 initData();
 
 (function loop(now) {

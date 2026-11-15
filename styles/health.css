@@ -36,10 +36,10 @@
 button.hp-row { transition: background .2s, padding .2s var(--ease); }
 button.hp-row:hover, button.hp-row:focus-visible { outline: none; background: var(--paper); margin: 0 -10px; padding-left: 10px; padding-right: 10px; width: calc(100% + 20px); }
 
-.hp-name { font: 500 15px/1.3 var(--sans); }
+.hp-name { flex: 1; min-width: 0; font: 500 15px/1.3 var(--sans); }
 .hp-name small { display: block; margin-top: 2px; font: 400 13px/1.3 var(--sans); color: var(--soft); }
 
-.hp-val { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; }
+.hp-val { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; min-width: 78px; }
 .hp-val b { font: 500 26px/1 var(--cond); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .hp-val b small { margin-left: 4px; font: 500 14px var(--cond); letter-spacing: .02em; color: var(--soft); }
 .hp-val em { margin-top: 4px; font: 600 12px var(--cond); font-style: normal; letter-spacing: .12em; text-transform: uppercase; color: var(--green); }
@@ -58,3 +58,38 @@ button.hp-row:hover, button.hp-row:focus-visible { outline: none; background: va
 }
 .hp-next:hover { background: var(--white); outline: 1px solid var(--ink); }
 .hp-next span { display: block; margin-bottom: 3px; font: 600 12px var(--cond); letter-spacing: .14em; text-transform: uppercase; color: var(--soft); }
+
+/* 7-day trend line in each row. Ink when normal, amber when the reading needs a look. */
+.hp-spark { flex: 0 0 64px; height: 22px; }
+.hp-spark polyline { fill: none; stroke: var(--soft); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.hp-spark circle { fill: var(--ink); }
+.hp-row.high .hp-spark polyline, .hp-row.low .hp-spark polyline { stroke: var(--amber); }
+.hp-row.high .hp-spark circle, .hp-row.low .hp-spark circle { fill: var(--amber); }
+
+/* Today at a glance: ring of normal readings + what needs a look. */
+.hp-sum {
+  flex: none; display: flex; align-items: center; gap: 16px; margin-bottom: 12px; padding: 14px 16px;
+  border: 1px solid var(--line); background: color-mix(in srgb, var(--white) 88%, transparent); backdrop-filter: blur(6px);
+}
+.hp-ring { position: relative; flex: 0 0 64px; height: 64px; }
+.hp-ring svg { width: 100%; height: 100%; }
+.hp-ring circle { fill: none; stroke: var(--line); stroke-width: 6; }
+.hp-ring .hp-arc { stroke: var(--green); stroke-linecap: round; transition: stroke-dasharray .6s var(--ease); }
+.hp-sum.flag .hp-ring circle:first-child { stroke: color-mix(in srgb, var(--amber) 45%, var(--line)); }
+.hp-ring span {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font: 500 11px/1 var(--cond); letter-spacing: .06em; color: var(--soft);
+}
+.hp-ring span b { font: 500 24px/1 var(--cond); color: var(--ink); font-variant-numeric: tabular-nums; }
+.hp-sum-text { min-width: 0; }
+.hp-sum-text h3 { font: 600 20px/1.1 var(--cond); letter-spacing: .04em; }
+.hp-sum.flag .hp-sum-text h3 { color: var(--amber); }
+.hp-sum-text small { display: block; margin-top: 3px; font: 400 13px var(--sans); color: var(--soft); }
+.hp-sum-text p { margin-top: 6px; font: 400 14px/1.35 var(--sans); }
+.hp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.hp-chip {
+  padding: 4px 9px; border: 1px solid var(--amber); font: 500 13px var(--sans); color: var(--ink);
+  background: color-mix(in srgb, var(--amber) 10%, transparent); transition: background .2s;
+}
+.hp-chip b { font-weight: 600; color: var(--amber); }
+.hp-chip:hover { background: color-mix(in srgb, var(--amber) 22%, transparent); }

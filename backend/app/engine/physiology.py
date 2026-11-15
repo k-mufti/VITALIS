@@ -145,6 +145,14 @@ def expected(mods, metric):
         return B["bp_sys"] + mods["bp_offset"]
     if metric == "resp_rate":
         return B["resp_rate"] + 0.05 * mods["bp_offset"] + mods["stress"]
+    if metric == "hrv":
+        return 55 - 6 * mods["sleep_debt"] - 5 * mods["stress"]
+    if metric == "glucose":
+        return B["glucose"] + 8 * mods["stress"]
+    if metric == "bp_dia":
+        return B["bp_dia"] + 0.5 * mods["bp_offset"]
+    if metric == "resistive_load_pct":
+        return max(60, 96 - 2.5 * mods["missed_exercise_days"])
     return B.get(metric, 0)
 
 

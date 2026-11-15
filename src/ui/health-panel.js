@@ -4,12 +4,13 @@ import { SYS, VITALS } from '../data/mock.js';
 import { setHoverOrgan } from '../three/api.js';
 import { openSystem } from './detail.js';
 
-/* "Your health": the right panel of the Body view. Every reading we have, grouped by body
-   system in tabs, the way the "Your body" panel groups the parts.
+/* "Your health": the right panel of the Body view. A ring on top says how today looks at a
+   glance; below, every reading grouped by body system in tabs.
 
-   Each reading is one row: what it is, your usual, the number, and one word for how it looks.
-   Rows that belong to an organ open that organ when clicked. Live values come from the
-   backend (devices + organ engine); with the backend off the demo numbers in mock.js are used. */
+   Each reading is one row: what it is, a 7-day trend line, the number, and one word for how it
+   looks. Your usual range is in the row's tooltip, not on screen. Rows that belong to an organ
+   open that organ when clicked. Live values come from the backend (devices + organ engine,
+   trends from /api/trends); with the backend off the demo numbers in mock.js are used. */
 
 // Latest device reading, or null.
 function vital(metric) {
@@ -44,67 +45,67 @@ const parseUsual = s => {
 };
 
 /* Every reading. get() returns { value (text), unit, usual (text), look: ok|high|low|null }.
-   sys = organ id the row opens. */
+   sys = organ id the row opens. trend = series name in /api/trends. */
 const READINGS = {
-  hr: { name: 'Resting heart rate', sys: 'heart', get() {
+  hr: { name: 'Resting heart rate', sys: 'heart', trend: 'heart_rate', get() {
     const r = organReading('heart'), [lo, hi] = parseUsual(r.usual);
     return { value: Math.round(r.value), unit: 'bpm', usual: r.usual, look: organLook(r.level, r.value, lo, hi) };
   } },
-  bp: { name: 'Blood pressure', get() {
+  bp: { name: 'Blood pressure', trend: 'bp_sys', get() {
     let s = vital('bp_sys'), d = vital('bp_dia');
     if (s === null && VITALS.bp.value) [s, d] = VITALS.bp.value;
     if (s === null) return { value: '—', unit: '', usual: 'Usual about 118/76', look: null };
     const look = s >= 130 || d >= 85 ? 'high' : s < 90 || d < 60 ? 'low' : 'ok';
     return { value: `${Math.round(s)}/${Math.round(d)}`, unit: 'mmHg', usual: 'Usual about 118/76', look };
   } },
-  hrv: { name: 'Heart rate variability', hint: 'Higher means better rested', get() {
+  hrv: { name: 'Recovery (HRV)', hint: 'Higher means better rested', trend: 'hrv', get() {
     const v = vital('hrv');
     return { value: v === null ? '—' : Math.round(v), unit: 'ms', usual: 'Usual about 55', look: v === null ? null : v < 45 ? 'low' : 'ok' };
   } },
-  glucose: { name: 'Blood sugar', get() {
+  glucose: { name: 'Blood sugar', trend: 'glucose', get() {
     let v = vital('glucose');
     if (v === null) v = VITALS.glucose.value;
     return { value: v === null ? '—' : Math.round(v), unit: 'mg/dL', usual: 'Usual 70–110', look: range(v, 70, 110) };
   } },
-  resp: { name: 'Breathing rate', sys: 'lungs', get() {
+  resp: { name: 'Breathing rate', sys: 'lungs', trend: 'resp_rate', get() {
     const r = organReading('lungs'), [lo, hi] = parseUsual(r.usual);
-    return { value: Math.round(r.value), unit: 'a minute', usual: r.usual, look: organLook(r.level, r.value, lo, hi) };
+    return { value: Math.round(r.value), unit: '/min', usual: r.usual, look: organLook(r.level, r.value, lo, hi) };
   } },
-  spo2: { name: 'Blood oxygen', sys: 'lungs', get() {
+  spo2: { name: 'Blood oxygen', sys: 'lungs', trend: 'spo2', get() {
     let v = vital('spo2');
     if (v === null) v = parseFloat(SYS.lungs.v2) || null;
     return { value: v === null ? '—' : Math.round(v), unit: '%', usual: 'Usual 95–100', look: v === null ? null : v < 95 ? 'low' : 'ok' };
   } },
-  sleep: { name: 'Sleep last night', sys: 'sleep', get() {
+  sleep: { name: 'Sleep last night', sys: 'sleep', trend: 'sleep_hours', get() {
     const r = organReading('sleep'), [lo, hi] = parseUsual(r.usual);
-    return { value: r.value, unit: 'hours', usual: r.usual, look: organLook(r.level, r.value, lo, hi) };
+    return { value: r.value, unit: 'h', usual: r.usual, look: organLook(r.level, r.value, lo, hi) };
   } },
-  reaction: { name: 'Reaction time', sys: 'sleep', hint: 'Lower is faster', get() {
+  reaction: { name: 'Reaction time', sys: 'sleep', hint: 'Lower is faster', trend: 'reaction_ms', get() {
     const v = vital('reaction_ms');
     return { value: v === null ? '—' : Math.round(v), unit: 'ms', usual: 'Usual about 250', look: v === null ? null : v > 275 ? 'high' : 'ok' };
   } },
-  mood: { name: 'Mood', get() {
+  mood: { name: 'Mood', trend: 'mood_1to5', get() {
     let v = vital('mood_1to5');
     if (v === null) v = VITALS.mood.value;
     return { value: v === null ? '—' : v.toFixed(1).replace('.0', ''), unit: 'of 5', usual: 'Usual about 4', look: v === null ? null : v < 3.5 ? 'low' : 'ok' };
   } },
-  onsd: { name: 'Optic nerve', sys: 'eyes', hint: 'Wider means fluid pressing on the eye', get() {
+  onsd: { name: 'Eye swelling', sys: 'eyes', hint: 'Optic nerve width, by ultrasound', trend: 'onsd_mm', get() {
     const r = organReading('eyes');
-    return { value: r.value, unit: 'mm wide', usual: r.usual, look: r.level === 'low' ? 'ok' : 'high' };
+    return { value: r.value, unit: 'mm', usual: r.usual, look: r.level === 'low' ? 'ok' : 'high' };
   } },
-  bone: { name: 'Bone density', sys: 'bones', hint: 'Estimate, scanned after landing', get() {
+  bone: { name: 'Bone density', sys: 'bones', hint: 'Estimate, % of preflight, scanned after landing', trend: 'bone_pct', get() {
     const r = organReading('bones'), [lo, hi] = parseUsual(r.usual);
-    return { value: r.value, unit: '% of preflight', usual: r.usual, look: organLook(r.level, r.value, lo, hi) };
+    return { value: r.value, unit: '%', usual: r.usual, look: organLook(r.level, r.value, lo, hi) };
   } },
-  muscle: { name: 'Muscle strength', sys: 'muscles', hint: 'Estimate', get() {
+  muscle: { name: 'Muscle strength', sys: 'muscles', hint: 'Estimate', trend: 'muscle_score', get() {
     const r = organReading('muscles'), [lo, hi] = parseUsual(r.usual);
     return { value: r.value, unit: 'of 100', usual: r.usual, look: organLook(r.level, r.value, lo, hi) };
   } },
-  load: { name: 'Lifting load', sys: 'muscles', hint: 'Weight on the exercise machine', get() {
+  load: { name: 'Lifting load', sys: 'muscles', hint: '% of preflight weight on the exercise machine', trend: 'resistive_load_pct', get() {
     const v = vital('resistive_load_pct');
-    return { value: v === null ? '—' : Math.round(v), unit: '% of preflight', usual: 'Usual 95–100', look: v === null ? null : v < 85 ? 'low' : 'ok' };
+    return { value: v === null ? '—' : Math.round(v), unit: '%', usual: 'Usual 95–100', look: v === null ? null : v < 85 ? 'low' : 'ok' };
   } },
-  exercise: { name: 'Exercise today', sys: 'muscles', get() {
+  exercise: { name: 'Exercise today', sys: 'muscles', trend: 'exercise_min', get() {
     const v = vital('exercise_min');
     return { value: v === null ? '—' : Math.round(v), unit: 'min', usual: 'Goal 90 or more', look: v === null ? null : v < 60 ? 'low' : 'ok' };
   } },
@@ -133,15 +134,76 @@ let shown = null;   // tab drawn last time; the fade-in plays only when it chang
 
 const flagged = tab => tab.rows && tab.rows.some(k => { const l = READINGS[k].get().look; return l && l !== 'ok'; });
 
+// Demo weeks in mock.js, for the trend line when the backend is off.
+const OFFLINE_WEEK = { hr: () => SYS.heart.week, sleep: () => SYS.sleep.week, resp: () => SYS.lungs.week, muscle: () => SYS.muscles.week };
+
+// The last 7 days of a reading, ending on the number the row shows. null = no trend to draw.
+function series(k, shown) {
+  const r = READINGS[k];
+  let s = live.trends && r.trend ? live.trends.metrics[r.trend] : null;
+  if (!s && OFFLINE_WEEK[k]) s = OFFLINE_WEEK[k]();
+  if (!s || s.length < 2) return null;
+  s = s.slice();
+  const now = parseFloat(shown);   // "117/76" reads as 117, the systolic the trend tracks
+  if (Number.isFinite(now)) s[s.length - 1] = now;
+  return s;
+}
+
+// A small trend line. Quiet weeks stay flat instead of blowing day-to-day noise up into a zigzag.
+function spark(k, shown) {
+  const s = series(k, shown);
+  if (!s) return '<span class="hp-spark"></span>';
+  const W = 64, H = 22, P = 3;
+  const lo0 = Math.min(...s), hi0 = Math.max(...s), mid = (lo0 + hi0) / 2;
+  const span = Math.max(hi0 - lo0, Math.abs(mid) * 0.02, 0.1);
+  const x = i => P + i * (W - 2 * P) / (s.length - 1);
+  const y = v => H - P - ((v - (mid - span / 2)) / span) * (H - 2 * P);
+  const pts = s.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  return `<svg class="hp-spark" viewBox="0 0 ${W} ${H}" aria-label="Last 7 days"><polyline points="${pts}"/><circle cx="${x(s.length - 1).toFixed(1)}" cy="${y(s[s.length - 1]).toFixed(1)}" r="2.4"/></svg>`;
+}
+
 function row(k) {
   const r = READINGS[k], d = r.get();
   const look = d.look || 'none';
   const tag = r.sys ? 'button' : 'div';
   const sys = r.sys ? ` data-sys="${r.sys}"` : '';
-  return `<${tag} class="hp-row ${look}"${sys}>
-    <span class="hp-name">${r.name}<small>${d.usual}${r.hint ? ` · ${r.hint}` : ''}</small></span>
+  const tip = [d.usual, r.hint].filter(Boolean).join(' · ');
+  return `<${tag} class="hp-row ${look}"${sys} title="${tip}">
+    <span class="hp-name">${r.name}</span>
+    ${spark(k, d.value)}
     <span class="hp-val"><b>${d.value}<small>${d.unit}</small></b><em>${word(k, d.look)}</em></span>
   </${tag}>`;
+}
+
+// Which tab a reading lives in (the General tab for readings that fit no system).
+const tabOf = k => (TABS.find(t => t.rows && t.rows.includes(k)) || TABS[0]).id;
+const ALL_READINGS = [...new Set(TABS.flatMap(t => t.rows || [])), 'temp'];
+
+// Today at a glance: a ring of how many readings are normal, and a chip for each one that is not.
+function summaryHtml() {
+  const taken = ALL_READINGS.map(k => [k, READINGS[k].get().look]).filter(([, l]) => l);
+  const off = taken.filter(([, l]) => l !== 'ok');
+  const ok = taken.length - off.length;
+  const C = 2 * Math.PI * 26;
+  const arc = taken.length ? C * ok / taken.length : C;
+  let head = 'All good today';
+  if (off.length === 1) head = '1 thing needs a look';
+  if (off.length > 1) head = `${off.length} things need a look`;
+  let more = '<p>Every reading is in your usual range.</p>';
+  if (off.length) {
+    // One chip per system, with how many of its readings are off. The tab lists which ones.
+    const count = {};
+    off.forEach(([k]) => { const t = tabOf(k); count[t] = (count[t] || 0) + 1; });
+    more = `<div class="hp-chips">${TABS.filter(t => count[t.id]).map(t =>
+      `<button class="hp-chip" data-tab="${t.id}">${t.label} <b>${count[t.id]}</b></button>`).join('')}</div>`;
+  }
+  return `<div class="hp-sum${off.length ? ' flag' : ''}">
+    <div class="hp-ring">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="26"/><circle class="hp-arc" cx="32" cy="32" r="26" stroke-dasharray="${arc.toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 32 32)"/></svg>
+      <span><b>${ok}</b>of ${taken.length}</span>
+    </div>
+    <div class="hp-sum-text"><h3>${head}</h3><small>${ok} of ${taken.length} readings normal</small>${more}</div>
+  </div>`;
 }
 
 // The backend's sentence for an organ, with medical terms swapped for plain words.
@@ -177,24 +239,16 @@ function systemBody(tab) {
 }
 
 // General: how each system is doing in a word, then the one check-in reading that fits nowhere else.
+// The ring above already names what is off, so the rows stay to one word each.
 function generalBody() {
-  const systems = TABS.slice(1);
-  const needs = systems.filter(flagged);
-  let say = 'Everything is in your usual range today.';
-  if (needs.length === 1) say = `${needs[0].title} needs a look today. Everything else is normal.`;
-  if (needs.length > 1) say = `${needs.length} systems need a look today. Everything else is normal.`;
-  const list = systems.map(t => {
+  const list = TABS.slice(1).map(t => {
     const bad = flagged(t);
-    // Name what is off, e.g. "Resting heart rate high".
-    const off = t.rows.map(k => [k, READINGS[k].get().look]).filter(([, l]) => l && l !== 'ok')
-      .map(([k, l]) => `${READINGS[k].name} ${word(k, l).toLowerCase()}`).join(' · ');
     return `<button class="hp-row hp-sys ${bad ? 'high' : 'ok'}" data-tab="${t.id}">
-      <span class="hp-name">${t.title}${off ? `<small>${off}</small>` : ''}</span>
+      <span class="hp-name">${t.title}</span>
       <span class="hp-val"><em>${bad ? 'Needs a look' : 'Normal'}</em></span>
     </button>`;
   }).join('');
-  return `<p class="hp-say">${say}</p>
-    <div class="hp-rows">${list}${row('temp')}</div>`;
+  return `<div class="hp-rows">${list}${row('temp')}</div>`;
 }
 
 export function renderHealth() {
@@ -202,6 +256,7 @@ export function renderHealth() {
   if (!box) return;
   const tab = TABS.find(t => t.id === current);
   box.innerHTML = `
+    ${summaryHtml()}
     <div class="hp-tabs" role="tablist" aria-label="Body systems">
       ${TABS.map(t => `<button class="hp-tab${t.id === current ? ' on' : ''}${flagged(t) ? ' flag' : ''}" role="tab" aria-selected="${t.id === current}" data-tab="${t.id}">${t.label}</button>`).join('')}
     </div>
@@ -210,6 +265,14 @@ export function renderHealth() {
       ${tab.id === 'general' ? generalBody() : systemBody(tab)}
     </div>`;
   shown = current;
+}
+
+// The 7-day trends change slowly (director events, logged steps): fetch at most every 10 s.
+let trendsAt = 0;
+function loadTrends() {
+  if (!live.online || Date.now() - trendsAt < 10000) return;
+  trendsAt = Date.now();
+  api.trends(7).then(t => { live.trends = t; renderHealth(); }).catch(() => {});
 }
 
 export function initHealthPanel() {
@@ -241,6 +304,7 @@ export function initHealthPanel() {
     if (type === 'online') {
       api.vitals().then(v => { Object.assign(live.vitals, v.latest || {}); renderHealth(); }).catch(() => {});
     }
+    if (type === 'online' || type === 'state') loadTrends();
     if (type === 'vital') {
       if (pending) return;
       pending = true;
