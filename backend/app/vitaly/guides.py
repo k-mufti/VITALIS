@@ -352,7 +352,7 @@ GUIDES = {
     },
     "strain": {
         "title": "Pulled muscle", "severity": "warning",
-        "match": r"pull(ed)? (a |my |his |her |their |the )?(muscle|hamstring|groin|calf|quad|thigh|back|shoulder|neck)|hamstring|"
+        "match": r"pull(ed)? (a |my |his |her |their |the )?(left |right )?(muscle|hamstr|groin|calf|quad|thigh|back|shoulder|neck)|hamstr|"
                  r"\bstrain|tweak(ed)?|torn (a |my )?muscle|tore (a |my )?muscle|muscle (tear|pull)|pulled muscle",
         "say": {"self": "Okay. Let's rest it and keep the swelling down.",
                 "other": "Okay. I'll talk you through looking after the muscle."},

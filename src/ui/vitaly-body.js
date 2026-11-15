@@ -91,12 +91,52 @@ const ALERT_BODY = {
   impact: [['whole'], 'impact'],
 };
 
+// Typed or misheard words ("wirst", "sholder", "ankel"): one letter off still counts. Only for
+// words of 5+ letters, so short words can't be mistaken for each other (head / heat / hear).
+const FUZZY = [
+  ['wrist', 'wrist'], ['finger', 'fingers'], ['thumb', 'fingers'], ['knuckle', 'fingers'], ['forearm', 'forearm'],
+  ['elbow', 'elbow'], ['tricep', 'tricep'], ['bicep', 'bicep'], ['shoulder', 'shoulder'],
+  ['ankle', 'ankle'], ['thigh', 'thigh'], ['hamstring', 'thigh'], ['groin', 'thigh'], ['calves', 'calf'],
+  ['chest', 'chest'], ['stomach', 'belly'], ['belly', 'belly'], ['forehead', 'forehead'],
+  ['throat', 'neck'], ['spine', 'lower-back'],
+];
+const FUZZY_PATH = {
+  wrist: ['upper', 'S-arm', 'wrist'], fingers: ['upper', 'S-arm', 'fingers'], forearm: ['upper', 'S-arm', 'forearm'],
+  elbow: ['upper', 'S-arm', 'elbow'], tricep: ['upper', 'S-arm', 'tricep'], bicep: ['upper', 'S-arm', 'bicep'],
+  shoulder: ['upper', 'S-arm', 'shoulder'], ankle: ['lower', 'S-leg', 'ankle'], thigh: ['lower', 'S-leg', 'thigh'],
+  calf: ['lower', 'S-leg', 'calf'], chest: ['upper', 'chest'], belly: ['upper', 'belly'],
+  forehead: ['head', 'forehead'], neck: ['head', 'neck'], 'lower-back': ['upper', 'lower-back'],
+};
+
+// Letters changed, added, dropped or swapped ("wirst" -> "wrist" is one swap).
+function oneOff(a, b) {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+  }
+  return d[a.length][b.length] <= 1;
+}
+
 // "my left wrist" -> ['upper', 'l-arm', 'wrist']. null if no place was named.
 export function placeFor(text) {
   const t = ` ${String(text || '').toLowerCase()} `;
-  const side = /\bright\b/.test(t) && !/\bleft\b/.test(t) ? 'r' : 'l';
+  const side = /\bri(gh|hg)t\b/.test(t) && !/\b(left|lfet|letf)\b/.test(t) ? 'r' : 'l';
+  const withSide = path => path.map(id => id.replace(/^S-/, side + '-'));
   for (const [re, path] of PLACES) {
-    if (re.test(t)) return path.map(id => id.replace(/^S-/, side + '-'));
+    if (re.test(t)) return withSide(path);
+  }
+  const words = t.match(/[a-z]+/g) || [];
+  for (const w of words) {
+    if (w.length < 5) continue;
+    const word = w.replace(/s$/, '');
+    const hit = FUZZY.find(([k]) => oneOff(word, k) || oneOff(w, k));
+    if (hit) return withSide(FUZZY_PATH[hit[1]]);
   }
   return null;
 }
