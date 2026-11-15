@@ -14,18 +14,16 @@ import json
 import os
 import re
 
-import httpx
-
 import time
 
 from .. import officer
-from . import crew, guides, profile, quick
+from . import crew, guides, net, profile, quick
 
 URL = "https://openrouter.ai/api/v1/chat/completions"
 # Picked by eval_vitaly.py: best answers of the cheap models tested, ~$0.03 per 1M tokens in and out.
 DEFAULT_MODEL = "mistralai/mistral-nemo"
 DEFAULT_FALLBACK = "meta-llama/llama-3.1-8b-instruct"
-TIMEOUT_S = 8
+TIMEOUT_S = 6
 
 ACTIONS = ("log_countermeasure", "note_earth")
 
@@ -100,13 +98,14 @@ async def complete(messages, max_tokens):
     s = settings()
     if not s["key"]:
         return None
+    # provider.sort = latency: OpenRouter picks whichever host is answering fastest right now. The
+    # same model took 1.5 s typically and 3 s at worst; this makes it about 0.5 s.
     body = {"model": s["model"], "models": [s["model"], s["fallback"]], "messages": messages,
-            "max_tokens": max_tokens, "temperature": 0.3}
+            "max_tokens": max_tokens, "temperature": 0.3, "provider": {"sort": "latency"}}
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT_S) as client:
-            r = await client.post(URL, json=body, headers={"Authorization": f"Bearer {s['key']}"})
-            r.raise_for_status()
-            data = r.json()
+        r = await net.client().post(URL, json=body, headers={"Authorization": f"Bearer {s['key']}"}, timeout=TIMEOUT_S)
+        r.raise_for_status()
+        data = r.json()
         return {"text": data["choices"][0]["message"]["content"].strip(), "model": data.get("model", s["model"])}
     except Exception:
         return None
@@ -220,7 +219,7 @@ async def ask_model(question, state, sim, focus):
               "or with action set to one of: "
               "{\"type\": \"log_countermeasure\", \"organ\": \"...\", \"id\": \"...\"}, {\"type\": \"note_earth\", \"text\": \"...\"}. "
               "Only propose an action if they ask for one; the say text should then ask them to confirm.")
-    out = await complete([{"role": "system", "content": PERSONA}, {"role": "user", "content": prompt}], 160)
+    out = await complete([{"role": "system", "content": PERSONA}, {"role": "user", "content": prompt}], 110)
     if out:
         parsed = parse_json(out["text"])
         if parsed and parsed.get("say"):

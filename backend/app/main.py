@@ -30,7 +30,7 @@ from .analysis import radiation as radiation_analysis  # noqa: E402
 from .analysis import training as training_analysis  # noqa: E402
 from .analysis.common import Reader  # noqa: E402
 from .devices import catalog  # noqa: E402
-from .vitaly import brain, crew, ears, guides, profile, protocols, voice, watchdog  # noqa: E402
+from .vitaly import brain, crew, ears, guides, net, profile, protocols, voice, watchdog  # noqa: E402
 from .devices.simulated import DEVICES  # noqa: E402
 from .engine.physiology import COUNTERMEASURES, apply_change, mission_state  # noqa: E402
 from .sources import donki, horizons, noaa  # noqa: E402
@@ -98,7 +98,7 @@ async def sim_loop():
 async def lifespan(app):
     # Voice every checklist line and common phrase in advance (from disk after the first run).
     voice.prewarm(*voice.COMMON, *protocols.all_lines(profile.profile(crew.PATIENT_ID)["name"]), *guides.all_lines())
-    tasks = [asyncio.create_task(refresh_loop()), asyncio.create_task(sim_loop())]
+    tasks = [asyncio.create_task(refresh_loop()), asyncio.create_task(sim_loop()), asyncio.create_task(net.keep_warm())]
     yield
     for t in tasks:
         t.cancel()
@@ -385,7 +385,7 @@ async def vitaly_prewarm():
     """Called when Vitaly is summoned: voice every everyday answer for the current data now, so
     the reply plays instantly by the time the question is finished."""
     texts = brain.quick.all_answers(mission_state(sim), sim)
-    voice.prewarm(*texts, background=False)
+    voice.prewarm(*texts)   # politely, a few at a time: the real answer to the question jumps the queue
     return {"lines": len(texts), "ready": sum(voice.cached(t) for t in texts)}
 
 
