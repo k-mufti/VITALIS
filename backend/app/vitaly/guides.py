@@ -12,13 +12,18 @@ voiced in advance and plays with no delay.
 import re
 
 # Someone else is the patient: "he", "she", "someone", "my crewmate"... or a name ("Amir is...").
-OTHER = re.compile(r"\b(he|she|they|him|her|them|his|their|he's|she's|they're|someone|somebody|crew ?mate|commander|"
-                   r"engineer|doctor|specialist|patient|person|friend|colleague)\b", re.I)
+# Words that name another person ("my teammate", "someone", "a stranger"), and pronouns that point at one.
+RELATION = re.compile(r"\b(someone|somebody|team ?mates?|crew ?mates?|crew member|commander|engineer|doctor|specialist|patient|person|"
+                      r"friend|buddy|partner|colleague|co-?worker|room ?mate|class ?mate|brother|sister|mom|mum|mother|dad|father|wife|husband|"
+                      r"boyfriend|girlfriend|son|daughter|kid|child|baby|boss|guy|girl|woman|lady|stranger|neighbou?r|passenger|teacher|"
+                      r"astronaut|pilot|captain)\b", re.I)
+PRONOUN = re.compile(r"\b(he|she|they|him|her|them|his|their|he's|she's|they're)\b", re.I)
+OTHER = re.compile(RELATION.pattern + "|" + PRONOUN.pattern, re.I)
 NAMED = re.compile(r"\b(?!I\b|What\b|How\b|Why\b|Something\b|It\b|This\b|That\b|There\b)[A-Z][a-z]+ (has|is|isn't|can't|won't|fell|passed|hit|cut|burned)\b"
                    r"|\b(with|help) (?!Vitaly\b)[A-Z][a-z]+\b")
 # Clearly about the speaker: "my chest", "I can't breathe", "I cut my arm".
-SELF = re.compile(r"\bmy (chest|head|arm|leg|throat|hand|heart|breathing|breath|stomach|back)\b|"
-                  r"\bi(?:'m| am| have|'ve| feel| can'?t| cannot| cut| hit| burned| burnt| think i)\b", re.I)
+STRONG_SELF = re.compile(r"\bmy (chest|head|arm|leg|throat|hand|heart|breathing|breath|stomach|back|wrist|ankle|knee|eye|eyes|face|neck)\b", re.I)
+SELF = re.compile(STRONG_SELF.pattern + r"|\bi(?:'m| am| have|'ve| feel| can'?t| cannot| cut| hit| burned| burnt| think i)\b", re.I)
 
 GUIDES = {
     "unresponsive": {
@@ -372,10 +377,15 @@ NEGATED = re.compile(r"\b(no|not|don'?t have|isn'?t|without|any)\b.{0,12}\b(pain
 
 
 def who(text):
-    """'other' if they're describing someone else, else 'self'."""
+    """'other' if they're describing someone else, else 'self'.
+    Naming another person ("my teammate", "Amir", "someone") wins over "I have..." / "I think..." ("I have a teammate with chest pain"),
+    but not over the speaker's own body ("my chest hurts"). A bare "he" or "she" decides only when nothing says it is the speaker."""
+    names_other = bool(RELATION.search(text) or NAMED.search(text))
+    if names_other and not STRONG_SELF.search(text):
+        return "other"
     if SELF.search(text):
         return "self"
-    if OTHER.search(text) or NAMED.search(text):
+    if PRONOUN.search(text):
         return "other"
     return "self"
 
@@ -384,7 +394,7 @@ def match(text):
     """The guide for what the crew member just said, or None."""
     if NEGATED.search(text):
         return None
-    someone = bool(OTHER.search(text) or NAMED.search(text)) and not SELF.search(text)
+    someone = who(text) == "other" and bool(OTHER.search(text) or NAMED.search(text))
     for gid, g in GUIDES.items():
         if g.get("needs_person") and not someone:
             continue
@@ -393,6 +403,34 @@ def match(text):
             return {"id": gid, "title": g["title"], "severity": g["severity"], "who": person,
                     "say": g["say"][person], "steps": g["steps"][person]}
     return None
+
+
+# Changing the patient part-way through a guide: "it's not for me, it's for my teammate", "actually it's me".
+NOT_ME = re.compile(r"\b(not (for )?(me|myself)|it'?s not me|it isn'?t me|isn'?t me|not mine|for (him|her|them)|someone else|somebody else|(he|she|they)(?:'s| is| are)? the (one|patient|person))\b", re.I)
+IT_IS_ME = re.compile(r"\b(it'?s me|it is me|for me|it'?s for me|i'?m the one|actually me|it'?s myself)\b", re.I)
+
+
+def retarget(text, current):
+    """'other' or 'self' if what was said moves the guide in progress to a different patient, else None.
+    `current` is {"id", "who"} of the guide being walked through."""
+    if not current or current.get("id") not in GUIDES:
+        return None
+    steps = GUIDES[current["id"]]["steps"]
+    if current.get("who") == "self" and "other" in steps and (NOT_ME.search(text) or RELATION.search(text) or NAMED.search(text)) \
+            and not STRONG_SELF.search(text):
+        return "other"
+    if current.get("who") == "other" and "self" in steps and IT_IS_ME.search(text) and not RELATION.search(text):
+        return "self"
+    return None
+
+
+def build(gid, who, ack=False):
+    """A guide by id for a patient. With ack, the opening first says it understood who the patient is."""
+    g = GUIDES[gid]
+    say = g["say"][who]
+    if ack:
+        say = ("Got it, it's not you. " if who == "other" else "Got it, it's you. ") + re.sub(r"^Okay[.,]\s*", "", say)
+    return {"id": gid, "title": g["title"], "severity": g["severity"], "who": who, "say": say, "steps": g["steps"][who]}
 
 
 def opening(say, first_step):

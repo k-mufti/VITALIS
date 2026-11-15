@@ -30,6 +30,9 @@ const STOP = /\b(stop|exit|quit|end (the )?guide|cancel|i'?m (fine|okay|ok|good|
 const GREETING = 'What do you need help with?';   // after "Hey Vitaly" on its own; voiced in advance by the backend
 // A lone "hey" or "um" is not a question (unless a guide or a yes/no is waiting for short answers).
 const FILLER = /^(?:hey|hi|hello|ok|okay|um+|uh+|hmm+|well|so)[\s.,!?]*$/i;
+// Words that change who a guide is for ("it's not for me, it's for my teammate", "actually it's me"). Checked before
+// the short step commands, so "no, it's my teammate" is not taken as "next".
+const RETARGET = /\b(team ?mates?|crew ?mates?|someone|somebody|friend|buddy|partner|colleague|co-?worker|brother|sister|mom|dad|wife|husband|not (for )?(me|myself)|it'?s not me|for (him|her|them|me)|it'?s me)\b/i;
 const CLOSE_AFTER_MS = 5000;
 // How long a pause ends what you're saying. Chrome's own "final" result usually arrives first;
 // these are the backstop. Short guide commands are quick; a sentence that stops on a word like
@@ -376,7 +379,7 @@ async function heard(text) {
     }
   }
   // In a guide, short replies drive the steps. A new symptom or a real question still gets through.
-  if (guide && text.split(/\s+/).length <= 5 && (STOP.test(text) || REPEAT.test(text) || BACK.test(text) || NEXT.test(text))) {
+  if (guide && !(guide.id && RETARGET.test(text)) && text.split(/\s+/).length <= 5 && (STOP.test(text) || REPEAT.test(text) || BACK.test(text) || NEXT.test(text))) {
     return guideCommand(text);
   }
 
@@ -384,7 +387,7 @@ async function heard(text) {
   status('Thinking');
   let r;
   try {
-    r = await api.vitalyAsk(text, state.current);
+    r = await api.vitalyAsk(text, state.current, guide && guide.id ? { id: guide.id, who: guide.who } : null);
   } catch (err) {
     r = { say: 'I can\'t reach the medical system right now. Your alerts still work.' };
   }
