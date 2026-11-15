@@ -3,21 +3,22 @@
    Normal visitors always get DEFAULTS. In dev mode, changes are saved in this browser;
    "Copy settings" puts them on the clipboard so they can become the DEFAULTS below. */
 
+// The look chosen in the ?dev panel (Nov 14).
 export const DEFAULTS = {
   print: 18,          // which print in assets/fingerprints (1-25)
-  size: 1,            // print size multiplier
-  holdMs: 1700,       // how long to hold for a match
+  size: 1.16,         // print size multiplier
+  holdMs: 1050,       // how long to hold for a match
   noFinish: false,    // dev: stop at 99% so the scan can be watched
-  tilt: true, tiltAmount: 1, follow: true,
-  split: true, splitAmount: 1, splitOpacity: 1,
-  glint: true, glintOpacity: 1, glintSpeed: 1,
-  lines: true, linesOpacity: 1,
-  glitch: true, glitchRate: 1, glitchStrength: 1,
-  particles: true, particleAmount: 1, particleSize: 1,
-  rings: true, arc: true,
-  glow: true, glowAmount: 1,
+  tilt: true, tiltAmount: .85, follow: false,
+  split: true, splitAmount: 1.65, splitOpacity: 1.35,
+  glint: true, glintOpacity: .15, glintSpeed: 1.05,
+  lines: true, linesOpacity: .25,
+  glitch: false, glitchRate: .1, glitchStrength: 0,
+  particles: false, particleAmount: 0, particleSize: 3,
+  rings: true, arc: false,
+  glow: true, glowAmount: 1.7,
   field: true, fieldOpacity: 1,
-  brackets: true, ruler: true, readouts: true, crosshairs: true,
+  brackets: true, ruler: true, readouts: false, crosshairs: false,
   shock: true,
 };
 

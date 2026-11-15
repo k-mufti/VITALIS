@@ -59,3 +59,17 @@ body { font-stretch: 87.5%; }
 /* ---------- bottom line ---------- */
 .foot { font-size: 11px; letter-spacing: .08em; }
 .hint { font-size: 11px; letter-spacing: .14em; }
+
+/* ---------- logo: holographic card ----------
+   logo-holo.js tilts the slab toward the pointer and sets --gx/--gy;
+   a glare and a rainbow foil band follow it. */
+.logo, .corner.tl { overflow: hidden; transition: transform .25s ease-out; will-change: transform; }
+.logo::before, .corner.tl::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen;
+  background:
+    radial-gradient(circle at var(--gx, 50%) var(--gy, 50%), rgba(255,255,255,.45), transparent 45%),
+    linear-gradient(115deg, transparent 20%, rgba(127,246,255,.35) 35%, rgba(201,166,255,.35) 45%, rgba(255,154,213,.3) 55%, transparent 70%);
+  background-size: 100% 100%, 250% 100%;
+  background-position: 0 0, var(--gx, 50%) 0;
+}
+@media (prefers-reduced-motion: reduce) { .logo::before, .corner.tl::before { display: none; } }

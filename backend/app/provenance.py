@@ -143,6 +143,8 @@ ASSUMPTIONS = [
      "why": "Our ranking model. The inputs are real; the weighting is ours."},
     {"value": "crew readings", "what": "Crew 03's vitals, routine, streak and ship time",
      "why": "Simulated. Real astronaut vitals are private medical data. The devices they flow through are a real interface."},
+    {"value": "7-day trend lines", "what": "The past week behind each reading in the health panel",
+     "why": "The demo stores no past days, so the week is rebuilt from today's body state. Today's point is the live reading."},
 ]
 
 

@@ -7,15 +7,19 @@ import { createHalftoneBackdrop } from './effects.js';
 export const host = $('#stage3d');
 export const scene = new THREE.Scene();
 export const camera = new THREE.PerspectiveCamera(30, 1, .01, 200);
-export const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+// stencil: the body marks its silhouette so organs shown through it never spill outside it.
+export const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, stencil: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.NoToneMapping;  // keep the black pure and the paper dots exact
 host.append(renderer.domElement);
 export const backdrop = createHalftoneBackdrop(scene, renderer);
-scene.add(new THREE.HemisphereLight(0xffffff, 0x2a2f31, 1.1));
+// Organs that need a look are drawn on this layer in a second pass, over the body (x-ray).
+export const XRAY_LAYER = 1;
+const hemi = new THREE.HemisphereLight(0xffffff, 0x2a2f31, 1.1); scene.add(hemi);
 const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(-3, 5, 6); scene.add(key);
 const rim = new THREE.DirectionalLight(0xffffff, 2.4); rim.position.set(3, 3, -5); scene.add(rim);
+[hemi, key, rim].forEach(l => l.layers.enable(XRAY_LAYER));
 
 export const pivot = new THREE.Group(); scene.add(pivot);
 export const HOME = { pos: new THREE.Vector3(0, 0, 11), look: new THREE.Vector3() };
@@ -36,7 +40,12 @@ export const twin = {
   // Detail view camera: orbits the focused organ (drag to turn, scroll to zoom).
   orbit: { on: false, focus: new THREE.Vector3(), yaw: 0, yawT: 0, pitch: 0, pitchT: 0, dist: 3, distT: 3, base: 3 },
   severity: {},      // organId -> 0..1, from setOrganSeverity
+  flagged: new Set(),  // organs that need a look (from showRisks): shown through the body
+  injury: false,     // an injury alert is showing (showInjury)
+  injuryModel: null, // the bone, muscle or organ system shown lit at the injury
   testSeverity: 0,   // FX panel preview
+  injury: false,     // an injury alert is showing (showInjury)
+  injuryModel: null, // the bone, muscle or organ system shown lit at the injury
 };
 
 export function flyTo(t, dur = 1500) {
