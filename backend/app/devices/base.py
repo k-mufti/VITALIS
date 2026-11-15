@@ -13,6 +13,7 @@ The engine only uses good readings, and counts the rest to say how confident it 
 import random
 import time
 
+from . import live
 from .catalog import DEFAULT_RESOLUTION, RESOLUTION, describe
 
 # ASSUMPTION: share of continuous wearable readings lost to motion or dropout in daily life.
@@ -42,6 +43,10 @@ class DeviceAdapter:
         for metric, value_fn in self.metrics(sim).items():
             if not self.due(sim, metric):
                 continue
+            real = live.override(sim, self.name, metric)   # a fresh reading from the real watch, if connected
+            if real:
+                out.append(vital(self.name, metric, real[0], "good", real[1]))
+                continue
             quality = "good"
             value = value_fn()
             # Continuous worn sensors suffer motion and contact loss; scheduled checks are supervised.
@@ -59,7 +64,7 @@ class DeviceAdapter:
         raise NotImplementedError
 
 
-def vital(device, metric, value, quality="good"):
+def vital(device, metric, value, quality="good", extra=None):
     meta = describe(metric)
     if value is not None:
         # Report in the device's own steps: whole beats, whole mg/dL, half breaths.
@@ -67,7 +72,7 @@ def vital(device, metric, value, quality="good"):
         value = round(round(value / step) * step, 2)
     return {"device": device, "metric": metric, "value": value, "quality": quality,
             "unit": meta["unit"], "ts": time.time(),
-            "sensor": meta["sensor"], "method": meta["method"], "cadence": meta["cadence"]}
+            "sensor": meta["sensor"], "method": meta["method"], "cadence": meta["cadence"], **(extra or {})}
 
 
 def noise(scale):

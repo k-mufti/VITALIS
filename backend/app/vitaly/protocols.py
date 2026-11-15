@@ -209,9 +209,12 @@ def spoken(kind, name):
 
 
 def all_lines(name):
-    """Every line Vitaly can say for an alert, for voicing in advance."""
+    """Every line Vitaly can say for an alert, for voicing in advance (including each opening joined
+    to its first step, which is played as one clip)."""
     out = []
     for p in PROTOCOLS.values():
-        out.append(p["say"].format(name=name))
+        say = p["say"].format(name=name)
+        out.append(say)
         out.extend(p["guide"])
+        out.append(f"{say} {p['guide'][0]}")
     return out

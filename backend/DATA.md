@@ -126,7 +126,7 @@ Standalone by design: Vitaly guides the crew member directly. It never dispatche
 - **Everyday questions** (`quick.py`): answered from live data in about 3 ms, no AI.
 - **AI** (`brain.py`): one cheap OpenRouter model (default Mistral Nemo) only for unusual questions; replies are cached for 2 minutes. Voice commands (log a countermeasure, note to Earth) are matched by rules and run after a spoken "yes". Without a key or network, rules answer.
 - **Ears** (`ears.py`): Deepgram Nova-3 live speech-to-text. The browser streams the microphone (16 kHz, echo-cancelled) to the backend, which relays it to Deepgram and sends the words back as they are spoken; the key stays on the backend. Deepgram is told to expect the word "Vitaly". The browser decides when you've finished: Deepgram's end-of-phrase signal, plus the microphone level so a pause mid-sentence doesn't cut you off. Chrome's recogniser is the fallback.
-- **Voice** (`voice.py`): Deepgram Aura, streamed (first audio in about 0.2 s). No guide line contains live numbers, so all of them are voiced once in advance and kept on disk (`data/voice_cache/`, git-ignored); they start in under 50 ms. Chrome's voice is the fallback.
+- **Voice** (`voice.py`): Deepgram Flux (default `flux-colin-en`; any `flux-<name>-en` or `aura-2-<name>-en` via `DEEPGRAM_TTS_MODEL`, plus `DEEPGRAM_TTS_SPEED` and `DEEPGRAM_TTS_EXPRESSIVITY`), streamed (first audio in about 0.2 s). No guide line contains live numbers, so all of them are voiced once in advance and kept on disk (`data/voice_cache/`, git-ignored); they start in under 50 ms. Every clip carries 100 to 450 ms of silence at each end, so an opening line and step 1 are voiced as one clip instead of two. Chrome's voice is the fallback.
 - The steps are standard first aid in plain words, written for the demo. They are not a reviewed medical procedure.
 - `eval_vitaly.py` compares models on real questions. `test_vitaly.py` covers the rules and guides.
 
@@ -139,3 +139,44 @@ Standalone by design: Vitaly guides the crew member directly. It never dispatche
 - `GET /api/vitaly/incidents`, `POST /api/vitaly/ask`, `POST /api/vitaly/action`, `POST /api/vitaly/prewarm`, `GET /api/vitaly/tts`, `GET /api/vitaly/status`: the Vitaly assistant.
 
 Tests: `test_analysis.py`, `test_devices.py`, `test_engine.py`.
+
+## 10. Real watch (Fitbit through the Google Health API)
+
+The one part of the crew data that can be real. A Fitbit worn by a person replaces the simulated smartwatch readings;
+everything else stays simulated and is labelled that way.
+
+- **Why Google Health API:** Fitbit's own Web API was switched off on 2 November 2026. The replacement is
+  <https://developers.google.com/health>. Sign-in is Google OAuth (authorization code with PKCE) as the owner of the watch.
+- **Setup (once):** Google Cloud Console: enable the Google Health API, OAuth consent screen "External" in Testing mode with
+  your own account as a test user, an OAuth client of type "Web" with redirect `http://localhost:8001/api/fitbit/callback`
+  (exactly). Put the client ID and secret in `backend/.env` (`GOOGLE_HEALTH_CLIENT_ID`, `GOOGLE_HEALTH_CLIENT_SECRET`). The
+  watch's Google account must have a Google Health profile (sign in once in the Google Health app). Then click
+  "Connect Fitbit" in the header. In Testing mode the connection expires after 7 days; connect again.
+- **What it reads** (`sources/googlehealth.py`, every 30 s): heart rate (newest samples), HRV, blood oxygen, breathing rate and
+  sleep. Tokens are kept in `backend/data/fitbit_tokens.json` (git-ignored, file mode 600). The secret never reaches the browser.
+- **Not a live stream:** the watch uploads through the phone app, so the newest heart-rate sample is usually minutes old (community
+  reports: 5 to 20 min). Every reading carries its own sample time and the app shows its age. Heart rate counts as real for
+  20 minutes; HRV, oxygen, breathing and sleep are measured overnight and count for 36 hours. Older than that, the simulated value
+  takes over and nothing is labelled real. If no sample exists there is no value; nothing is made up.
+- **In the engine** (`devices/live.py`): a fresh real reading replaces the simulated one for the smartwatch device only. Director events
+  still work: the change an event causes in the body model is added on top of the real value (an arrest shows a flat line), and the
+  reading is tagged "Real + event". Everything downstream (organs, analysis, Vitaly's watchdog) sees these readings like any other.
+- **In the app:** header chip (connected, reading, age; "Connect Fitbit" when not signed in; hidden when not set up), a "Real" tag on
+  readings in Your health, Collect and the organ detail, the footer, the Sources panel, and `GET /api/vitals/raw` (records say
+  `simulated: false` and name the Google Health API).
+- **Endpoints:** `GET /api/fitbit/status`, `GET /api/fitbit/connect`, `GET /api/fitbit/callback`, `POST /api/fitbit/disconnect`.
+- **Unverified until the first live run** (Google's docs do not say): the heart-rate sampling interval, the exact sync delay, and the
+  filter syntax for "last N minutes" (the code asks for the newest samples instead, so it does not depend on it). Sleep is listed with
+  the default data-source family; Google says sleep listing normally uses its `reconcile` method, so it may need switching.
+- **Real readings never raise an alert by themselves** (`watchdog.real_plain`): a real heart rate or blood oxygen going up, down or odd does not make
+  Vitaly speak; it is only used when you ask ("Hey Vitaly, how's my heart?"). A Director event layered on top of a real reading (tagged "Real + event") is
+  detected like any other, so you can still trigger Vitaly on demand.
+- **Whose resting heart rate:** the simulated crew member's baseline is 58 bpm (`constants.BASELINE`); judged against that, a real person at rest
+  (often 65 to 85) would set off Vitaly's "drifting up" alert (15 above baseline) the moment the watch went live. So while a fresh real heart rate
+  is in use, everything that compares heart rate with a baseline uses the wearer's own resting rate instead: Vitaly's drift alert, the heart
+  analysis, the organ's resting-heart-rate verdict and the history page (`googlehealth.resting_baseline`). It is the watch's daily resting heart rate
+  if it has one from the last 4 days, otherwise the low end (20th percentile) of at least 10 heart-rate readings spread over at least 20 minutes, from the last 12 hours (every 10 minutes it fetches the newest 2000 samples to catch up).
+  Until one of those exists, nothing is judged against a baseline at all (no drift alert) rather than against someone else's number. When the
+  real data goes stale, the simulation and its 58 bpm baseline are back. Other readings (HRV, oxygen, breathing, sleep) are still compared
+  with the simulated crew member's baselines, so a real HRV below 55 ms can show as "low"; that does not trigger a voice alert.
+

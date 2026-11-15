@@ -8,6 +8,7 @@ crew member's own preflight value is the reference and the source says so.
 `approx` marks ranges we are less sure of; the UI can show them with a "~" so nobody over-trusts.
 """
 from .. import constants as C
+from ..sources import googlehealth
 
 PERSONAL = "Your preflight baseline"
 
@@ -67,10 +68,11 @@ def heart_checks(a, reader):
     sv = reader("stroke_volume_ml")
     pp = d["pulse_pressure"]["value"]
     why = "; ".join(f"{c['cause']}: {', '.join(c['effects'])}" for c in a["chain"][:2])
+    own = googlehealth.resting_baseline(C.BASELINE["heart_rate"])   # None: real watch, own rate not learned yet
     bp_verdict = "ok" if sys_ < 120 and dia < 80 else "watch" if sys_ < 140 and dia < 90 else "act"
     return [
         check("resting_hr", "Resting heart rate", round(hr), "bpm",
-              "ok" if 60 <= hr <= 100 and hr - C.BASELINE["heart_rate"] <= 8 else "watch" if hr <= 100 else "act", why),
+              "ok" if 60 <= hr <= 100 and (own is None or hr - own <= 8) else "watch" if hr <= 100 else "act", why),
         check("blood_pressure", "Blood pressure", f"{sys_:.0f}/{dia:.0f}", "mmHg", bp_verdict,
               "AHA: 120-129 elevated, 130-139 stage 1, 140+ stage 2"),
         check("hr_recovery", "Heart-rate recovery", round(hrr), "bpm in 1 min",

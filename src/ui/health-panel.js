@@ -1,4 +1,4 @@
-import { $, $$ } from '../util.js';
+import { $, $$, realTag } from '../util.js';
 import { live, onData, organ, api } from '../data/client.js';
 import { SYS, VITALS } from '../data/mock.js';
 import { setHoverOrgan } from '../three/api.js';
@@ -169,7 +169,7 @@ function row(k) {
   const sys = r.sys ? ` data-sys="${r.sys}"` : '';
   const tip = [d.usual, r.hint].filter(Boolean).join(' · ');
   return `<${tag} class="hp-row ${look}"${sys} title="${tip}">
-    <span class="hp-name">${r.name}</span>
+    <span class="hp-name">${r.name}${realTag(live.vitals[r.trend])}</span>
     ${spark(k, d.value)}
     <span class="hp-val"><b>${d.value}<small>${d.unit}</small></b><em>${word(k, d.look)}</em></span>
   </${tag}>`;

@@ -15,6 +15,7 @@ import time
 from .. import constants as C
 from ..devices.catalog import describe
 from ..engine import signals
+from ..sources import googlehealth
 
 
 class Reader:
@@ -60,6 +61,8 @@ def inputs(reader, metrics):
 def vs_baseline(metric, value):
     """Layer 3: value against this crew member's preflight baseline."""
     base = C.BASELINE.get(metric)
+    if metric == "heart_rate":   # the real wearer's own resting rate while the real watch is the source
+        base = googlehealth.resting_baseline(base)
     if base in (None, 0):
         return {"baseline": base, "delta": None, "pct": None}
     return {"baseline": base, "delta": round(value - base, 2), "pct": round(100 * (value - base) / base, 1)}

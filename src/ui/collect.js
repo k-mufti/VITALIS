@@ -1,4 +1,4 @@
-import { $ } from '../util.js';
+import { $, realTag } from '../util.js';
 import { state } from '../state.js';
 import { live, onData, api } from '../data/client.js';
 
@@ -62,11 +62,11 @@ function readingRow(m) {
   let record = '';
   if (isOpen) {
     record = rec
-      ? `<div class="col-rec"><span>${rec.format} · simulated</span><pre>${JSON.stringify(rec.record, null, 2)}</pre></div>`
+      ? `<div class="col-rec"><span>${rec.format} · ${rec.simulated ? 'simulated' : 'real'}</span><pre>${JSON.stringify(rec.record, null, 2)}</pre></div>`
       : '<div class="col-rec"><span>No record yet</span></div>';
   }
   return `<button class="col-row${isOpen ? ' open' : ''}" data-metric="${m.metric}" aria-expanded="${isOpen}">
-      <span class="col-name">${NAME[m.metric] || m.metric}</span>
+      <span class="col-name">${NAME[m.metric] || m.metric}${realTag(v)}</span>
       <span class="col-often">${OFTEN[m.cadence] || cap(m.cadence)}</span>
       <span class="col-val">${valueText(m.metric, m.unit)}</span>
       <span class="col-ago">${v ? ago(v.ts) : 'Waiting'}</span>
@@ -78,8 +78,8 @@ const plainReal = s => s.replace(/\s*\(ASSUMPTION[^)]*\)/, '. Not yet flown on a
 
 function deviceCard(d) {
   return `<article class="col-dev">
-    <header><h4>${d.label}</h4><span class="col-live"><i></i>Sending</span></header>
-    <p class="col-real">${plainReal(d.real)}</p>
+    <header><h4>${d.label}</h4><span class="col-live"><i></i>${d.live_source ? 'Real · ' + d.live_source : 'Sending'}</span></header>
+    <p class="col-real">${d.live_source ? 'A real watch worn by a person. Its readings reach us through the phone app, so they are minutes old. Anything it cannot measure stays simulated.' : plainReal(d.real)}</p>
     <div class="col-rows">${d.metrics.map(readingRow).join('')}</div>
   </article>`;
 }
@@ -104,7 +104,9 @@ function render() {
       <h3>${g.title}</h3><p class="col-say">${g.say}</p>
       ${devices.filter(d => d.kind === g.kind).map(deviceCard).join('')}
     </section>`).join('')}</div>
-    <p class="col-note">Demo: readings are simulated. The units, steps and record formats are the ones real devices use.</p>`;
+    <p class="col-note">${devices.some(d => d.live_source)
+      ? 'Readings tagged Real come from a real watch, minutes old. Everything else is simulated, in the units, steps and record formats real devices use.'
+      : 'Demo: readings are simulated. The units, steps and record formats are the ones real devices use.'}</p>`;
 }
 
 function loadRaw() {
@@ -134,6 +136,8 @@ export function initCollect() {
     }
     if (type === 'offline') render();
   });
+  // The device list changes when the real watch connects or its data goes stale.
+  setInterval(() => { if (state.view === 'collect' && live.online) api.vitals().then(v => { devices = v.devices; }).catch(() => {}); }, 10000);
   // Readings stream in every second; redraw once a second, and only while this view is showing.
   setInterval(() => { if (state.view === 'collect') render(); }, 1000);
   setInterval(() => { if (state.view === 'collect') loadRaw(); }, 2000);

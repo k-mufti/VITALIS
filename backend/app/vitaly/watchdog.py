@@ -5,6 +5,9 @@ Three kinds of problem:
   spike   a sharp change: heart rate moving 25+ bpm within a minute
   drift   far from this person's normal: resting heart rate 15+ above baseline
 
+Readings from a real watch (devices/live.py) are never alerted on by themselves, only asked about; a Director event
+layered on top of one is detected like any other (real_plain below).
+
 Rules decide; the AI never does. Each detected problem becomes an incident with an opening line
 and a step-by-step guide (protocols.py) that Vitaly walks the crew member through. Standalone:
 the guide starts at once and never waits on another person or on Earth.
@@ -19,6 +22,7 @@ import time
 from .. import constants as C
 from .. import missions as M
 from ..triage import _scale as time_scale
+from ..sources import googlehealth
 from . import crew, profile, protocols
 
 EARTH_REPLY = "Flight surgeon: we have your readings. Keep following the steps. We are standing by."
@@ -67,6 +71,14 @@ def above(sim, metric, limit):
     return v is not None and min(v) > limit
 
 
+def real_plain(sim, metric):
+    """True if the latest reading of this metric is from the real watch with no Director event on top.
+    Those readings are for asking Vitaly about ("Hey Vitaly, how's my heart?"); they never set off an alert by
+    themselves, so a real person's heart rate going up and down does not make Vitaly speak."""
+    v = sim.latest.get(metric)
+    return bool(v and v.get("real") and not v.get("modified"))
+
+
 def detect(sim, now):
     """Problems present right now: {kind: value text}."""
     r = sim.recent
@@ -74,7 +86,7 @@ def detect(sim, now):
     found = {}
 
     hr = r("heart_rate")
-    if hr is not None:
+    if hr is not None and not real_plain(sim, "heart_rate"):
         latest = last_two(sim, "heart_rate")[-1]
         sim.hr_trace.append((now, latest))
         if below(sim, "heart_rate", lim["hr_arrest"]):
@@ -86,11 +98,14 @@ def detect(sim, now):
         recent = [v for t, v in sim.hr_trace if now - t <= SPIKE_WINDOW_S]
         if len(recent) >= 3 and max(recent) - min(recent) >= SPIKE_BPM:
             found["heart_spike"] = f"{max(recent) - min(recent):.0f}"
-        if hr - C.BASELINE["heart_rate"] >= DRIFT_BPM:  # drift is slow: the smoothed value is right
-            found["heart_drift"] = f"+{hr - C.BASELINE['heart_rate']:.0f} bpm"
+        # Drift is judged against this person's own resting rate: the real wearer's while the real watch is
+        # live (unknown until learned: then no drift alert), the simulated crew member's otherwise.
+        base = googlehealth.resting_baseline(C.BASELINE["heart_rate"])
+        if base is not None and hr - base >= DRIFT_BPM:  # drift is slow: the smoothed value is right
+            found["heart_drift"] = f"+{hr - base:.0f} bpm"
     if above(sim, "ecg_irregular", 0.5):
         found["irregular_rhythm"] = f"{hr:.0f} bpm" if hr else "?"
-    if below(sim, "spo2", lim["spo2_low"]):
+    if not real_plain(sim, "spo2") and below(sim, "spo2", lim["spo2_low"]):
         found["low_oxygen_blood"] = f"{last_two(sim, 'spo2')[-1]:.0f}%"
     sys_, dia = r("bp_sys"), r("bp_dia")
     if sys_ is not None:
