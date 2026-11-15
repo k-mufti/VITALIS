@@ -1,3 +1,4 @@
+import './logo-badge.js';   // the orb badge (draws over the slab)
 // VITALIS logo: holographic card. The slab tilts toward the pointer and a glare +
 // foil sheen follow it (styles in styles/type.css). Skipped for reduced motion.
 
