@@ -37,6 +37,8 @@ export const twin = {
   orbit: { on: false, focus: new THREE.Vector3(), yaw: 0, yawT: 0, pitch: 0, pitchT: 0, dist: 3, distT: 3, base: 3 },
   severity: {},      // organId -> 0..1, from setOrganSeverity
   testSeverity: 0,   // FX panel preview
+  injury: false,     // an injury alert is showing (showInjury)
+  injuryModel: null, // the bone, muscle or organ system shown lit at the injury
 };
 
 export function flyTo(t, dur = 1500) {

@@ -496,6 +496,7 @@ export function prefetchOrgans() {
 
 // Should this model be showing? The open system's model, or (on the Body view) the models of the picked layer.
 function wanted(k, now) {
+  if (twin.injury) return twin.injuryModel === k && now - twin.focusAt > 650;   // injury drill: only the hurt part
   if (twin.focus) return twin.focus === k && now - twin.focusAt > 650;
   return (LAYER_MODELS[twin.layer] || []).includes(k);
 }
@@ -590,6 +591,7 @@ export function updateOrgans(now, dt) {
     // Region glow (the thigh on the écorché) only while that system is hovered or open.
     let regionGoal = 0;
     if (o.region && (twin.focus === k || twin.hover === k)) regionGoal = 1;
+    if (twin.injury && twin.injuryModel === k) regionGoal = 1.8;   // injury: the hurt spot glows strong (red)
     o.u.uRegionOn.value += (regionGoal - o.u.uRegionOn.value) * Math.min(1, dt * 6);
     if (want) o.reveal = Math.min(1, o.reveal + dt / (k === 'muscles' ? 2.2 : 1.5));
     else o.reveal = Math.max(0, o.reveal - dt / .5);
