@@ -1,0 +1,140 @@
+/* Injury drill (src/ui/injury.js): the hidden operator panel and the injury alert.
+   Same signage look as the rest: white boxes, black lines, Barlow. Red = injury. */
+
+/* While an injury shows, the side panels step back so the body and the alert lead. */
+.view.body .anatomy, .view.body .risk-rail, .view.body .body-foot, .view.body .hint { transition: opacity .5s var(--ease); }
+.injury-on .view.body .anatomy, .injury-on .view.body .risk-rail,
+.injury-on .view.body .body-foot, .injury-on .view.body .hint { opacity: 0; pointer-events: none; }
+.injury-on .view.body .risk-rail > * { pointer-events: none; }
+
+/* ---------- hidden operator panel ---------- */
+.inj-op {
+  position: fixed; left: 24px; bottom: 24px; z-index: 60; width: 380px; max-height: calc(100vh - 110px); overflow-y: auto;
+  padding: 16px; background: var(--ink); color: var(--white); box-shadow: 0 12px 40px rgba(0, 0, 0, .25);
+  animation: injUp .25s var(--ease) both;
+}
+.inj-op[hidden] { display: none; }
+.inj-op header { display: flex; flex-direction: column; gap: 2px; margin-bottom: 14px; }
+.inj-op header b { font: 600 16px var(--cond); letter-spacing: .16em; text-transform: uppercase; }
+.inj-op header span { font: 400 13px var(--sans); color: #9a9a95; }
+.inj-op label { display: block; margin: 12px 0 8px; font: 600 12px var(--cond); letter-spacing: .14em; text-transform: uppercase; color: #9a9a95; }
+
+/* Quick picks: the injuries most likely in space. */
+.inj-common {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px; max-height: 214px; overflow-y: auto;
+  padding-right: 4px; scrollbar-width: thin; scrollbar-color: #3a3a38 transparent;
+}
+.inj-common button {
+  padding: 7px 9px; text-align: left; border: 1px solid #2c2c2a; color: #e4e4df;
+  font: 500 13px/1.25 var(--sans); transition: background .2s, border-color .2s;
+}
+.inj-common button:hover, .inj-common button:focus-visible { outline: none; border-color: #8a8a85; background: #1d1d1c; }
+.inj-common button.on { border-color: var(--red); background: color-mix(in srgb, var(--red) 22%, transparent); color: var(--white); }
+
+.inj-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 8px; font: 500 14px var(--sans); }
+.inj-crumbs button { color: #cfcfca; }
+.inj-crumbs button:last-child { color: var(--white); font-weight: 600; }
+.inj-crumbs button:hover { color: var(--white); text-decoration: underline; }
+.inj-crumbs i { font-style: normal; color: #6a6a66; }
+
+.inj-parts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.inj-parts button {
+  padding: 9px 10px; text-align: left; border: 1px solid #3a3a38; color: var(--white);
+  font: 500 14px var(--sans); transition: background .2s, border-color .2s;
+}
+.inj-parts button:hover, .inj-parts button:focus-visible { outline: none; border-color: var(--white); background: #1d1d1c; }
+.inj-parts button i { font-style: normal; color: #8a8a85; }
+
+.inj-op input {
+  width: 100%; padding: 10px 12px; border: 1px solid #3a3a38; background: #1a1a19; color: var(--white);
+  font: 500 16px var(--sans); outline: none;
+}
+.inj-op input:focus { border-color: var(--white); }
+.inj-preview { margin-top: 8px; font: 400 13px var(--sans); color: #9a9a95; }
+.inj-preview.miss { color: var(--amber); }
+
+.inj-actions { display: flex; gap: 8px; margin-top: 14px; }
+.inj-send {
+  flex: 1; padding: 11px; background: var(--red); color: var(--white);
+  font: 600 14px var(--cond); letter-spacing: .14em; text-transform: uppercase;
+}
+.inj-send:disabled { background: #3a3a38; color: #7a7a76; cursor: not-allowed; }
+.inj-clear { padding: 11px 16px; border: 1px solid #3a3a38; color: #cfcfca; font: 600 14px var(--cond); letter-spacing: .14em; text-transform: uppercase; }
+.inj-clear:hover { border-color: var(--white); color: var(--white); }
+
+/* ---------- screen flash when the injury is caught ---------- */
+.inj-flash {
+  position: fixed; inset: 0; z-index: 55; pointer-events: none;
+  box-shadow: inset 0 0 0 6px var(--red), inset 0 0 120px color-mix(in srgb, var(--red) 35%, transparent);
+  animation: injFlash 1.6s steps(1, end) both;
+}
+@keyframes injFlash { 0%, 25%, 50% { opacity: 1; } 12%, 37% { opacity: 0; } 100% { opacity: 0; } }
+
+/* ---------- the alert ---------- */
+.inj-alert {
+  position: fixed; right: 36px; top: 88px; bottom: 52px; z-index: 50; width: 420px;
+  display: flex; flex-direction: column; background: var(--white); border: 1px solid var(--ink);
+  box-shadow: 0 16px 50px rgba(0, 0, 0, .14); animation: injIn .45s var(--ease) both;
+  --acc: var(--amber);
+}
+.inj-alert.urgent { --acc: var(--red); }
+.inj-alert.out { animation: injOut .3s var(--ease) both; }
+@keyframes injIn { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes injOut { to { opacity: 0; transform: translateX(24px); } }
+@keyframes injUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+.inj-band {
+  flex: none; display: flex; align-items: center; justify-content: space-between; padding: 12px 18px;
+  background: var(--acc); color: var(--white);
+}
+.inj-band span { display: flex; align-items: center; gap: 10px; font: 700 15px var(--cond); letter-spacing: .2em; text-transform: uppercase; }
+.inj-band span i { width: 10px; height: 10px; border-radius: 50%; background: var(--white); animation: injBlink 1s steps(1, end) infinite; }
+@keyframes injBlink { 50% { opacity: 0; } }
+.inj-band b { font: 600 18px var(--cond); font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+
+.inj-main { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; padding: 18px 20px 8px; }
+.inj-main::-webkit-scrollbar { width: 0; }
+.inj-where { font: 600 13px var(--cond); letter-spacing: .16em; text-transform: uppercase; color: var(--acc); }
+.inj-main h2 { margin-top: 2px; font: 600 34px/1.05 var(--cond); letter-spacing: .01em; }
+.inj-src { margin-top: 6px; font: 400 14px var(--sans); color: var(--soft); }
+
+.inj-you { margin-top: 14px; padding: 10px 12px; border-left: 3px solid var(--acc); background: var(--paper); font: 500 15px/1.35 var(--sans); }
+.inj-you b { display: block; margin-bottom: 2px; font: 600 12px var(--cond); letter-spacing: .14em; text-transform: uppercase; color: var(--soft); }
+
+.inj-main h3 { margin: 18px 0 8px; font: 600 13px var(--cond); letter-spacing: .16em; text-transform: uppercase; color: var(--soft); }
+
+.inj-steps { list-style: none; }
+.inj-steps li + li { border-top: 1px solid var(--line); }
+.inj-steps button { display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 10px 0; text-align: left; }
+.inj-steps i {
+  flex: none; display: grid; place-items: center; width: 26px; height: 26px; margin-top: -2px;
+  border: 1.5px solid var(--ink); font: 600 15px var(--cond); font-style: normal; transition: background .2s, color .2s;
+}
+.inj-steps span { font: 500 16px/1.35 var(--sans); transition: color .2s; }
+.inj-steps button:hover i { background: var(--paper); }
+.inj-steps button.done i { background: var(--ink); color: var(--white); font-size: 0; }
+.inj-steps button.done i::after { content: '✓'; font-size: 15px; }
+.inj-steps button.done span { color: var(--soft); text-decoration: line-through; text-decoration-color: var(--line); }
+
+.inj-help { list-style: none; }
+.inj-help li { position: relative; padding: 4px 0 4px 18px; font: 400 15px/1.35 var(--sans); }
+.inj-help li::before { content: ''; position: absolute; left: 2px; top: 12px; width: 7px; height: 7px; background: var(--acc); }
+
+.inj-facts { margin-top: 16px; border-top: 1px solid var(--line); }
+.inj-facts div { display: grid; grid-template-columns: 96px 1fr; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.inj-facts dt { font: 600 12px/1.6 var(--cond); letter-spacing: .12em; text-transform: uppercase; color: var(--soft); }
+.inj-facts dd { font: 400 14px/1.4 var(--sans); }
+
+.inj-foot { flex: none; display: grid; grid-template-columns: 1.3fr 1fr .8fr; gap: 8px; padding: 14px 20px 18px; border-top: 1px solid var(--line); }
+.inj-foot button { padding: 11px 12px; font: 600 14px var(--cond); letter-spacing: .06em; text-transform: uppercase; border: 1px solid var(--ink); transition: background .2s, color .2s; }
+.inj-foot button:hover { background: var(--paper); }
+.inj-ground { text-align: left; background: var(--acc); border-color: var(--acc) !important; color: var(--white); }
+.inj-ground:hover { background: var(--acc) !important; filter: brightness(.95); }
+.inj-ground small { display: block; margin-top: 2px; font: 400 12px var(--sans); letter-spacing: 0; text-transform: none; opacity: .9; }
+.inj-ground.sent { background: var(--white) !important; color: var(--ink); border-color: var(--ink) !important; }
+.inj-alert.all-done .inj-done { background: var(--ink); color: var(--white); }
+
+@media (max-width: 900px) {
+  .inj-alert { left: 16px; right: 16px; width: auto; top: auto; max-height: 70vh; }
+  .inj-op { left: 16px; right: 16px; width: auto; }
+}

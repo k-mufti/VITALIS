@@ -7,7 +7,7 @@ export const API = 'http://localhost:8001';
 const WS_URL = 'ws://localhost:8001/ws';
 
 // Latest data from the backend. Views read from here (or from SYS, which is kept in sync).
-export const live = { online: false, state: null, risks: [], vitals: {}, triage: [], previewDay: null };
+export const live = { online: false, state: null, risks: [], vitals: {}, triage: [], previewDay: null, trends: null };
 
 const listeners = [];
 // fn(type, live). type: 'online' | 'offline' | 'state' | 'vital' | 'triage'
@@ -59,6 +59,7 @@ export const api = {
   vitals: () => request('/api/vitals'),
   sources: () => request('/api/sources'),
   provenance: () => request('/api/provenance'),
+  trends: days => request('/api/trends' + query({ days })),
 };
 
 /* One organ, merged from live data and the mock fallback, in the shape the views use.

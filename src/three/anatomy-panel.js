@@ -93,8 +93,16 @@ export function initAnatomyPanel(setHover, focus, reset) {
   panel.className = 'anatomy';
   panel.id = 'anatomy';
   panel.setAttribute('aria-label', 'Your body');
+  // "Highlight" switch: organs that need a look show through the skin. Remembered in this browser.
+  let saved = null;
+  try { saved = localStorage.getItem('vitalis.highlight'); } catch {}
+  twin.showFlagged = saved !== 'off';
   panel.innerHTML = `
-    <h3 class="t-label">Your body</h3>
+    <div class="an-head">
+      <h3 class="t-label">Your body</h3>
+      <button class="an-switch" id="anHighlight" role="switch" aria-checked="${twin.showFlagged}"
+        title="Show organs that need a look through the skin"><i></i>Highlight</button>
+    </div>
     <div class="an-tabs" role="tablist" aria-label="Body layers">
       ${LAYERS.map(l => `<button class="an-tab" role="tab" data-layer="${l.id}">${l.label}</button>`).join('')}
     </div>
@@ -122,5 +130,10 @@ export function initAnatomyPanel(setHover, focus, reset) {
     t.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); zoomTo(t); } });
   });
   addEventListener('keydown', e => { if (e.key === 'Escape') zoomOut(); });
+  $('#anHighlight').addEventListener('click', e => {
+    twin.showFlagged = !twin.showFlagged;
+    e.currentTarget.setAttribute('aria-checked', twin.showFlagged);
+    try { localStorage.setItem('vitalis.highlight', twin.showFlagged ? 'on' : 'off'); } catch {}
+  });
   setLayer('skin');
 }

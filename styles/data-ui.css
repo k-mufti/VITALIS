@@ -12,38 +12,43 @@
 
 /* ---------- Today panel (body view, right side) ---------- */
 .today { width: 100%; }
-.t-head { display: flex; justify-content: space-between; align-items: flex-end; }
-.t-head > span, .t-label { font: 600 13px var(--cond); letter-spacing: .2em; text-transform: uppercase; }
-.t-head > span small { display: block; color: var(--soft); letter-spacing: .14em; margin-top: 2px; }
-.streak { font: 300 44px/0.9 var(--cond); text-align: right; transition: color .4s; }
-.streak small { display: block; font: 600 11px var(--cond); letter-spacing: .18em; text-transform: uppercase; color: var(--soft); margin-top: 4px; }
-.streak.up { color: var(--cyan); }
-.t-bar { height: 2px; background: var(--line); margin-top: 14px; }
-.t-bar i { display: block; height: 100%; background: var(--ink); transition: width .8s var(--ease); }
-.t-count { font: 500 12px var(--cond); letter-spacing: .14em; text-transform: uppercase; color: var(--soft); margin-top: 8px; }
+/* Mood drawer: one question, five faces, a week of dots */
+.mood { display: flex; flex-direction: column; min-height: calc(100vh - 170px); }
+.m-q { font: 300 52px/0.95 var(--cond); letter-spacing: -.01em; margin-top: 18px; }
+.m-hero { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 34px 0 26px; }
+.mface { fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; overflow: visible; }
+.mface .eye { fill: currentColor; stroke: none; }
+.mface path { transition: d .5s var(--ease); }
+.mface.big { width: 168px; height: 168px; color: var(--line); stroke-width: 1; transition: color .5s var(--ease), transform .5s var(--ease); }
+.m-hero.set .mface.big { color: var(--ink); animation: moodPop .5s var(--ease); }
+.m-hero[data-m="1"] .mface.big, .m-hero[data-m="2"] .mface.big { color: #44606a; }
+.m-hero[data-m="4"] .mface.big, .m-hero[data-m="5"] .mface.big { color: var(--cyan); }
+.m-word { font: 600 15px var(--cond); letter-spacing: .32em; text-transform: uppercase; padding-left: .32em; min-height: 18px; }
+@keyframes moodPop { 0% { transform: scale(.92); } 60% { transform: scale(1.03); } 100% { transform: scale(1); } }
 
-.routine, .vitals { list-style: none; margin-top: 10px; }
-.routine button, .vitals button { width: 100%; display: grid; align-items: center; text-align: left; border-bottom: 1px solid var(--line); transition: background .25s, color .25s; }
-.routine button { grid-template-columns: 52px 1fr auto; padding: 8px 6px; }
-.routine time { font: 500 14px var(--cond); letter-spacing: .08em; color: var(--soft); font-variant-numeric: tabular-nums; }
-.routine span { font: 500 15px var(--cond); letter-spacing: .06em; text-transform: uppercase; }
-.routine i { font: 600 12px var(--cond); font-style: normal; letter-spacing: .14em; text-transform: uppercase; }
-.routine .done span, .routine .done time { color: #b4b4ae; }
-.routine .done i { color: var(--green); }
-.routine .due button { background: var(--ink); color: var(--white); }
-.routine .due time { color: #9fe3ee; }
-.routine .due i { color: var(--amber); animation: idle 1.6s infinite; }
-.routine button:hover { background: var(--white); }
-.routine .due button:hover { background: #222; }
+.m-pick { display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.m-pick button { display: grid; place-items: center; padding: 16px 0; color: #b4b4ae; transition: color .25s, background .25s; }
+.m-pick button + button { border-left: 1px solid var(--line); }
+.m-pick .mface { width: 36px; height: 36px; transition: transform .35s var(--ease); }
+.m-pick button:hover { color: var(--ink); }
+.m-pick button:hover .mface { transform: translateY(-2px); }
+.m-pick button.on { background: var(--ink); color: var(--white); }
+.m-save { margin-top: 18px; }
+
+.m-week { display: flex; justify-content: space-between; align-items: flex-end; margin-top: auto; padding-top: 40px; }
+.m-week ol { list-style: none; display: flex; gap: 14px; }
+.m-week li { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.m-week .col { position: relative; width: 8px; height: 56px; background: linear-gradient(var(--line), var(--line)) center / 1px 100% no-repeat; }
+.m-week .col i { position: absolute; left: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--ink); transform: translateY(50%); transition: bottom .6s var(--ease); }
+.m-week .col i.empty { bottom: 50%; background: var(--white); border: 1px dashed var(--soft); }
+.m-week .now .col i:not(.empty) { background: var(--cyan); box-shadow: 0 0 0 4px color-mix(in srgb, var(--cyan) 18%, transparent); }
+.m-week small { font: 600 11px var(--cond); letter-spacing: .14em; color: var(--soft); }
+.m-week .now small { color: var(--ink); }
+.m-streak { font: 600 11px var(--cond); letter-spacing: .18em; text-transform: uppercase; color: var(--soft); text-align: right; }
+.m-streak b { display: block; font: 300 44px/0.9 var(--cond); letter-spacing: 0; color: var(--ink); }
 
 .t-label { display: block; margin-top: 30px; }
 .t-label small { color: var(--soft); letter-spacing: .14em; margin-left: 10px; }
-.vitals button { grid-template-columns: 18px 1fr auto; gap: 4px; padding: 10px 6px; }
-.v-name { font: 500 15px var(--cond); letter-spacing: .06em; text-transform: uppercase; }
-.v-name small { display: block; font: 400 12px var(--sans); letter-spacing: 0; text-transform: none; color: var(--soft); }
-.vitals b { font: 300 28px/1 var(--cond); font-variant-numeric: tabular-nums; }
-.vitals b small { font: 500 12px var(--cond); letter-spacing: .08em; color: var(--soft); margin-left: 4px; }
-.vitals button:hover { background: var(--white); }
 
 .checkin-btn { margin-top: 22px; width: 100%; display: flex; justify-content: space-between; align-items: center; background: var(--ink); color: var(--white); font: 600 16px var(--cond); letter-spacing: .16em; text-transform: uppercase; padding: 14px 18px; transition: background .3s; }
 .checkin-btn span { transition: transform .3s var(--ease); }
