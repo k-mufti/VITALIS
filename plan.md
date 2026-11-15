@@ -246,6 +246,7 @@ Organs open from BOTH the risk panel and the body spots; both call `openSystem(i
 | GET    | `/api/space-weather`      | live NOAA proton flux (`now`) + recent NASA DONKI solar particle events and flares |
 | GET    | `/api/comms`              | one-way + round-trip Earth delay (JPL Horizons)       |
 | GET    | `/api/vitals`             | latest reading per metric + device list               |
+| GET    | `/api/vitals/raw`         | latest readings in each device's own record format: HealthKit samples (watch, cuff), Dexcom EGV (glucose patch) |
 | GET    | `/api/provenance`         | where every number comes from: live APIs (with a re-runnable URL each), published values with citations, and our assumptions |
 | GET    | `/api/hrp`                | NASA HRP framework: 5 hazards, 17 risks, organ + mission mapping, coverage, research studies |
 | GET    | `/api/sources`            | live / cache / fallback status of every data source (Engineer Mode) |

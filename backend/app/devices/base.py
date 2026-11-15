@@ -1,7 +1,7 @@
-"""Device adapter interface. Real hardware (biomonitor shirt, ultrasound, dosimeter) plugs in by
+"""Device adapter interface. Real hardware (smartwatch, glucose patch, ultrasound, dosimeter) plugs in by
 implementing metrics(); nothing else in the backend changes. In the demo, all adapters are simulated.
 
-Each metric is read on its own schedule from devices/catalog.py: the shirt streams every second,
+Each metric is read on its own schedule from devices/catalog.py: the watch streams every second,
 the blood pressure cuff is daily, the ultrasound weekly (squeezed into demo seconds).
 sim.measure_now makes every device take an unscheduled reading on the next read.
 
@@ -13,7 +13,7 @@ The engine only uses good readings, and counts the rest to say how confident it 
 import random
 import time
 
-from .catalog import describe
+from .catalog import DEFAULT_RESOLUTION, RESOLUTION, describe
 
 # ASSUMPTION: share of continuous wearable readings lost to motion or dropout in daily life.
 NOISY_RATE = 0.015
@@ -62,7 +62,9 @@ class DeviceAdapter:
 def vital(device, metric, value, quality="good"):
     meta = describe(metric)
     if value is not None:
-        value = round(value, 2 if metric in ("dose_rate_usv_h", "co2_mmhg") else 1)
+        # Report in the device's own steps: whole beats, whole mg/dL, half breaths.
+        step = RESOLUTION.get(metric, DEFAULT_RESOLUTION)
+        value = round(round(value / step) * step, 2)
     return {"device": device, "metric": metric, "value": value, "quality": quality,
             "unit": meta["unit"], "ts": time.time(),
             "sensor": meta["sensor"], "method": meta["method"], "cadence": meta["cadence"]}
