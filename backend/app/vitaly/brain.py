@@ -156,9 +156,14 @@ def command(question, state, sim):
     return None
 
 
-async def ask(question, state, sim, focus=None):
-    """Spoken answer (max two sentences) and an optional action for the crew member to confirm."""
+async def ask(question, state, sim, focus=None, current=None):
+    """Spoken answer (max two sentences) and an optional action for the crew member to confirm.
+    `current` is the guide being walked through ({"id", "who"}), so "it's for my teammate" can change the patient."""
     guide = guides.match(question)
+    if not guide:
+        patient = guides.retarget(question, current)
+        if patient:
+            guide = guides.build(current["id"], patient, ack=True)
     if guide:
         return {"say": guide["say"], "action": None, "engine": "guide",
                 "guide": {**guide, "readings": readings_line(guide, sim)}}

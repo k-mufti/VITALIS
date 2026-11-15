@@ -84,6 +84,17 @@ cases = [
     ("she keeps throwing up", "vomiting", "other"),
     ("I'm having a panic attack", "panic", "self"),
     ("something is wrong with Kenji", "assess", "other"),
+    # other people, named in more ways: the word "teammate" was not understood and fell through to "you"
+    ("my teammate has chest pain", "chest_pain", "other"),
+    ("my team mate has a sharp pain in his chest", "chest_pain", "other"),
+    ("I have a teammate with chest pain", "chest_pain", "other"),
+    ("I think my teammate is having chest pain", "chest_pain", "other"),
+    ("my buddy is bleeding from his arm", "bleeding", "other"),
+    ("my brother can't breathe", "breathing", "other"),
+    ("my friend is choking", "choking", "other"),
+    ("my roommate fainted", "fainting", "other"),
+    ("I have a sharp pain in my chest", "chest_pain", "self"),
+    ("my chest hurts and my teammate is here", "chest_pain", "self"),
 ]
 for text, gid, person in cases:
     g = guides.match(text)
@@ -104,6 +115,22 @@ r = asyncio.run(brain.ask("sharp pain in my chest", state, sim))
 assert r["engine"] == "guide" and r["guide"]["id"] == "chest_pain" and "heart rate" in r["guide"]["readings"]
 r = asyncio.run(brain.ask("someone else has a sharp pain in their chest", state, sim))
 assert r["guide"]["who"] == "other" and r["guide"]["readings"] is None  # can't see someone else's body
+
+# Changing the patient part-way through a guide
+me, them = {"id": "chest_pain", "who": "self"}, {"id": "chest_pain", "who": "other"}
+for text in ("it's not for me, it's for my teammate", "no it's my teammate", "it's for someone else", "it's not me", "he is the one with the pain", "not for me"):
+    assert guides.retarget(text, me) == "other", text
+for text in ("actually it's me", "it's for me", "it's me"):
+    assert guides.retarget(text, them) == "self", text
+for text in ("next", "repeat that", "how long will this take", "how is my heart"):
+    assert guides.retarget(text, me) is None and guides.retarget(text, them) is None, text
+assert guides.retarget("it's my teammate", None) is None and guides.retarget("it's for me", {"id": "unresponsive", "who": "other"}) is None   # no self version
+g = asyncio.run(brain.ask("no it's not for me, it's for my teammate", state, sim, current=me))["guide"]
+assert g["who"] == "other" and g["say"].startswith("Got it, it's not you.") and g["steps"] == guides.GUIDES["chest_pain"]["steps"]["other"] and g["readings"] is None
+g = asyncio.run(brain.ask("actually it's me", state, sim, current=them))["guide"]
+assert g["who"] == "self" and g["say"].startswith("Got it, it's you.") and g["readings"]                # your own readings come back
+assert asyncio.run(brain.ask("my teammate is not breathing", state, sim, current=me))["guide"]["id"] == "unresponsive"   # a new emergency wins
+assert "guide" not in asyncio.run(brain.ask("how is my heart", state, sim, current=me))
 
 # Voice commands are matched by rules, not the model
 say, action = brain.command("I did sixty minutes on the treadmill, log it", state, sim)
