@@ -21,9 +21,9 @@ if ! sudo test -f "$KEY"; then
   exit 0
 fi
 
-if [ ! -d /opt/vitalis ]; then sudo -E git clone "$REPO" /opt/vitalis; fi
-sudo -E git -C /opt/vitalis checkout -- backend/data/cache 2>/dev/null || true
-sudo -E git -C /opt/vitalis pull --ff-only
+if [ ! -d /opt/vitalis ]; then sudo -E git -c safe.directory=/opt/vitalis clone "$REPO" /opt/vitalis; fi
+sudo -E git -c safe.directory=/opt/vitalis -C /opt/vitalis checkout -- backend/data/cache 2>/dev/null || true
+sudo -E git -c safe.directory=/opt/vitalis -C /opt/vitalis pull --ff-only
 
 cd /opt/vitalis/backend
 sudo python3 -m venv .venv
