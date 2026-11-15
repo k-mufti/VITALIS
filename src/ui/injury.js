@@ -116,7 +116,10 @@ function send() {
 let runId = 0, clock = null, t0 = 0;
 
 // Zoom in step by step, then show the alert. pathIds general to specific, name = what was typed.
-export function triggerInjury(pathIds, name) {
+// opts.card = false: zoom only, no card (Vitaly's alerts). opts.vitaly = true: the crew member told
+// Vitaly, who reads the steps out in its own panel, so the card leaves them out. opts.title and
+// opts.yourData: Vitaly's own name for it and the line it said from their data, so both agree.
+export function triggerInjury(pathIds, name, opts = {}) {
   const path = nodes(pathIds);
   if (!path.length) return;
   const inj = matchInjury(name, path) || GENERAL;
@@ -136,7 +139,8 @@ export function triggerInjury(pathIds, name) {
     if (model === 'bones') sink = n.bone ? { ...n.bone, z: 0, radius: Math.max(.13, n.spot.radius) } : { depth: Math.min(.08, n.spot.radius * .5) };
     showInjury(i === last ? { ...n.spot, ...sink, ...inj.glow } : n.spot, i === last ? model : null);
   }, i * 950));
-  setTimeout(() => run === runId && openAlert(path, name, inj), path.length * 950 + 250);
+  if (opts.card === false) return;
+  setTimeout(() => run === runId && openAlert(path, name, inj, opts), path.length * 950 + 250);
 }
 
 function flash() {
@@ -172,28 +176,28 @@ function bonesLine(inj) {
   return `<p class="inj-you"><b>Your data</b>${say}</p>`;
 }
 
-function openAlert(path, name, inj) {
-  const title = inj.title || (name ? name[0].toUpperCase() + name.slice(1) : 'Injury');
+function openAlert(path, name, inj, opts = {}) {
+  const title = opts.title || inj.title || (name ? name[0].toUpperCase() + name.slice(1) : 'Injury');
   const delay = Math.round(commsDelayMin() || 0);
   const urgent = !!inj.urgent;
   t0 = performance.now();
 
   const box = document.createElement('section');
-  box.className = 'inj-alert' + (urgent ? ' urgent' : '');
+  box.className = 'inj-alert' + (urgent ? ' urgent' : '') + (opts.vitaly ? ' inj-vitaly' : '');
   box.id = 'injAlert';
   box.setAttribute('role', 'alertdialog');
   box.setAttribute('aria-label', 'Injury alert');
   box.innerHTML = `
     <header class="inj-band">
-      <span><i></i>Injury detected</span>
+      <span><i></i>${opts.vitaly ? 'Told to Vitaly' : 'Injury detected'}</span>
       <b id="injClock">0:00</b>
     </header>
     <div class="inj-main">
       <p class="inj-where">${esc(placeName(path))}</p>
       <h2>${esc(title)}</h2>
-      <p class="inj-src">Picked up by suit motion sensors and heart rate</p>
-      ${bonesLine(inj)}
-      <h3>Do this now</h3>
+      <p class="inj-src">${opts.vitaly ? 'What you said, checked against your own data' : 'Picked up by suit motion sensors and heart rate'}</p>
+      ${opts.yourData ? `<p class="inj-you"><b>Your data</b>${esc(opts.yourData)}</p>` : bonesLine(inj)}
+      <h3 class="inj-steps-h">Do this now</h3>
       <ol class="inj-steps">
         ${inj.steps.map((s, i) => `<li><button data-step="${i}"><i>${i + 1}</i><span>${esc(s)}</span></button></li>`).join('')}
       </ol>
@@ -249,6 +253,11 @@ function closeAlert(keep3d) {
   runId++;   // stop a zoom that is still on its way
   document.body.classList.remove('injury-on');
   clearInjury();
+}
+
+// Clear the card and the zoom (Vitaly calls this when it is done).
+export function closeInjury() {
+  closeAlert();
 }
 
 export function initInjury() {

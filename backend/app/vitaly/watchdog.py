@@ -30,6 +30,8 @@ EARTH_REPLY = "Flight surgeon: we have your readings. Keep following the steps. 
 KEEP_RESOLVED_S = 60
 SPIKE_BPM, SPIKE_WINDOW_S = 25, 60
 DRIFT_BPM = 15
+# ASSUMPTION: how long after a hard knock Vitaly still asks about it (listed in provenance.py).
+IMPACT_WINDOW_S = 30
 
 LIMITS = {
     "hr_arrest": 20, "hr_low": 45, "hr_high": 130,
@@ -50,6 +52,7 @@ SUPPRESSES = {
     "fast_heart": {"heart_drift", "heart_spike"},
     "pressure_low": {"o2_low"},
     "fire": {"temp_high"},
+    "impact": {"heart_spike"},  # the jolt and the fright move the heart rate; that's not a second problem
 }
 
 
@@ -140,6 +143,10 @@ def detect(sim, now):
         found["noise_high"] = f"{noise:.0f} dBA"
     if sim.storm:
         found["radiation_storm"] = "storm"
+    # The watch's motion sensor felt a hard knock (Director "impact"). It can't say what got hurt, so
+    # the alert is a question; what the person answers starts the right guide.
+    if sim.impact_at and now - sim.impact_at < IMPACT_WINDOW_S:
+        found["impact"] = "hard knock"
 
     hidden = set()
     for kind in found:

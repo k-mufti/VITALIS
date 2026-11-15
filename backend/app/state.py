@@ -54,6 +54,8 @@ class Sim:
         self.incidents = []      # Vitaly watchdog incidents (vitaly/watchdog.py)
         self.incident_seq = 0
         self.hr_trace = deque(maxlen=180)  # (time, heart rate) for spike detection
+        self.impact_at = None    # when the watch last felt a hard knock (Director "impact")
+        self.heads_up_said = set()  # slow risks Vitaly has already mentioned once (brain.heads_up)
 
     def record(self, vital):
         """Keep every quality flag, but only good readings feed the values the engine uses."""

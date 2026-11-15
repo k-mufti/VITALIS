@@ -22,6 +22,7 @@ const EVENTS = [
   ['fire_smoke', 'Smoke / fire'],
   ['o2_high', 'Cabin oxygen too high'],
   ['cabin_hot', 'Cabin too hot'],
+  ['impact', 'Hard knock (watch motion sensor)'],
   ['reset', 'Reset the crew member'],
 ];
 

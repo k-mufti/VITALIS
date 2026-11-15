@@ -201,6 +201,18 @@ PROTOCOLS = {
             "Stay inside. I'm tracking your dose and I'll tell you when it's safe to come out.",
         ],
     },
+    # ---------- something happened that only the person can describe ----------
+    # The watch can feel a hard knock but can't tell a bruise from a break, so Vitaly asks. The answer
+    # ("my wrist hurts, I think it's broken") starts that injury's guide and zooms the body to it.
+    "impact": {
+        "title": "Hard knock", "severity": "warning",
+        "say": "Your watch just felt a hard knock. Are you hurt?",
+        "guide": [
+            "Hold on to something so you don't drift.",
+            "Tell me where it hurts. For example: my wrist hurts, or I hit my head.",
+            "If nothing hurts, say I'm fine now, and I'll keep watching your heart rate.",
+        ],
+    },
 }
 
 

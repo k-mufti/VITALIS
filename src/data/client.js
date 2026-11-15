@@ -3,8 +3,17 @@ import { SYS, MOCK_MISSION } from './mock.js';
 /* Talks to the backend (plan.md 5.5). If the backend is off, the app keeps running on mock.js.
    Try it in the browser console: vitalis.api.director('bad_sleep_week') */
 
-export const API = 'http://localhost:8001';
-const WS_URL = 'ws://localhost:8001/ws';
+// Where the backend is. On your own machine: port 8001 next to the app. Online (kareemmuftee.com/vitalis):
+// the same site, under the app's folder; nginx forwards /vitalis/api and /vitalis/ws to the backend
+// (deploy/nginx-vitalis.conf). ?api=http://localhost:8011 points the app at another backend, for testing.
+function backendUrl() {
+  const asked = new URLSearchParams(location.search).get('api');
+  if (asked) return asked.replace(/\/$/, '');
+  if (['localhost', '127.0.0.1', ''].includes(location.hostname)) return 'http://localhost:8001';
+  return location.origin + location.pathname.replace(/\/[^/]*$/, '');
+}
+export const API = backendUrl();
+const WS_URL = API.replace(/^http/, 'ws') + '/ws';
 
 // Latest data from the backend. Views read from here (or from SYS, which is kept in sync).
 export const live = { online: false, state: null, risks: [], vitals: {}, triage: [], incidents: [], previewDay: null, trends: null };
