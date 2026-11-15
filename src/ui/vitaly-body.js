@@ -1,6 +1,8 @@
 import { state } from '../state.js';
 import { show } from '../nav.js';
 import { triggerInjury, closeInjury } from './injury.js';
+import { BODY } from './injury-library.js';
+import { api } from '../data/client.js';
 
 /* Vitaly and the body, one system. Two ways something reaches the crew member:
 
@@ -11,12 +13,29 @@ import { triggerInjury, closeInjury } from './injury.js';
      shows where, what, their own data, the kit and when to call ground.
 
    Where on the body comes from the words they used, with the injury drill's body map
-   (injury-library.js). Only for the crew member themselves: the twin is their body, so when
-   they're helping someone else nothing zooms. */
+   (injury-library.js): first this file's own words (instant, includes medical names like ACL),
+   then, only if none match, the AI picks a place from the same map (backend vitaly/place.py).
+   If they didn't say which side, Vitaly asks before zooming. Only for the crew member themselves:
+   the twin is their body, so when they're helping someone else nothing zooms. */
 
 // Words for a spot, most specific first. Each gives a path in injury-library.js's BODY tree.
-// 'S' is replaced by l or r for the side they said (left if they didn't say).
+// 'S' is replaced by l or r for the side they said; if they didn't say, Vitaly asks.
 const PLACES = [
+  // Medical names people use for a part (a ligament or bone belongs to the joint or part it is in).
+  [/\b(a\.? ?c\.? ?l|m\.? ?c\.? ?l|p\.? ?c\.? ?l|l\.? ?c\.? ?l|cruciate|menisc\w*|knee ?caps?|patell\w*)\b/, ['lower', 'S-leg', 'knee']],
+  [/\b(rotator cuff|collar ?bones?|clavicles?|labrum|deltoids?)\b/, ['upper', 'S-arm', 'shoulder']],
+  [/\b(achilles)\b/, ['lower', 'S-leg', 'ankle']],
+  [/\b(heels?|big toe|metatarsals?)\b/, ['lower', 'S-leg', 'foot']],
+  [/\b(carpal|scaphoid)\b/, ['upper', 'S-arm', 'wrist']],
+  [/\b(funny bone|tennis elbow|golfer'?s elbow)\b/, ['upper', 'S-arm', 'elbow']],
+  [/\b(pinky|pinkie|index finger|ring finger|middle finger)\b/, ['upper', 'S-arm', 'fingers']],
+  [/\b(femur|quadriceps)\b/, ['lower', 'S-leg', 'thigh']],
+  [/\b(tail ?bone|coccyx|lumbar|slipped disc|sciatica)\b/, ['upper', 'lower-back']],
+  [/\b(traps|trapezius)\b/, ['upper', 'upper-back']],
+  [/\b(glutes?|buttocks?|butt|pelvis)\b/, ['lower', 'hips']],
+  [/\b(whiplash|cervical)\b/, ['head', 'neck']],
+  [/\b(sternum|breast ?bone|pecs?|pectorals?)\b/, ['upper', 'chest']],
+  [/\b(gums?|molars?|wisdom tooth)\b/, ['head', 'jaw']],
   [/\bback of (my |the )?head\b/, ['head', 'backhead']],
   [/\bforehead\b/, ['head', 'forehead']],
   [/\beyes?\b/, ['head', 'S-eye']],
@@ -59,29 +78,29 @@ const GUIDE_BODY = {
   head_injury: { path: ['head', 'forehead'], name: 'hit head' },
   seizure: { path: ['head'], name: 'seizure' },
   stroke: { path: ['head'], name: 'stroke' },
-  eye: { path: ['head', 'l-eye'], name: 'debris in eye' },
+  eye: { path: ['head', 'S-eye'], name: 'debris in eye' },
   allergy: { path: ['whole'], name: 'allergic reaction' },
   vomiting: { path: ['upper', 'belly'], name: 'motion sickness' },
   poisoning: { path: ['upper', 'belly'], name: 'poisoning' },
   bleeding: { path: ['whole'], name: 'cut' },
   burn: { path: ['whole'], name: 'burn' },
   fracture: { path: ['whole'], name: 'broken bone' },
-  cramp: { path: ['lower', 'l-leg', 'calf'], name: 'muscle cramp' },
+  cramp: { path: ['lower'], name: 'muscle cramp' },
   // Guides taken from the injury drill's library (backend/app/vitaly/injuries.py).
   sprain: { path: ['whole'], name: 'sprain strain pulled muscle' },
   dislocation: { path: ['whole'], name: 'dislocated' },
   nosebleed: { path: ['head', 'nose'], name: 'nosebleed' },
   puncture: { path: ['whole'], name: 'puncture' },
   back: { path: ['upper', 'lower-back'], name: 'back pain' },
-  nail: { path: ['upper', 'l-arm', 'fingers'], name: 'fingernail from glove' },
-  ear: { path: ['head', 'l-ear'], name: 'ear pressure' },
+  nail: { path: ['upper', 'S-arm', 'fingers'], name: 'fingernail from glove' },
+  ear: { path: ['head', 'S-ear'], name: 'ear pressure' },
   kidney: { path: ['upper', 'lower-back'], name: 'kidney stone' },
-  bends: { path: ['upper', 'l-arm', 'shoulder'], name: 'the bends' },
+  bends: { path: ['whole'], name: 'the bends' },
   radiation: { path: ['whole'], name: 'radiation sickness' },
-  cold: { path: ['upper', 'l-arm', 'fingers'], name: 'frostbite' },
-  crush: { path: ['upper', 'l-arm', 'fingers'], name: 'crushed in hatch' },
+  cold: { path: ['upper', 'S-arm', 'fingers'], name: 'frostbite' },
+  crush: { path: ['upper', 'S-arm', 'fingers'], name: 'crushed in hatch' },
   tooth: { path: ['head', 'jaw'], name: 'toothache' },
-  rash: { path: ['upper', 'l-arm', 'forearm'], name: 'rash' },
+  rash: { path: ['whole'], name: 'rash' },
   bruise: { path: ['whole'], name: 'bruise' },
   shock: { path: ['whole'], name: 'electric shock' },
 };
@@ -139,22 +158,77 @@ function oneOff(a, b) {
   return d[a.length][b.length] <= 1;
 }
 
-// "my left wrist" -> ['upper', 'l-arm', 'wrist']. null if no place was named.
+// Which side they said: 'l', 'r', or null (not said, or both).
+export function sideFrom(text) {
+  const t = ` ${String(text || '').toLowerCase()} `;
+  const left = /\b(left|lfet|letf)\b/.test(t), right = /\b(right|rihgt|rigth)\b/.test(t);
+  if (left && !right) return 'l';
+  if (right && !left) return 'r';
+  return null;
+}
+
+// "my left wrist" -> { path: ['upper', 'S-arm', 'wrist'], side: 'l' }. null if no place was named.
 export function placeFor(text) {
   const t = ` ${String(text || '').toLowerCase()} `;
-  const side = /\bri(gh|hg)t\b/.test(t) && !/\b(left|lfet|letf)\b/.test(t) ? 'r' : 'l';
-  const withSide = path => path.map(id => id.replace(/^S-/, side + '-'));
+  const side = sideFrom(t);
   for (const [re, path] of PLACES) {
-    if (re.test(t)) return withSide(path);
+    if (re.test(t)) return { path, side };
   }
   const words = t.match(/[a-z]+/g) || [];
   for (const w of words) {
     if (w.length < 5) continue;
     const word = w.replace(/s$/, '');
     const hit = FUZZY.find(([k]) => oneOff(word, k) || oneOff(w, k));
-    if (hit) return withSide(FUZZY_PATH[hit[1]]);
+    if (hit) return { path: FUZZY_PATH[hit[1]], side };
   }
   return null;
+}
+
+// The body map as a menu for the AI: one entry per place, sides folded into 'S' ("lower/S-leg/knee").
+const AI_PLACES = [];
+(function flatten(nodes, prefix, names) {
+  for (const n of nodes) {
+    const path = [...prefix, n.id.replace(/^[lr]-/, 'S-')];
+    const id = path.join('/');
+    const label = [...names, n.name.replace(/^(Left|Right) /, '')];
+    if (!AI_PLACES.some(p => p.id === id)) AI_PLACES.push({ id, name: label.join(' > ') });
+    if (n.parts) flatten(n.parts, path, label);
+  }
+})(BODY, [], []);
+
+// Words the app doesn't know: the AI picks from AI_PLACES. null if it can't (no key, slow, no place).
+async function askAi(text) {
+  try {
+    const r = await api.vitalyPlace(text, AI_PLACES);
+    if (!r || !AI_PLACES.some(p => p.id === r.place)) return null;
+    return { path: r.place.split('/'), side: r.side === 'left' ? 'l' : r.side === 'right' ? 'r' : null };
+  } catch (err) {
+    return null;
+  }
+}
+
+const SIDE_NOUN = { arm: 'arm', leg: 'leg', eye: 'eye', ear: 'ear', fingers: 'hand', hand: 'hand', foot: 'foot',
+  bicep: 'arm', tricep: 'arm', ribs: null };
+
+// "Which knee, left or right?"
+function sideQuestion(path) {
+  const last = path[path.length - 1].replace(/^S-/, '');
+  const noun = last in SIDE_NOUN ? SIDE_NOUN[last] : last;
+  return noun ? `Which ${noun}, left or right?` : 'Which side, left or right?';
+}
+
+// Where a guide's injury is: { guide, text, known, path, side, question }. question is set when the
+// place has a side they didn't say. null = no zoom for this guide (someone else, or no body place).
+export async function placeForGuide(guide, text) {
+  if (!guide || guide.who !== 'self') return null;
+  const known = GUIDE_BODY[guide.id];
+  if (!known) return null;
+  let hit = placeFor(text);
+  if (!hit && known.path.length <= 1) hit = await askAi(text);   // the guide alone can't place it
+  const path = hit ? hit.path : known.path;
+  const side = (hit && hit.side) || sideFrom(text);
+  const needsSide = path.some(id => id.startsWith('S-')) && !side;
+  return { guide, text, known, path, side, question: needsSide ? sideQuestion(path) : null };
 }
 
 let zoomed = null;   // 'card' (an injury card is up) or 'alert' (zoom only) while Vitaly has the body
@@ -164,15 +238,18 @@ function toBody() {
   if (state.view !== 'body') show('body');
 }
 
-// Vitaly started a guide for something the crew member said. True if the body zoomed.
-export function bodyForGuide(guide, text) {
-  if (!guide || guide.who !== 'self') return false;
-  const known = GUIDE_BODY[guide.id];
-  if (!known) return false;
-  const path = placeFor(text) || known.path;
+// Zoom to the place and open the injury card. side: 'l' / 'r' (their answer), or null: then the area
+// around both sides (lower body for a knee) rather than a guess.
+export function bodyForPlace(where, side) {
+  if (!where) return false;
+  const s = side || where.side;
+  let path = where.path;
+  const cut = path.findIndex(id => id.startsWith('S-'));
+  if (cut >= 0) path = s ? path.map(id => id.replace(/^S-/, s + '-')) : path.slice(0, cut);
+  if (!path.length) path = ['whole'];
   toBody();
-  // The card is matched on what they said first ("broke my wrist"), then on the guide's own name.
-  triggerInjury(path, `${text} ${known.name}`, { vitaly: true, title: guide.title, yourData: guide.readings });
+  // The card is matched on what they said first ("tore my ACL"), then on the guide's own name.
+  triggerInjury(path, `${where.text} ${where.known.name}`, { vitaly: true, title: where.guide.title, yourData: where.guide.readings });
   zoomed = 'card';
   return true;
 }

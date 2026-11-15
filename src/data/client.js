@@ -75,6 +75,7 @@ export const api = {
   vitalyIncidents: () => request('/api/vitaly/incidents'),
   vitalyAsk: (question, focus, current) => post('/api/vitaly/ask', { question, focus, current }, 15000),
   vitalyAction: action => post('/api/vitaly/action', action, 15000),
+  vitalyPlace: (text, places) => post('/api/vitaly/place', { text, places }, 3500),
 };
 
 /* One organ, merged from live data and the mock fallback, in the shape the views use.

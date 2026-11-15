@@ -1,7 +1,7 @@
 import { $ } from '../util.js';
 import { API, api, live, onData } from '../data/client.js';
 import { state } from '../state.js';
-import { bodyForGuide, bodyForAlert, releaseBody } from './vitaly-body.js';
+import { placeForGuide, bodyForPlace, bodyForAlert, releaseBody, sideFrom } from './vitaly-body.js';
 
 /* Vitaly: the voice assistant. Standalone: it guides you, it never calls anyone.
 
@@ -56,6 +56,9 @@ let guide = null;             // { title, severity, steps, i, incidentId } while
 let closeTimer = null;
 let speaking = false;
 let ignoreUntil = 0;          // don't hear our own voice
+let askSide = null;           // an injury waiting for "which knee, left or right?" before the body zooms
+let sideTimer = null;
+const SIDE_WAIT_MS = 12000;   // no answer by then: show both sides and carry on with the guide
 const announced = new Set();
 const queue = [];
 
@@ -153,6 +156,8 @@ function close(cancelled = false) {
   }
   hush();
   releaseBody();
+  askSide = null;
+  clearTimeout(sideTimer);
   dock(false);
   open = false;
   mode = 'idle';
@@ -397,6 +402,7 @@ async function heard(text) {
       return closeSoon();
     }
   }
+  if (askSide) return answerSide(text);
   // In a guide, short replies drive the steps. A new symptom or a real question still gets through.
   if (guide && !(guide.id && RETARGET.test(text)) && text.split(/\s+/).length <= 5 && (STOP.test(text) || REPEAT.test(text) || BACK.test(text) || NEXT.test(text))) {
     return guideCommand(text);
@@ -411,7 +417,19 @@ async function heard(text) {
     r = { say: 'I can\'t reach the medical system right now. Your alerts still work.' };
   }
   if (r.guide) {
-    if (bodyForGuide(r.guide, text)) dock(true);
+    // Where on the body: their words first, the AI if the words aren't known (vitaly-body.js).
+    status('Finding where');
+    const where = await placeForGuide(r.guide, text);
+    if (where && where.question) {    // they didn't say which side: ask before zooming
+      askSide = where;
+      mode = 'confirm';
+      status('Left or right?');
+      await say(where.question);
+      clearTimeout(sideTimer);
+      sideTimer = setTimeout(() => { if (askSide === where) answerSide(''); }, SIDE_WAIT_MS);
+      return;
+    }
+    if (bodyForPlace(where)) dock(true);
     return startGuide(r.guide);
   }
   if (r.action) {
@@ -434,6 +452,15 @@ async function heard(text) {
   mode = 'listening';
   status(ears ? 'Listening' : 'Type your question');
   closeSoon();
+}
+
+// Their answer to "which knee?": zoom to that side (both sides if the answer didn't say), then the guide.
+async function answerSide(text) {
+  const where = askSide;
+  askSide = null;
+  clearTimeout(sideTimer);
+  if (bodyForPlace(where, sideFrom(text))) dock(true);
+  return startGuide(where.guide);
 }
 
 async function runAction(action) {
@@ -686,7 +713,7 @@ function hearing(id, text, stopped, settle, done) {
   closeSoon();   // still talking: don't let the screen time out mid-question
   $('#vHeard').textContent = `“${text}”`;
   clearTimeout(endTimer);
-  const command = guide && rest.split(/\s+/).length <= 2 && (NEXT.test(rest) || REPEAT.test(rest) || BACK.test(rest) || STOP.test(rest));
+  const command = (askSide && rest.split(/\s+/).length <= 3 && sideFrom(rest)) || guide && rest.split(/\s+/).length <= 2 && (NEXT.test(rest) || REPEAT.test(rest) || BACK.test(rest) || STOP.test(rest));
   const wakeOnly = WAKE.test(text) && rest.length < 2;
   const unfinished = !wakeOnly && (UNFINISHED.test(rest.replace(/[.,!?…]+$/, '')) || rest.length < 2);   // Deepgram adds punctuation
   let wait;

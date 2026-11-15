@@ -31,7 +31,7 @@ from .analysis import radiation as radiation_analysis  # noqa: E402
 from .analysis import training as training_analysis  # noqa: E402
 from .analysis.common import Reader  # noqa: E402
 from .devices import catalog, native  # noqa: E402
-from .vitaly import brain, crew, ears, guides, net, profile, protocols, voice, watchdog  # noqa: E402
+from .vitaly import brain, crew, ears, guides, net, place, profile, protocols, voice, watchdog  # noqa: E402
 from .devices.simulated import DEVICES  # noqa: E402
 from .engine.physiology import COUNTERMEASURES, apply_change, mission_state  # noqa: E402
 from .sources import donki, googlehealth, horizons, noaa  # noqa: E402
@@ -432,6 +432,17 @@ async def vitaly_prewarm():
     texts = brain.quick.all_answers(mission_state(sim), sim)
     voice.prewarm(*texts)   # politely, a few at a time: the real answer to the question jumps the queue
     return {"lines": len(texts), "ready": sum(voice.cached(t) for t in texts)}
+
+
+class VitalyPlace(BaseModel):
+    text: str
+    places: list[dict]
+
+
+@app.post("/api/vitaly/place")
+async def vitaly_place(body: VitalyPlace):
+    """Which place on the body map they meant, when the browser's own words didn't find one (vitaly/place.py)."""
+    return await place.find(body.text[:300], body.places[:120])
 
 
 @app.post("/api/vitaly/ask")
