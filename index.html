@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="styles/collect.css" />
   <link rel="stylesheet" href="styles/fitbit.css?v=5" />
   <link rel="stylesheet" href="styles/injury.css" />
-  <link rel="stylesheet" href="styles/vitaly.css?v=5" />
+  <link rel="stylesheet" href="styles/vitaly.css?v=6" />
   <link rel="stylesheet" href="styles/type.css?v=4" />
 </head>
 <body>
@@ -82,10 +82,10 @@
       <div class="body-foot">
         <div class="day"><span>Day</span><b id="bodyDay">184</b></div>
         <p class="mission-line" id="missionLine">Mars transit · day 184</p>
-        <div class="dose" id="dose" aria-label="Radiation dose over the mission">
-          <div class="dose-head"><span>Radiation</span><b id="doseValue">—</b></div>
-          <svg class="dose-chart" id="doseChart" viewBox="0 0 320 130" role="img"></svg>
-        </div>
+        <button class="vcall" id="vCall" type="button" aria-label="Talk to Vitaly">
+          <canvas class="vcall-orb" id="vCallOrb" aria-hidden="true"></canvas>
+          <span class="vcall-text"><b>Ask Vitaly</b><em>Click here or press T</em></span>
+        </button>
       </div>
 
       <aside class="risk-rail" aria-label="Your health">
@@ -182,6 +182,6 @@
 
   <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
   <script type="module" src="src/ui/logo-holo.js"></script>
-  <script type="module" src="src/main.js?v=30"></script>
+  <script type="module" src="src/main.js?v=31"></script>
 </body>
 </html>

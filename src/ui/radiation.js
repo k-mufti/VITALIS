@@ -350,7 +350,7 @@ let curveKey = null;
 async function loadCurve() {
   const m = missionInfo();
   const key = `${m.mission}|${m.day}|${m.storm_dose_msv || 0}`;
-  if (!live.online || key === curveKey) return;
+  if (!$('#dose') || !live.online || key === curveKey) return;
   curveKey = key;
   try {
     curve = await api.radiationCurve();
@@ -361,6 +361,7 @@ async function loadCurve() {
 }
 
 function renderDose() {
+  if (!$('#dose')) return;   // the dose graph was taken off the Body view
   const m = missionInfo();
   $('#doseValue').innerHTML = `${Math.round(m.radiation_msv || 0)} <small>mSv</small>`;
   drawChart();
@@ -368,6 +369,7 @@ function renderDose() {
 }
 
 function drawChart() {
+  if (!$('#dose')) return;
   const m = missionInfo();
   const svg = $('#doseChart');
   const limit = m.radiation_career_limit_msv || 600;

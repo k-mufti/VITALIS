@@ -103,3 +103,17 @@ body:has(.storm-alert.in) .vitaly.docked .v-orb { display: none; }
 .vitaly.docked .v-guide { min-height: 120px; }
 .vitaly.docked .v-earth-note, .vitaly.docked .v-earth-demo { display: none; }
 .vitaly.docked .v-status { padding-right: 64px; }
+
+/* "Ask Vitaly" on the Body view (bottom left, where the radiation graph was): a medium orb you click. */
+.vcall { display: flex; align-items: center; gap: 14px; margin: 14px 0 0 -10px; padding: 0; background: none; border: 0; cursor: pointer; text-align: left; color: var(--ink); }
+.vcall-orb { width: 112px; height: 112px; display: block; flex: none; transition: transform .3s var(--ease, ease); }
+.vcall:hover .vcall-orb, .vcall:focus-visible .vcall-orb { transform: scale(1.05); }
+.vcall:focus-visible { outline: 2px solid #1846c4; outline-offset: 4px; }
+.vcall-text { display: flex; flex-direction: column; gap: 6px; }
+.vcall-text b { display: flex; align-items: center; gap: 8px; font: 700 16px var(--cond); letter-spacing: .2em; text-transform: uppercase; color: #0a1f6b; }
+.vcall-text em { font: 400 14px var(--sans); font-style: normal; color: var(--soft); }
+/* Listening for "Hey Vitaly": a small breathing dot next to the name. */
+.vcall.listening .vcall-text b::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #1846c4; animation: v-breathe 2.4s ease-in-out infinite; }
+/* The Body view has the big button, so the small launcher pill is only shown on the other screens. */
+body:not(.injury-on):has(#view-body.on) .v-launch { display: none; }
+@media (prefers-reduced-motion: reduce) { .vcall.listening .vcall-text b::after { animation: none; } }

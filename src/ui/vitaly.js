@@ -2,6 +2,7 @@ import { $ } from '../util.js';
 import { API, api, live, onData } from '../data/client.js';
 import { state } from '../state.js';
 import { placeForGuide, bodyForPlace, bodyForAlert, releaseBody, sideFrom } from './vitaly-body.js';
+import { startCallOrb } from './vitaly-call.js';
 
 /* Vitaly: the voice assistant. Standalone: it guides you, it never calls anyone.
 
@@ -91,6 +92,7 @@ export function initVitaly() {
     </button>`);
 
   $('#vLaunch').addEventListener('click', () => summon());
+  startCallOrb(() => summon());
   $('#vClose').addEventListener('click', () => close(true));
   $('#vType').addEventListener('submit', e => {
     e.preventDefault();
@@ -730,6 +732,7 @@ function hearing(id, text, stopped, settle, done) {
 function earsOn(kind) {
   $('#vMic').textContent = 'Hey';
   $('#vLaunch').classList.add('listening');
+  $('#vCall')?.classList.add('listening');
   $('#vLaunch').title = `Talk to Vitaly (say "Hey Vitaly" or press T) · ${kind === 'deepgram' ? 'Deepgram' : 'Chrome'} listening`;
   $('#vitaly').dataset.ears = kind;
 }
@@ -737,6 +740,7 @@ function earsOff(reason) {
   ears = null;
   $('#vMic').textContent = 'T';
   $('#vLaunch').classList.remove('listening');
+  $('#vCall')?.classList.remove('listening');
   if (reason) $('#vLaunch').title = reason;
 }
 
