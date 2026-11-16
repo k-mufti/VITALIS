@@ -19,7 +19,8 @@ export function renderMission() {
   const m = missionInfo();
   const phase = PHASE_WORD[m.phase] || 'transit';
   const where = `${m.mission_name} ${phase} · day ${m.day}`;
-  $('#bodyDay').textContent = m.day;
+  const dayEl = $('#bodyDay');   // the day number left the Body view; the top bar still shows it
+  if (dayEl) dayEl.textContent = m.day;
   const line = $('#missionLine');
   if (line) line.innerHTML = `<b>${m.mission_name}</b> ${phase} · day ${m.day}`;
   const bar = $('#barMission');

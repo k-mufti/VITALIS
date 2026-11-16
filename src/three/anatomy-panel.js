@@ -93,10 +93,10 @@ export function initAnatomyPanel(setHover, focus, reset) {
   panel.className = 'anatomy';
   panel.id = 'anatomy';
   panel.setAttribute('aria-label', 'Your body');
-  // "Highlight" switch: organs that need a look show through the skin. Remembered in this browser.
+  // "Highlight" switch: organs that need a look show through the skin. Off by default; remembered in this browser.
   let saved = null;
   try { saved = localStorage.getItem('vitalis.highlight'); } catch {}
-  twin.showFlagged = saved !== 'off';
+  twin.showFlagged = saved === 'on';   // off unless this browser turned it on
   panel.innerHTML = `
     <div class="an-head">
       <h3 class="t-label">Your body</h3>
