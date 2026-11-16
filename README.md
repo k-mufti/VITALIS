@@ -214,7 +214,10 @@ VITALIS is a hackathon prototype, not a medical device. Nothing in it has been c
 
 ## Team
 
-Built by **Kareem Muftee** (3D, design, frontend) and **Zaid Khayyat** (backend, data, UI) for NASA Space Apps
+**Kareem Muftee** 
+**Zaid Khayyat** 
+
+for NASA Space Apps
 Challenge 2026.
 
 ## Credits
