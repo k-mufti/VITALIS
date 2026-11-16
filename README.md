@@ -8,6 +8,8 @@ Challenge 2026.
 
 **Live demo:** https://kareemmuftee.com/vitalis
 
+**Presentation:** [VITALIS slides (Google Slides)](https://docs.google.com/presentation/d/1H89pXaYadHyD9WQUo16FAIu04s4yp_qU/edit?usp=sharing)
+
 ---
 
 ## The challenge
