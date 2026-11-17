@@ -26,15 +26,23 @@ if (logos.length) {
   document.head.appendChild(style);
 
   // Orb height and word size: top bar, and the smaller corner on the sign-in screen.
+  // Smaller in the phone layout (styles/phone.css uses the same query).
+  const phone = matchMedia('(max-width: 820px), (max-height: 500px)');
+  const sizeOf = it => {
+    const small = it.el.matches('.corner');
+    it.H = phone.matches ? 30 : (small ? 34 : 42);
+    it.size = phone.matches ? 13 : (small ? 14 : 18.5);
+  };
   const items = logos.map(el => {
-    const small = el.matches('.corner');
     const cv = document.createElement('canvas');
     cv.className = 'logo-badge';
     cv.setAttribute('aria-hidden', 'true');
     el.setAttribute('aria-label', el.textContent.trim());
     el.appendChild(cv);
     el.classList.add('logo-orb');
-    return { el, cv, ctx: cv.getContext('2d'), H: small ? 34 : 42, size: small ? 14 : 18.5, pull: 0, mx: null, my: null };
+    const it = { el, cv, ctx: cv.getContext('2d'), pull: 0, mx: null, my: null };
+    sizeOf(it);
+    return it;
   });
 
   addEventListener('pointermove', e => {
@@ -148,7 +156,10 @@ if (logos.length) {
     t += dt;
     for (const it of items) if (it.el.isConnected && it.el.offsetParent) draw(it, t, dt);
   };
-  const start = () => { items.forEach(measure); requestAnimationFrame(frame); };
+  const start = () => {
+    items.forEach(measure); requestAnimationFrame(frame);
+    phone.addEventListener('change', () => items.forEach(it => { sizeOf(it); measure(it); }));
+  };
   // Wait for the font's stylesheet, then the font itself (a fallback font is used if either fails).
   new Promise(r => { font.onload = font.onerror = r; setTimeout(r, 3000); })
     .then(() => document.fonts && document.fonts.load('400 12px Michroma'))

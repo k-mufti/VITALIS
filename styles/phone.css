@@ -1,95 +1,140 @@
-/* Phone layout (up to 820px wide, so tablets in portrait too). Loaded last, so it only overrides.
-   Top bar: logo and space weather. Tabs move to a bar at the bottom.
-   Body and organ screens: the 3D body fills the top part; the panels scroll up under it.
-   Vitaly: a small orb button above the tabs. */
+/* Phone and tablet-portrait layout. Loaded last, so it only overrides the desktop styles.
+   src/ui/phone.js moves three things for this layout (Vitaly orb, body layer switch, footer).
 
-@media (max-width: 820px) {
-  :root { --bar: 56px; --tabs: calc(56px + env(safe-area-inset-bottom)); --stage: 44dvh; }
+   - Top bar: small logo, space weather.
+   - Bottom tab bar: Body | Vitaly orb (raised, in the middle, on every screen) | Collect.
+   - Body and organ screens: the 3D body fills the screen; a white sheet peeks up from the bottom
+     and slides up over the body when you scroll it. The layer switch sits on the body itself. */
+
+@media (max-width: 820px), (max-height: 500px) {
+  :root {
+    --bar: 52px;
+    --tabs: calc(60px + env(safe-area-inset-bottom));
+    --peek: 168px;                                   /* how much of the sheet shows before you scroll */
+    --stage: calc(100vh - var(--bar) - var(--tabs) - var(--peek));
+    --sheet-x: max(16px, calc((100% - 640px) / 2));  /* sheet text stays readable on a tablet */
+  }
+  @supports (height: 100dvh) { :root { --stage: calc(100dvh - var(--bar) - var(--tabs) - var(--peek)); } }
+
+  button { touch-action: manipulation; }
 
   /* ---------- top bar ---------- */
-  /* No blur on the bar: a backdrop-filter would trap the fixed bottom tabs inside it. */
+  /* Solid, no blur: a backdrop-filter would trap the fixed tab bar inside the top bar. */
   .bar { height: var(--bar); grid-template-columns: auto 1fr; gap: 8px; padding: 0 12px; background: var(--paper); backdrop-filter: none; }
   .bar-mid { display: none; }
   .bar-right { gap: 6px; }
-  .sw { padding: 6px 9px; gap: 6px; }
+  .sw { padding: 5px 9px; gap: 7px; }
   .sw em { display: none; }
-  .fb { padding: 6px 9px; }
+  .sw b { font-size: 14px; }
+  .fb { padding: 5px 9px; }
   .fb-label { display: none; }
   .sw-pop { position: fixed; top: calc(var(--bar) + 8px); left: 12px; right: 12px; width: auto; }
 
-  /* ---------- tabs at the bottom ---------- */
-  nav { justify-self: stretch; position: fixed; z-index: 24; left: 0; right: 0; bottom: 0; height: var(--tabs); padding-bottom: env(safe-area-inset-bottom);
-    display: grid; grid-template-columns: 1fr 1fr; background: var(--paper); border-top: 1px solid var(--line); }
-  .tab { padding: 0; font-size: 15px; }
+  /* ---------- bottom tab bar ---------- */
+  nav { justify-self: stretch; position: fixed; z-index: 24; left: 0; right: 0; bottom: 0; height: var(--tabs);
+    padding-bottom: env(safe-area-inset-bottom); display: grid; grid-template-columns: 1fr 104px 1fr;
+    background: var(--paper); border-top: 1px solid var(--line); }
+  .tab { position: relative; padding: 0; font-size: 13px; letter-spacing: .18em; color: var(--soft); background: none; }
+  .tab:first-child { grid-column: 1; }
+  .tab:last-child { grid-column: 3; }
+  .tab.on { background: none; color: var(--ink); }
+  .tab.on::after { content: ''; position: absolute; left: 50%; top: -1px; width: 28px; margin-left: -14px; height: 3px; background: var(--ink); }
 
-  /* ---------- views and the 3D stage ---------- */
+  /* Vitaly: the orb, raised out of the middle of the tab bar. */
+  .body-foot { position: fixed; z-index: 25; left: 50%; right: auto; bottom: calc(env(safe-area-inset-bottom) + 4px); transform: translateX(-50%); }
+  .vcall { margin: 0; align-items: center; }
+  .vcall-orb { width: 80px; height: 80px; margin-bottom: -8px; }
+  .vcall-text { margin: 0; align-items: center; }
+  .vcall-label { font-size: 10px; letter-spacing: .18em; }
+  .vcall-hint { display: none; }
+  .v-launch { display: none !important; }   /* the orb in the tab bar does this job on a phone */
+  .app > .foot { display: none; }            /* until phone.js moves it into Collect */
+
+  /* ---------- screens and the 3D stage ---------- */
   .view { inset: var(--bar) 0 var(--tabs); }
-  .stage3d { top: var(--bar); bottom: auto; height: var(--stage); }
+  .stage3d { top: var(--bar); bottom: auto; height: var(--stage); touch-action: none; }
   .storm-alert { top: calc(var(--bar) + 8px); }
 
-  /* Body: the panels sit below the 3D body and scroll up over it. */
-  /* Paper starts where the panels start and scrolls with them, so the body never shows through. */
-  .view.body, .view.detail { background: linear-gradient(to bottom, transparent var(--stage), var(--paper) var(--stage)) local; }
-  .view.body { overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; padding: var(--stage) 0 96px; }
+  /* Body and organ screens scroll as one sheet. The paper under the sheet starts where the sheet
+     starts and scrolls with it, so the body never shows through. */
+  .view.body, .view.detail {
+    overflow-y: auto; overscroll-behavior: contain; scroll-snap-type: y proximity; scrollbar-width: none;
+    display: flex; flex-direction: column; padding: 0;
+    background: linear-gradient(to bottom, transparent var(--stage), var(--white) var(--stage)) local;
+  }
+  .view.body::-webkit-scrollbar, .view.detail::-webkit-scrollbar { display: none; }
+  /* The see-through space over the 3D body. It is also the closed resting point, so the screen
+     opens with the body showing and the sheet snaps back down to it. */
+  .view.body::before, .view.detail::before { content: ''; order: -1; flex: 0 0 var(--stage); scroll-snap-align: start; }
+
+  /* The top of the sheet: a grab handle, a soft shadow, and it snaps open. */
+  .view.body .risk-rail, .view.detail .d-left {
+    scroll-snap-align: start; border-top: 1px solid var(--line);
+    box-shadow: 0 -12px 28px rgba(14, 14, 14, .07);
+  }
+  .view.body .risk-rail::before, .view.detail .d-left::before {
+    content: ''; display: block; width: 36px; height: 4px; border-radius: 2px; margin: 0 auto 12px; background: #d4d4cf;
+  }
+  .view.body .hint, .view.detail .hint { position: absolute; top: calc(var(--stage) - 26px); bottom: auto; font-size: 10px; }
+
+  /* Body: your health first, then the parts of the body as a row you can swipe. */
   .view.body .risk-rail, .view.body .anatomy {
-    position: static; inset: auto; width: auto; height: auto;
-    padding: 16px; background: var(--paper);
+    position: relative; inset: auto; width: auto; height: auto; background: var(--white);
   }
-  .view.body .risk-rail { order: 1; border-top: 1px solid var(--line); }
-  .view.body .anatomy { order: 2; padding-top: 8px; }
+  .view.body .risk-rail { order: 1; padding: 10px var(--sheet-x) 16px; gap: 12px; }
+  .view.body .risk-rail header { display: none; }
   .health { flex: none; }
-  .hp-body { overflow: visible; }
-  .hp-tabs { overflow-x: auto; scrollbar-width: none; }
-  .hp-tab { padding-left: 2px; padding-right: 2px; }
-  .view.body .hint { position: absolute; top: calc(var(--stage) - 30px); bottom: auto; }
+  .hp-body { overflow: visible; margin-top: 10px; }
+  .hp-tab { font-size: 11.5px; padding-left: 2px; padding-right: 2px; }
+  .rail-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .rail-btn { padding: 13px 12px; font-size: 12px; letter-spacing: .12em; }
 
-  /* Vitaly: a small orb above the tabs, bottom right. */
-  .body-foot { position: fixed; left: auto; right: 10px; bottom: calc(var(--tabs) + 10px); z-index: 7; }
-  .vcall { margin: 0; align-items: center; }
-  .vcall-orb { width: 66px; height: 66px; }
-  .vcall-text { margin: -8px 0 0; align-items: center; }
-  .vcall-label { font-size: 11px; letter-spacing: .14em; padding: 2px 6px; background: color-mix(in srgb, var(--paper) 85%, transparent); }
-  .vcall-hint { display: none; }
-  .v-launch { left: auto; right: 12px; bottom: calc(var(--tabs) + 12px); }
-  .v-launch em { display: none; }
-  body:has(#view-collect.on) .v-launch { bottom: calc(var(--tabs) + 64px); }
+  .view.body .anatomy { order: 2; padding: 18px var(--sheet-x) 28px; border-top: 1px solid var(--line); }
+  .view.body .anatomy::before { content: 'Your body'; display: block; margin-bottom: 10px; font: 600 13px var(--cond); letter-spacing: .18em; text-transform: uppercase; }
+  .an-grid.on { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x proximity; scroll-padding-inline: 16px; scrollbar-width: none; margin: 0 -16px; padding: 0 16px 4px; }
+  .an-grid::-webkit-scrollbar { display: none; }
+  .an-tile { flex: 0 0 96px; scroll-snap-align: start; }
 
-  /* Organ detail: same idea, columns stack under the 3D organ. */
-  .view.detail { overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 12px; padding: var(--stage) 12px 40px; }
-  .view.detail .back { position: absolute; top: 12px; left: 12px; background: var(--paper); }
+  /* Layer switch and Highlight, on top of the 3D body. */
+  .stage-tools { position: absolute; z-index: 3; top: 10px; left: 12px; right: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; transition: opacity .5s var(--ease); }
+  .stage-tools .an-tabs { order: 1; display: flex; background: color-mix(in srgb, var(--paper) 88%, transparent); }
+  .stage-tools .an-tab { padding: 7px 9px; font-size: 11px; letter-spacing: .08em; }
+  .stage-tools .an-head { order: 2; margin: 0; }
+  .stage-tools .t-label { display: none; }
+  .stage-tools .an-switch { gap: 6px; font-size: 11px; letter-spacing: .1em; }
+  .injury-on .stage-tools { opacity: 0; pointer-events: none; }
+
+  /* Organ: name and number in the peek, then the readings, the week, and the plan. */
+  .view.detail .back { position: absolute; z-index: 3; top: 10px; left: 12px; padding: 6px 10px; font-size: 12px; background: color-mix(in srgb, var(--paper) 88%, transparent); }
   .view.detail .d-left, .view.detail .d-right, .view.detail .d-plan, .view.detail .week {
-    position: static; inset: auto; transform: none; width: auto; max-width: none;
+    position: relative; inset: auto; transform: none; width: auto; max-width: none; background: var(--white);
   }
-  .view.detail .d-left, .view.detail .d-right, .view.detail .d-plan { background: var(--paper); padding: 0; }
-  .view.detail .d-left { order: 1; }
-  .view.detail .d-right { order: 2; }
-  .view.detail .d-plan { order: 3; overflow: visible; }
-  .view.detail .week { order: 4; align-self: center; }
+  .view.detail .d-left { order: 1; padding: 10px var(--sheet-x) 16px; }
+  .view.detail .d-right { order: 2; padding: 0 var(--sheet-x) 16px; }
+  .view.detail .week { order: 3; height: auto; min-height: 92px; justify-content: center; padding: 8px var(--sheet-x) 16px; }
+  .view.detail .d-plan { order: 4; padding: 8px var(--sheet-x) 28px; overflow: visible; }
   .view.detail .organ { display: none; }
-  .view.detail .hint { position: absolute; top: calc(var(--stage) - 30px); bottom: auto; }
-  .big { font-size: 72px; }
-  .detail .d-right .pair b { font-size: 22px; }
+  .big { font-size: 64px; }
   .note, .guide { max-width: none; }
+  .detail .d-right .pair b { font-size: 22px; }
 
   /* Collect */
-  .view.collect { padding: 20px 14px 40px; }
-  .col-head h2 { font-size: 24px; }
+  .view.collect { padding: 18px 16px 24px; }
+  .col-head h2 { font-size: 22px; }
+  .col-head p { font-size: 15px; }
   .col-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 2px; }
   .col-often { grid-column: 1; grid-row: 2; }
   .col-val { grid-column: 2; grid-row: 1; }
   .col-ago { grid-column: 2; grid-row: 2; }
+  .view.collect .foot { position: static; display: block; margin-top: 24px; padding: 16px 0 8px; border-top: 1px solid var(--line); text-align: center; white-space: normal; line-height: 1.8; }
 
-  /* Footer: shown on Collect only, as a strip above the tabs. */
-  .foot { display: none; }
-  body:has(#view-collect.on) .foot { display: block; position: fixed; left: 0; right: 0; bottom: var(--tabs); z-index: 23;
-    padding: 6px 12px; text-align: center; white-space: normal; background: var(--paper); border-top: 1px solid var(--line); }
-  body:has(#view-collect.on) .view.collect { padding-bottom: 80px; }
-
-  /* Pop-ups sit above the tabs. */
-  .toast { top: calc(var(--bar) + 8px); bottom: auto; width: calc(100vw - 24px); max-width: none; flex-wrap: wrap; gap: 8px 14px; transform: translate(-50%, -12px); }
+  /* Pop-ups stay above the tab bar and the orb. */
+  .toast { bottom: calc(var(--tabs) + 30px); width: calc(100vw - 24px); max-width: 520px; gap: 10px; padding: 10px 12px; font-size: 14px; transform: translate(-50%, 10px); }
   .toast.on { transform: translate(-50%, 0); }
-  .vitaly.docked, .vitaly.docked[data-level] { bottom: calc(var(--tabs) + 8px); max-height: 46vh; }
-  .inj-alert { bottom: calc(var(--tabs) + 8px); max-height: 60vh; }
+  .toast .t-time { font-size: 11px; letter-spacing: .14em; }
+  .toast button { margin-left: auto; padding: 6px 10px; font-size: 11px; }
+  .vitaly.docked, .vitaly.docked[data-level] { inset: auto 8px calc(var(--tabs) + 28px) 8px; width: auto; max-height: 50vh; }
+  .inj-alert { left: 12px; right: 12px; width: auto; top: auto; bottom: calc(var(--tabs) + 28px); max-height: 55vh; }
   .drawer .sheet { width: 100vw; padding: 56px 18px 32px; }
   .drawer .close { right: 16px; top: 18px; }
   .ci-top { padding: 20px 18px 14px; }
@@ -99,4 +144,16 @@
   /* Sign-in corners closer to the edge */
   .corner.tl, .corner.bl { left: 18px; }
   .corner.tr, .corner.br { right: 18px; }
+}
+
+/* Phone on its side: the body on the left, the sheet on the right. */
+@media (max-height: 500px) and (orientation: landscape) {
+  :root { --tabs: calc(52px + env(safe-area-inset-bottom)); --sheet-x: 16px; }
+  .stage3d { height: auto; bottom: var(--tabs); right: 50%; }
+  .view.body::before, .view.detail::before { display: none; }
+  .view.body, .view.detail { padding: 0 0 0 50%; scroll-snap-type: none; background: linear-gradient(to right, transparent 50%, var(--white) 50%); }
+  .view.body .risk-rail, .view.detail .d-left { box-shadow: none; border-top: 0; }
+  .view.body .risk-rail::before, .view.detail .d-left::before { display: none; }
+  .view.body .hint, .view.detail .hint { display: none; }
+  .stage-tools { right: calc(50% + 12px); }
 }
