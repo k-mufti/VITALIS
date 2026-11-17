@@ -1,36 +1,16 @@
-// VITALIS logo: the orb badge. A small Vitaly orb (flat blue water layers, cyan halftone dots,
-// crisp cyan edge) with VITALIS set across it in Michroma. The word is white over the orb and navy
-// where it runs past the edge, so it reads on the paper bar. The water always flows; the cursor
-// pulls it when nearby. Replaces the black slab (the holographic tilt in logo-holo.js still applies).
+// VITALIS logo: a small Vitaly orb (flat blue water layers, cyan halftone dots, crisp cyan edge)
+// with VITALIS in navy Michroma to its right. The water always flows; the cursor pulls it when nearby. Replaces the black slab (the holographic tilt in logo-holo.js still applies).
 // The real text stays in the page for screen readers.
 
 const logos = [...document.querySelectorAll('.logo, .corner.tl')];
 
-const DEEP = [10, 31, 107], BODY = [24, 70, 196], DOT = [127, 233, 255], WHITE = [255, 255, 255];
+const DEEP = [10, 31, 107], BODY = [24, 70, 196], DOT = [127, 233, 255];
 const LX = -0.55, LY = -0.65, LZ = 0.55, LN = Math.hypot(LX, LY, LZ);   // light: upper left, as on the organs
 const FONT = "'Michroma', 'Arial', sans-serif", SPACING = 0.22;
 const LAYERS = 5, N = 96;
 const mix = (a, b, f) => a.map((v, i) => Math.round(v + (b[i] - v) * f));
 const css = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-
-// Box blur, 3 passes (close to a gaussian), on a w*h float field.
-function blur(src, w, h, r) {
-  let a = Float32Array.from(src), b = new Float32Array(src.length);
-  for (let pass = 0; pass < 3; pass++) {
-    for (let y = 0; y < h; y++) {
-      let s = 0; const row = y * w;
-      for (let x = -r; x <= r; x++) s += a[row + Math.min(w - 1, Math.max(0, x))];
-      for (let x = 0; x < w; x++) { b[row + x] = s / (2 * r + 1); s += a[row + Math.min(w - 1, x + r + 1)] - a[row + Math.max(0, x - r)]; }
-    }
-    for (let x = 0; x < w; x++) {
-      let s = 0;
-      for (let y = -r; y <= r; y++) s += b[Math.min(h - 1, Math.max(0, y)) * w + x];
-      for (let y = 0; y < h; y++) { a[y * w + x] = s / (2 * r + 1); s += b[Math.min(h - 1, y + r + 1) * w + x] - b[Math.max(0, y - r) * w + x]; }
-    }
-  }
-  return a;
-}
 
 if (logos.length) {
   const font = document.createElement('link');
@@ -54,7 +34,7 @@ if (logos.length) {
     el.setAttribute('aria-label', el.textContent.trim());
     el.appendChild(cv);
     el.classList.add('logo-orb');
-    return { el, cv, ctx: cv.getContext('2d'), H: small ? 44 : 56, size: small ? 9.5 : 12, pull: 0, mx: null, my: null };
+    return { el, cv, ctx: cv.getContext('2d'), H: small ? 34 : 42, size: small ? 14 : 18.5, pull: 0, mx: null, my: null };
   });
 
   addEventListener('pointermove', e => {
@@ -70,11 +50,13 @@ if (logos.length) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
   };
-  // Letter spacing leaves a gap after the last letter; shift by half of it to centre the word.
-  const wordAt = (ctx, it, how) => {
+  // The word starts a little to the right of the orb.
+  const wordAt = (ctx, it) => {
     setFont(ctx, it.size);
-    const x = it.W / 2 + ('letterSpacing' in ctx ? it.size * SPACING / 2 : 0);
-    ctx[how]('VITALIS', x, it.H / 2 + it.size * 0.04);
+    ctx.textAlign = 'left';
+    const x = it.H * 1.3, y = it.H / 2 + it.size * 0.04;
+    ctx.fillText('VITALIS', x, y);
+    if (ctx.lineWidth > 0.5) ctx.strokeText('VITALIS', x, y);   // a touch heavier than Michroma's one weight
   };
 
   const measure = it => {
@@ -84,24 +66,15 @@ if (logos.length) {
     setFont(m, it.size);
     if ('letterSpacing' in m) m.letterSpacing = '0px';
     const tw = m.measureText('VITALIS').width + it.size * SPACING * 6;
-    it.W = Math.ceil(Math.max(it.H, tw + 6));
+    it.W = Math.ceil(it.H * 1.3 + tw + 4);
     it.dpr = Math.min(3, devicePixelRatio || 1);
     it.cv.width = Math.round(it.W * it.dpr); it.cv.height = Math.round(it.H * it.dpr);
     it.cv.style.width = it.W + 'px'; it.cv.style.height = it.H + 'px';
-    // Where the word is (softened), so the dots keep clear of it.
-    const c = document.createElement('canvas'); c.width = it.W; c.height = it.H;
-    const mc = c.getContext('2d');
-    mc.fillStyle = '#fff';
-    wordAt(mc, it, 'fillText');
-    const px = mc.getImageData(0, 0, it.W, it.H).data;
-    const inside = new Float32Array(it.W * it.H);
-    for (let i = 0; i < inside.length; i++) inside[i] = px[i * 4 + 3] / 255;
-    it.soft = blur(inside, it.W, it.H, 2);
   };
 
   const draw = (it, t, dt) => {
     const { ctx, W, H, dpr } = it;
-    const ox = W / 2, oy = H / 2, R = H * 0.45;
+    const ox = H / 2, oy = H / 2, R = H * 0.45;
     // Pull toward the cursor when it is within about three orb radii.
     const d = it.mx == null ? 1e9 : Math.hypot(it.mx - ox, it.my - oy);
     it.pull += (smooth(R * 3.5, R, d) - it.pull) * (1 - Math.exp(-dt * 5));
@@ -150,10 +123,8 @@ if (logos.length) {
         let k = LAYERS - 1; while (k > 0 && rho > rad[k][ia]) k--;
         const nx = dx / (R * 0.95), ny = dy / (R * 0.95), nz = Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny));
         const lam = Math.max(0, (nx * LX + ny * LY + nz * LZ) / LN);
-        let size = Math.max(smooth(0.35, 0.97, 1 - nz) * 0.74, smooth(0.4, 1, lam) * 0.55, smooth(0.82, 1, rho / rad[k][ia]) * (0.5 - k * 0.05));
+        const size = Math.max(smooth(0.35, 0.97, 1 - nz) * 0.74, smooth(0.4, 1, lam) * 0.55, smooth(0.82, 1, rho / rad[k][ia]) * (0.5 - k * 0.05));
         const x = ox + dx, y = oy + dy;
-        const xi = x | 0, yi = y | 0;
-        if (xi >= 0 && yi >= 0 && xi < W && yi < H) size *= 1 - smooth(0.04, 0.3, it.soft[yi * W + xi]);
         if (size < 0.08) continue;
         const r = Math.min(0.5, size * 0.5) * s;
         dots.moveTo(x + r, y); dots.arc(x, y, r, 0, Math.PI * 2);
@@ -164,20 +135,9 @@ if (logos.length) {
     ctx.restore();
     path(0); ctx.strokeStyle = css(DOT, 0.9); ctx.lineWidth = 1; ctx.stroke();
 
-    // The word: white over the orb, navy where it runs past the edge onto the paper.
-    ctx.save(); path(0); ctx.clip();
-    ctx.fillStyle = css(WHITE); wordAt(ctx, it, 'fillText');
-    ctx.restore();
-    const outside = new Path2D();
-    outside.rect(0, 0, W, H);
-    for (let i = 0; i <= N; i++) {
-      const a = i / N * Math.PI * 2, r = rad[0][i % N];
-      i ? outside.lineTo(ox + Math.cos(a) * r, oy + Math.sin(a) * r) : outside.moveTo(ox + Math.cos(a) * r, oy + Math.sin(a) * r);
-    }
-    ctx.save();
-    ctx.clip(outside, 'evenodd');
-    ctx.fillStyle = css(DEEP); wordAt(ctx, it, 'fillText');
-    ctx.restore();
+    // The word, in navy beside the orb.
+    ctx.fillStyle = ctx.strokeStyle = css(DEEP); ctx.lineWidth = it.size * 0.045; ctx.lineJoin = 'round';
+    wordAt(ctx, it);
   };
 
   let last = performance.now(), t = 0;
