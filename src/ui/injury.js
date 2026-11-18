@@ -140,7 +140,15 @@ export function triggerInjury(pathIds, name, opts = {}) {
     if (model === 'bones') sink = n.bone ? { ...n.bone, z: 0, radius: Math.max(.13, n.spot.radius) } : { depth: Math.min(.08, n.spot.radius * .5) };
     showInjury(i === last ? { ...n.spot, ...sink, ...inj.glow } : n.spot, i === last ? model : null);
   }, i * 950));
-  if (opts.card === false) return;
+  if (opts.card === false) return;    // Vitaly's own alerts zoom only: not a report
+  // PostHog (kareemmuftee.com/analytics.js, added by nginx; a no-op locally).
+  window.track?.('injury_reported', {
+    part: path[last].name,
+    where: placeName(path),
+    name,
+    injury: opts.title || inj.title || inj.id,
+    via: opts.vitaly ? 'vitaly' : 'panel',
+  });
   setTimeout(() => run === runId && openAlert(path, name, inj, opts), path.length * 950 + 250);
 }
 

@@ -98,17 +98,17 @@ export function initVitaly() {
     e.preventDefault();
     const text = $('#vInput').value.trim();
     $('#vInput').value = '';
-    if (text) heard(text);
+    if (text) heard(text, 'typed');
   });
   $('#vInput').addEventListener('input', () => { if (open) closeSoon(); });   // typing: don't time out
   $('#vConfirm').addEventListener('click', e => {
     const a = e.target.dataset.answer;
-    if (a) heard(a);
+    if (a) heard(a, 'button');
   });
   setInterval(paintEarth, 500);
   $('#vBar').addEventListener('click', e => {
     const a = e.target.dataset.say;
-    if (a) heard(a);
+    if (a) heard(a, 'button');
   });
   addEventListener('keydown', e => {
     const typing = /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName);
@@ -379,7 +379,8 @@ function paintEarth() {
 
 // ---------- what the crew member said ----------
 
-async function heard(text) {
+// via: how it came in, 'voice' (the microphone), 'typed' or 'button'. Counted in PostHog.
+async function heard(text, via = 'voice') {
   if (!open) show(openEmergency() ? 'emergency' : 'calm');
   clearTimeout(closeTimer);
   $('#vHeard').textContent = `“${text}”`;
@@ -407,8 +408,15 @@ async function heard(text) {
   try {
     r = await api.vitalyAsk(text, state.current, guide && guide.id ? { id: guide.id, who: guide.who, step: guide.i } : null);
   } catch (err) {
-    r = { say: 'I can\'t reach the medical system right now. Your alerts still work.' };
+    r = { say: 'I can\'t reach the medical system right now. Your alerts still work.', failed: true };
   }
+  // PostHog (kareemmuftee.com/analytics.js, added by nginx; a no-op locally).
+  window.track?.('vitaly_asked', {
+    question: text,
+    via,
+    reply: r.failed ? 'failed' : r.guide ? 'guide' : r.action ? 'action' : 'answer',
+    guide: r.guide?.title,
+  });
   if (r.guide) {
     // Where on the body: their words first, the AI if the words aren't known (vitaly-body.js).
     status('Finding where');
